@@ -357,7 +357,7 @@ test("URL parser")
 
 test("HTTP")
 {
-	//test_skip("too slow");
+	test_skip("too slow");
 #define URL "http://httpbin.org/user-agent"
 #define CONTENTS "{\n  \"user-agent\": null\n}\n"
 	{

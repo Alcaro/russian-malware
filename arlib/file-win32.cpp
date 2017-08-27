@@ -226,7 +226,7 @@ namespace {
 		}
 		
 		arrayvieww<byte> mmapw(size_t start, size_t len) { return mmap(true, start, len); }
-		void unmapw(arrayvieww<byte> data) { unmap(data); }
+		bool unmapw(arrayvieww<byte> data) { unmap(data); return true; }
 		
 		~file_fs() { CloseHandle(handle); }
 	};

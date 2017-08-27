@@ -165,6 +165,9 @@ test()
 	testcall(testundec<double>("000123", 123));
 	testcall(testundec<double>("0", 0));
 	
+	testcall(testundec<float>("2.5", 2.5));
+	testcall(testundec<float>("2.5e+1", 25));
+	
 	byte foo[4] = {0x12,0x34,0x56,0x78};
 	assert_eq(tostringhex(arrayview<byte>(foo)), "12345678");
 	
@@ -189,6 +192,8 @@ test()
 	assert(!fromstring("", u)); // this isn't an integer
 	assert(!fromstringhex("", u));
 	assert(!fromstring("", f));
+	
+	assert(!fromstring("2,5", f)); // this is not the decimal separator, has never been and will never be
 	
 	string s;
 	s[0] = '7';

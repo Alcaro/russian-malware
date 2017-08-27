@@ -17,9 +17,14 @@ public:
 		virtual arrayview<byte> mmap(size_t start, size_t len) = 0;
 		virtual void unmap(arrayview<byte> data) = 0;
 		virtual arrayvieww<byte> mmapw(size_t start, size_t len) = 0;
-		virtual void unmapw(arrayvieww<byte> data) = 0;
+		virtual bool unmapw(arrayvieww<byte> data) = 0;
 		
 		virtual ~impl() {}
+		
+		arrayview<byte> default_mmap(size_t start, size_t len);
+		void default_unmap(arrayview<byte> data);
+		arrayvieww<byte> default_mmapw(size_t start, size_t len);
+		bool default_unmapw(arrayvieww<byte> data);
 	};
 	
 	class implrd : public impl {
@@ -34,7 +39,7 @@ public:
 		virtual arrayview<byte> mmap(size_t start, size_t len) = 0;
 		virtual void unmap(arrayview<byte> data) = 0;
 		arrayvieww<byte> mmapw(size_t start, size_t len) { return NULL; }
-		void unmapw(arrayvieww<byte> data) {}
+		bool unmapw(arrayvieww<byte> data) { return false; }
 	};
 private:
 	impl* core;
@@ -117,7 +122,8 @@ public:
 	
 	arrayvieww<byte> mmapw(size_t start, size_t len) { return core->mmapw(start, len); }
 	arrayvieww<byte> mmapw() { return this->mmapw(0, this->size()); }
-	void unmapw(arrayvieww<byte> data) { return core->unmapw(data); }
+	//If this succeeds, data written to the file is guaranteed to be written. If not, file contents are undefined.
+	bool unmapw(arrayvieww<byte> data) { return core->unmapw(data); }
 	
 	~file() { delete core; }
 	
@@ -131,7 +137,7 @@ public:
 		return file(new file::memimpl(&data));
 	}
 private:
-	class memimpl : public file::implrd {
+	class memimpl : public file::impl {
 	public:
 		arrayview<byte> datard;
 		array<byte>* datawr; // this object does not own the array
@@ -174,7 +180,7 @@ private:
 		arrayview<byte>   mmap(size_t start, size_t len) { return datard.slice(start, len); }
 		arrayvieww<byte> mmapw(size_t start, size_t len) { if (!datawr) return NULL; return datawr->slice(start, len); }
 		void  unmap(arrayview<byte>  data) {}
-		void unmapw(arrayvieww<byte> data) {}
+		bool unmapw(arrayvieww<byte> data) { return true; }
 	};
 public:
 	

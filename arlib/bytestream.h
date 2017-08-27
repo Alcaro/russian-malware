@@ -3,7 +3,7 @@
 #include "endian.h"
 
 //prefers little endian, it's more common
-//you're welcome to inherit this object if you need a more rare operation, like leb128
+//you're welcome to extend this object if you need a more rare operation, like leb128
 class bytestream {
 protected:
 	const uint8_t* start;
@@ -27,6 +27,8 @@ public:
 	}
 	bool signature(cstring sig)
 	{
+		if (remaining() < sig.length()) return false;
+		
 		arrayview<uint8_t> expected = sig.bytes();
 		arrayview<uint8_t> actual = peekbytes(sig.length());
 		if (actual == expected)

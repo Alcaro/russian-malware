@@ -341,10 +341,10 @@ public:
 	widget_textbox* focus();
 	
 	//TODO: use string or cstring
-	////The return value is guaranteed valid until the next call to any function
-	//// on this object, or the next window_run[_iter], whichever comes first.
-	//const char * get_text();
-	//widget_textbox* set_text(const char * text);
+	//The return value is guaranteed valid until the next call to any function
+	// on this object, or the next window_run[_iter], whichever comes first.
+	const char * get_text();
+	widget_textbox* set_text(const char * text);
 	//Length is the maximum amount of text entered, in units of either
 	// UTF-8 bytes, Unicode grapheme clusters, or something in between (implementation defined).
 	widget_textbox* set_length(unsigned int maxlen);

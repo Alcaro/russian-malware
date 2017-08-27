@@ -60,6 +60,7 @@ g_log_set_always_fatal((GLogLevelFlags)(G_LOG_LEVEL_CRITICAL|G_LOG_LEVEL_WARNING
 	gdk_set_allowed_backends("x11");
 	XInitThreads();
 #endif
+	gtk_disable_setlocale(); // go away, you're a library like any other and have no right to mess with libc config
 	if (require)
 	{
 		gtk_init(argc, argv);
@@ -107,7 +108,6 @@ bool window_console_attach()
 
 string window_config_path()
 {
-puts(g_get_user_config_dir());
 	return g_get_user_config_dir();
 }
 
@@ -231,8 +231,135 @@ puts(g_get_user_config_dir());
 
 
 
+namespace {
+	class file_gtk : public file::impl {
+	public:
+		/*
+		m_read,
+		m_write,          // If the file exists, opens it. If it doesn't, creates a new file.
+		m_wr_existing,    // Fails if the file doesn't exist.
+		m_replace,        // If the file exists, it's either deleted and recreated, or truncated.
+		m_create_excl,    // Fails if the file does exist.
+		*/
+		GFile* file;
+		GFileIOStream* io;
+		GSeekable* seek;
+		GInputStream* input;
+		GOutputStream* output;
+		
+		size_t size()
+		{
+			GFileInfo* info;
+			if (this->io) info = g_file_io_stream_query_info(this->io, G_FILE_ATTRIBUTE_STANDARD_SIZE, NULL, NULL);
+			else info = g_file_input_stream_query_info(G_FILE_INPUT_STREAM(this->input), G_FILE_ATTRIBUTE_STANDARD_SIZE, NULL, NULL);
+			gsize size = g_file_info_get_size(info);
+			g_object_unref(info);
+			return size;
+		}
+		bool resize(size_t newsize)
+		{
+			if (newsize < size())
+			{
+				return g_seekable_truncate(this->seek, newsize, NULL, NULL);
+			}
+			else
+			{
+				byte nul[1] = {0};
+				return write(nul, newsize-1);
+			}
+		}
+		
+		size_t read(arrayvieww<byte> target, size_t start)
+		{
+			bool ok = g_seekable_seek(this->seek, start, G_SEEK_SET, NULL, NULL);
+			if (!ok) return 0;
+			return g_input_stream_read(this->input, target.ptr(), target.size(), NULL, NULL);
+		}
+		bool write(arrayview<byte> data, size_t start)
+		{
+			bool ok = g_seekable_seek(this->seek, start, G_SEEK_SET, NULL, NULL);
+			if (!ok) return false;
+			size_t actual = g_output_stream_write(this->output, data.ptr(), data.size(), NULL, NULL);
+			return (actual == data.size());
+		}
+		
+		arrayview<byte> mmap(size_t start, size_t len) { return default_mmap(start, len); }
+		void unmap(arrayview<byte> data) { default_unmap(data); }
+		arrayvieww<byte> mmapw(size_t start, size_t len) { return default_mmapw(start, len); }
+		bool unmapw(arrayvieww<byte> data) { return default_unmapw(data); }
+		
+		~file_gtk()
+		{
+			if (this->io) g_object_unref(this->io);
+			else
+			{
+				if (this->input) g_object_unref(this->input);
+				if (this->output) g_object_unref(this->output);
+			}
+			if (this->file) g_object_unref(this->file);
+		}
+	};
+}
+
+file::impl* file::open_impl(cstring filename, mode m)
+{
+	//GFile doesn't support mmap, so let's use native if possible
+	//ignore relative paths, Arlib doesn't support that
+	if (g_path_is_absolute(filename.c_str())) return open_impl_fs(filename, m);
+	
+	file_gtk* ret = new file_gtk();
+	ret->file = g_file_new_for_uri(filename.c_str());
+	switch (m)
+	{
+		case m_read:
+			ret->input = G_INPUT_STREAM(g_file_read(ret->file, NULL, NULL));
+			break;
+		case m_write:
+			ret->io = g_file_open_readwrite(ret->file, NULL, NULL);
+			if (!ret->io) ret->io = g_file_create_readwrite(ret->file, G_FILE_CREATE_NONE, NULL, NULL);
+			break;
+		case m_wr_existing:
+			ret->io = g_file_open_readwrite(ret->file, NULL, NULL);
+			break;
+		case m_replace:
+			ret->io = g_file_replace_readwrite(ret->file, NULL, false, G_FILE_CREATE_REPLACE_DESTINATION, NULL, NULL);
+			break;
+		case m_create_excl:
+			ret->io = g_file_create_readwrite(ret->file, G_FILE_CREATE_NONE, NULL, NULL);
+			break;
+	}
+	if (ret->io)
+	{
+		ret->input = g_io_stream_get_input_stream(G_IO_STREAM(ret->io));
+		ret->output = g_io_stream_get_output_stream(G_IO_STREAM(ret->io));
+	}
+	if (!ret->input)
+	{
+		delete ret;
+		return NULL;
+	}
+	if (ret->output) ret->seek = G_SEEKABLE(ret->output); // can't truncate on input streams, even if it's the same as the output
+	else ret->seek = G_SEEKABLE(ret->input);
+	return ret;
+}
+
+bool file::unlink(cstring filename)
+{
+	//no need to use native if possible, GFile contains all features I need
+	GFile* file = g_file_new_for_commandline_arg(filename.c_str());
+	GError* err = NULL;
+	bool ok = g_file_delete(file, NULL, &err);
+	if (ok) return true;
+	ok = (g_error_matches(err, G_IO_ERROR, G_IO_ERROR_NOT_FOUND));
+	g_error_free(err);
+	return ok;
+}
+
+
+
 //for windows support, https://developer.gnome.org/glib/stable/glib-IO-Channels.html#g-io-channel-win32-new-socket
 #include <glib-unix.h>
+namespace {
 class runloop_gtk : public runloop
 {
 	struct fd_cbs {
@@ -295,15 +422,16 @@ class runloop_gtk : public runloop
 	{
 		gtk_main_iteration_do(false);
 		
-		//workaround for GTK thinking the program is lagging, we only call this every 16ms
+		//workaround for GTK thinking the program is lagging if, we only call this every 16ms
 		//we're busy waiting in non-gtk syscalls, waiting less costs us nothing
 		gtk_main_iteration_do(false);
 	}
 };
+}
 
 runloop* runloop::global()
 {
-	static runloop* ret;
+	static runloop* ret = NULL;
 	if (!ret) ret = new runloop_gtk();
 	return ret;
 }
@@ -358,67 +486,6 @@ char * window_get_native_path(const char * path)
 	g_object_unref(file);
 	if (!ret) return NULL;
 	return (char*)mem_from_g_alloc(ret, 0);
-}
-
-
-
-bool file_read(const char * filename, void* * data, size_t * len)
-{
-	if (!filename) return false;
-	GFile* file=g_file_new_for_commandline_arg(filename);
-	if (!file) return false;
-	
-	char* ret;
-	gsize glen;
-	if (!g_file_load_contents(file, NULL, &ret, &glen, NULL, NULL))
-	{
-		g_object_unref(file);
-		return false;
-	}
-	g_object_unref(file);
-	if (len) *len=glen;
-	*data=mem_from_g_alloc(ret, glen);
-	return true;
-}
-
-bool file_write(const char * filename, const anyptr data, size_t len)
-{
-	if (!filename) return false;
-	if (!len) return true;
-	GFile* file=g_file_new_for_commandline_arg(filename);
-	if (!file) return false;
-	bool success=g_file_replace_contents(file, data, len, NULL, false, G_FILE_CREATE_NONE, NULL, NULL, NULL);
-	g_object_unref(file);
-	return success;
-}
-
-bool file_read_to(const char * filename, anyptr data, size_t len)
-{
-	if (!filename) return false;
-	if (!len) return true;
-	GFile* file=g_file_new_for_commandline_arg(filename);
-	if (!file) return false;
-	GFileInputStream* io=g_file_read(file, NULL, NULL);
-	if (!io)
-	{
-		g_object_unref(file);
-		return false;
-	}
-	GFileInfo* info=g_file_input_stream_query_info(io, G_FILE_ATTRIBUTE_STANDARD_SIZE, NULL, NULL);
-	gsize size=g_file_info_get_size(info);
-	if (size!=len) return false;
-	gsize actualsize;
-	bool success=g_input_stream_read_all(G_INPUT_STREAM(io), data, size, &actualsize, NULL, NULL);
-	g_input_stream_close(G_INPUT_STREAM(io), NULL, NULL);
-	g_object_unref(file);
-	g_object_unref(io);
-	g_object_unref(info);
-	if (!success || size!=actualsize)
-	{
-		memset(data, 0, len);
-		return false;
-	}
-	return true;
 }
 
 

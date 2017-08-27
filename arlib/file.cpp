@@ -1,13 +1,44 @@
 #include "file.h"
 #include "test.h"
 
+arrayview<byte> file::impl::default_mmap(size_t start, size_t len)
+{
+	arrayvieww<byte> ret(malloc(len), len);
+	size_t actual = this->read(ret, start);
+	return ret.slice(0, actual);
+}
+
+void file::impl::default_unmap(arrayview<byte> data)
+{
+	free((void*)data.ptr());
+}
+
+arrayvieww<byte> file::impl::default_mmapw(size_t start, size_t len)
+{
+	byte* ptr = malloc(sizeof(size_t) + len);
+	*(size_t*)ptr = start;
+	
+	arrayvieww<byte> ret(ptr+sizeof(size_t), len);
+	size_t actual = this->read(ret, start);
+	return ret.slice(0, actual);
+}
+
+bool file::impl::default_unmapw(arrayvieww<byte> data)
+{
+	byte* ptr = data.ptr() - sizeof(size_t);
+	size_t start = *(size_t*)ptr;
+	bool ok = this->write(data, start);
+	free(ptr);
+	return ok;
+}
+
 #ifdef ARLIB_TEST
 
 //criteria:
 //- must be a normal file, no /dev/*
 //- minimum 66000 bytes
 //- the first few bytes must be known, no .txt files or possibly-shebanged stuff
-//- the file must contain somewhat unpredictable data, nothing from /dev/zero
+//- the file must contain somewhat unpredictable data, no huge streams of the same thing like /dev/zero
 //- must be readable by everyone (assuming absense of sandboxes)
 //- must NOT be writable or deletable by this program
 //recommended choice: some random executable
@@ -69,16 +100,21 @@ test("file writing")
 	assert(!f.open(READONLY_FILE, file::m_replace));
 	assert(!f.open(READONLY_FILE, file::m_create_excl));
 	
-	assert(file::unlink(WRITABLE_FILE));
+	assert( file::unlink(WRITABLE_FILE));
+	assert(!file::unlink(READONLY_FILE));
 	
 	assert(!f.open(WRITABLE_FILE));
 	
 	assert(f.open(WRITABLE_FILE, file::m_write));
-	assert(f.replace("foo"));
+	assert(f.replace("foobar"));
 	
+	assert_eq(string(file::read(WRITABLE_FILE)), "foobar");
+	
+	assert(f.resize(3));
+	assert(f.size() == 3);
 	assert_eq(string(file::read(WRITABLE_FILE)), "foo");
 	
-	f.resize(8);
+	assert(f.resize(8));
 	assert(f.size() == 8);
 	byte expected[8]={'f','o','o',0,0,0,0,0};
 	array<byte> actual = file::read(WRITABLE_FILE);
@@ -102,11 +138,12 @@ test("file writing")
 	//test the various creation modes
 	//file exists, these three should work
 	assert( (f.open(WRITABLE_FILE, file::m_write)));
+	assert_eq(f.size(), 8);
 	assert( (f.open(WRITABLE_FILE, file::m_wr_existing)));
 	assert_eq(f.size(), 8);
 	assert( (f.open(WRITABLE_FILE, file::m_replace)));
 	assert_eq(f.size(), 0);
-	assert(!(f.open(WRITABLE_FILE, file::m_create_excl)));//but this shouldn't
+	assert(!(f.open(WRITABLE_FILE, file::m_create_excl))); // but this should fail
 	
 	assert(file::unlink(WRITABLE_FILE));
 	assert(!f.open(WRITABLE_FILE, file::m_wr_existing)); // this should fail
