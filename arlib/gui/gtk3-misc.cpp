@@ -81,7 +81,6 @@ g_log_set_always_fatal((GLogLevelFlags)(G_LOG_LEVEL_CRITICAL|G_LOG_LEVEL_WARNING
 	window_x11.screen=gdk_x11_get_default_screen();
 	window_x11.root=gdk_x11_get_default_root_xwindow();//alternatively XRootWindow(window_x11.display, window_x11.screen)
 #endif
-	errno=0;
 	return true;
 }
 
@@ -232,73 +231,73 @@ string window_config_path()
 
 
 namespace {
-	class file_gtk : public file::impl {
-	public:
-		/*
-		m_read,
-		m_write,          // If the file exists, opens it. If it doesn't, creates a new file.
-		m_wr_existing,    // Fails if the file doesn't exist.
-		m_replace,        // If the file exists, it's either deleted and recreated, or truncated.
-		m_create_excl,    // Fails if the file does exist.
-		*/
-		GFile* file;
-		GFileIOStream* io;
-		GSeekable* seek;
-		GInputStream* input;
-		GOutputStream* output;
-		
-		size_t size()
+class file_gtk : public file::impl {
+public:
+	/*
+	m_read,
+	m_write,          // If the file exists, opens it. If it doesn't, creates a new file.
+	m_wr_existing,    // Fails if the file doesn't exist.
+	m_replace,        // If the file exists, it's either deleted and recreated, or truncated.
+	m_create_excl,    // Fails if the file does exist.
+	*/
+	GFile* file;
+	GFileIOStream* io;
+	GSeekable* seek;
+	GInputStream* input;
+	GOutputStream* output;
+	
+	size_t size()
+	{
+		GFileInfo* info;
+		if (this->io) info = g_file_io_stream_query_info(this->io, G_FILE_ATTRIBUTE_STANDARD_SIZE, NULL, NULL);
+		else info = g_file_input_stream_query_info(G_FILE_INPUT_STREAM(this->input), G_FILE_ATTRIBUTE_STANDARD_SIZE, NULL, NULL);
+		gsize size = g_file_info_get_size(info);
+		g_object_unref(info);
+		return size;
+	}
+	bool resize(size_t newsize)
+	{
+		if (newsize < size())
 		{
-			GFileInfo* info;
-			if (this->io) info = g_file_io_stream_query_info(this->io, G_FILE_ATTRIBUTE_STANDARD_SIZE, NULL, NULL);
-			else info = g_file_input_stream_query_info(G_FILE_INPUT_STREAM(this->input), G_FILE_ATTRIBUTE_STANDARD_SIZE, NULL, NULL);
-			gsize size = g_file_info_get_size(info);
-			g_object_unref(info);
-			return size;
+			return g_seekable_truncate(this->seek, newsize, NULL, NULL);
 		}
-		bool resize(size_t newsize)
+		else
 		{
-			if (newsize < size())
-			{
-				return g_seekable_truncate(this->seek, newsize, NULL, NULL);
-			}
-			else
-			{
-				byte nul[1] = {0};
-				return write(nul, newsize-1);
-			}
+			byte nul[1] = {0};
+			return write(nul, newsize-1);
 		}
-		
-		size_t read(arrayvieww<byte> target, size_t start)
+	}
+	
+	size_t read(arrayvieww<byte> target, size_t start)
+	{
+		bool ok = g_seekable_seek(this->seek, start, G_SEEK_SET, NULL, NULL);
+		if (!ok) return 0;
+		return g_input_stream_read(this->input, target.ptr(), target.size(), NULL, NULL);
+	}
+	bool write(arrayview<byte> data, size_t start)
+	{
+		bool ok = g_seekable_seek(this->seek, start, G_SEEK_SET, NULL, NULL);
+		if (!ok) return false;
+		size_t actual = g_output_stream_write(this->output, data.ptr(), data.size(), NULL, NULL);
+		return (actual == data.size());
+	}
+	
+	arrayview<byte> mmap(size_t start, size_t len) { return default_mmap(start, len); }
+	void unmap(arrayview<byte> data) { default_unmap(data); }
+	arrayvieww<byte> mmapw(size_t start, size_t len) { return default_mmapw(start, len); }
+	bool unmapw(arrayvieww<byte> data) { return default_unmapw(data); }
+	
+	~file_gtk()
+	{
+		if (this->io) g_object_unref(this->io);
+		else
 		{
-			bool ok = g_seekable_seek(this->seek, start, G_SEEK_SET, NULL, NULL);
-			if (!ok) return 0;
-			return g_input_stream_read(this->input, target.ptr(), target.size(), NULL, NULL);
+			if (this->input) g_object_unref(this->input);
+			if (this->output) g_object_unref(this->output);
 		}
-		bool write(arrayview<byte> data, size_t start)
-		{
-			bool ok = g_seekable_seek(this->seek, start, G_SEEK_SET, NULL, NULL);
-			if (!ok) return false;
-			size_t actual = g_output_stream_write(this->output, data.ptr(), data.size(), NULL, NULL);
-			return (actual == data.size());
-		}
-		
-		arrayview<byte> mmap(size_t start, size_t len) { return default_mmap(start, len); }
-		void unmap(arrayview<byte> data) { default_unmap(data); }
-		arrayvieww<byte> mmapw(size_t start, size_t len) { return default_mmapw(start, len); }
-		bool unmapw(arrayvieww<byte> data) { return default_unmapw(data); }
-		
-		~file_gtk()
-		{
-			if (this->io) g_object_unref(this->io);
-			else
-			{
-				if (this->input) g_object_unref(this->input);
-				if (this->output) g_object_unref(this->output);
-			}
-			if (this->file) g_object_unref(this->file);
-		}
-	};
+		if (this->file) g_object_unref(this->file);
+	}
+};
 }
 
 file::impl* file::open_impl(cstring filename, mode m)
@@ -345,7 +344,7 @@ file::impl* file::open_impl(cstring filename, mode m)
 
 bool file::unlink(cstring filename)
 {
-	//no need to use native if possible, GFile contains all features I need
+	//native isn't needed here, removing a file doesn't need mmap
 	GFile* file = g_file_new_for_commandline_arg(filename.c_str());
 	GError* err = NULL;
 	bool ok = g_file_delete(file, NULL, &err);
@@ -369,6 +368,7 @@ class runloop_gtk : public runloop
 		function<void(uintptr_t)> cb_write;
 	};
 	map<uintptr_t,fd_cbs> fdinfo;
+	bool need_exit_sync = true;
 	
 	static const GIOCondition cond_rd = (GIOCondition)(G_IO_IN |G_IO_HUP|G_IO_ERR);
 	static const GIOCondition cond_wr = (GIOCondition)(G_IO_OUT|G_IO_HUP|G_IO_ERR);
@@ -416,7 +416,7 @@ class runloop_gtk : public runloop
 	}
 	
 	
-	void enter() { gtk_main(); }
+	void enter() { gtk_main(); need_exit_sync = false; }
 	void exit() { gtk_main_quit(); }
 	void step()
 	{
@@ -425,6 +425,31 @@ class runloop_gtk : public runloop
 		//workaround for GTK thinking the program is lagging if, we only call this every 16ms
 		//we're busy waiting in non-gtk syscalls, waiting less costs us nothing
 		gtk_main_iteration_do(false);
+		
+		need_exit_sync = true;
+	}
+	
+	~runloop_gtk()
+	{
+		if (need_exit_sync)
+		{
+			//GTK BUG WORKAROUND:
+			
+			//gtk docs say "It's OK to use the GLib main loop directly instead of gtk_main(), though it involves slightly more typing"
+			//but that is a lie. gtk_main() does a few deinitialization tasks when it leaves
+			//for example, it saves the clipboard to X11-server-side storage; without that, the clipboard is wiped on app exit
+			//there's no publically exported symbol to perform these cleanup tasks, so gtk_main() must be called
+			// (GtkApplication does the same deinitialization, but gtk_main is easier)
+			
+			//we need it to exit immediately so let's schedule a oneshot idle event saying gtk_main_quit
+			//there could be other events at this point, but they don't matter, gtk doesn't know we're about to exit
+			
+			//but this is still an ugly hack. a much better solution would be creating gtk_deinit() and moving these shutdown actions there
+			//or even better, have gtk put this in its own atexit handler
+			
+			g_idle_add([](void*)->gboolean { gtk_main_quit(); return false; }, NULL);
+			gtk_main();
+		}
 	}
 };
 }
@@ -432,7 +457,15 @@ class runloop_gtk : public runloop
 runloop* runloop::global()
 {
 	static runloop* ret = NULL;
-	if (!ret) ret = new runloop_gtk();
+	if (!ret)
+	{
+		ret = new runloop_gtk();
+		//If more than one atexit function has been specified by different calls to this function,
+		// they are all executed in reverse order as a stack (i.e. the last function specified is
+		// the first to be executed at exit).
+		//so this should be called early, while gtk is still operational
+		atexit([](){ delete ret; });
+	}
 	return ret;
 }
 

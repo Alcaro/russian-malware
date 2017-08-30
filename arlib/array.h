@@ -765,3 +765,19 @@ public:
 	//const T* end() { return this->items+this->count; }
 	//array(null_t)
 };
+
+
+//A refarray acts mostly like a normal array. The difference is that it stores pointers rather than the elements themselves;
+//as such, you can't cast to arrayview or pointer, but you can keep pointers or references to the elements.
+template<typename T> class refarray {
+	array<autoptr<T>> items;
+public:
+	T& operator[](size_t n)
+	{
+		while (n >= items.size())
+		{
+			items.append();
+		}
+		return *items[n];
+	}
+};

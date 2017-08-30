@@ -184,6 +184,7 @@ test()
 {
 	test_skip("kinda slow");
 	
+	//both of these are annoyingly slow, but I haven't found any alternatives
 	{
 		WebSocket ws;
 		assert(ws.connect("wss://echo.websocket.org"));
@@ -205,7 +206,7 @@ test()
 	{
 		//this server requires masking for whatever strange reason
 		WebSocket ws;
-		assert(ws.connect("wss://wss.websocketstest.com/service"));
+		assert(ws.connect("wss://websocketstest.com/service"));
 		assert_eq(ws.recvstr(true), "connected,");
 		ws.send("version,");
 		assert_eq(ws.recvstr(true), "version,hybi-draft-13");

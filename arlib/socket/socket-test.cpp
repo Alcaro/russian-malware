@@ -57,22 +57,22 @@ test("SSL permissiveness (bad root)")
 {
 	test_skip("too slow");
 	autoptr<socket> s;
-	assert(!(s=socketssl::create("badfish.filippo.io", 443)));
-	assert( (s=socketssl::create("badfish.filippo.io", 443, true)));
+	assert(!(s=socketssl::create("superfish.badssl.com", 443)));
+	assert( (s=socketssl::create("superfish.badssl.com", 443, true)));
 }
 test("SSL permissiveness (bad name)")
 {
 	test_skip("too slow");
 	autoptr<socket> s;
-	assert(!(s=socketssl::create("172.217.18.142", 443))); // IP addresses don't have certs (this is Google)
-	assert( (s=socketssl::create("172.217.18.142", 443, true)));
+	assert(!(s=socketssl::create("wrong.host.badssl.com", 443)));
+	assert( (s=socketssl::create("wrong.host.badssl.com", 443, true)));
 }
 test("SSL permissiveness (expired)")
 {
 	test_skip("too slow");
 	autoptr<socket> s;
-	assert(!(s=socketssl::create("irc.caffie.net", 6697))); // IP addresses don't have certs (this is Google)
-	assert( (s=socketssl::create("irc.caffie.net", 6697, true)));
+	assert(!(s=socketssl::create("expired.badssl.com", 443)));
+	assert( (s=socketssl::create("expired.badssl.com", 443, true)));
 }
 
 #ifdef ARLIB_SSL_BEARSSL

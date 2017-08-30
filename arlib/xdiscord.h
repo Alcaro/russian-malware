@@ -141,6 +141,8 @@ public:
 		string account() { return impl().username+"#"+impl().discriminator; }
 		msg highlight() { return msg::from_md("<@"+m_id+">"); }
 		
+		bool is_bot() { return impl().is_bot; }
+		
 		array<Role> roles();
 		array<Role> roles(Guild guild);
 		bool has_role(Role role)
@@ -339,6 +341,7 @@ private:
 		string discriminator; // 4697 (it's split for some reason)
 		map<string,string> nicks; // varies per guild
 		set<string> roles; // also per-guild, but roles are unique across discord so excess roles don't do any harm
+		bool is_bot = false;
 	};
 	map<string,i_user> users;
 	string my_user;

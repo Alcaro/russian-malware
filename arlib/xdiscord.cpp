@@ -385,6 +385,8 @@ void Discord::set_user(cstring guild_id, JSON& json)
 			user.roles.add(r.str());
 		}
 	}
+	
+	if (json["user"]["bot"]) user.is_bot = true;
 }
 
 void Discord::del_user(cstring guild_id, cstring user_id)

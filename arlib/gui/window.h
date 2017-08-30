@@ -54,7 +54,6 @@ public:
 	virtual void set_modal(bool modal) = 0;
 	
 	//newwidth and newheight are the content size, excluding menus/toolbars/etc.
-	//If there is any widget whose size is unknown inside, then the sizes may only be used in resize(), and for relative measurements.
 	//It is allowed to call resize() on unresizable windows, but changing the size of
 	// any contents (changing a label text, for example) will resize it to minimum.
 	//If resizable, the resize callback is called after the window is resized and everything is set to the new sizes.
@@ -442,6 +441,8 @@ public:
 
 class widget_listbox_virtual : public widget_base { WIDGET_BASE
 private:
+	//TODO: arrayview<cstring> columns
+	//TODO: figure out what happens if given an arrayview<string>, they don't cast to <cstring>
 	void construct(unsigned int numcolumns, const char * * columns);
 	
 public:

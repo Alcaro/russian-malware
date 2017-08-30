@@ -167,7 +167,6 @@ netagain:
 	}
 	
 	try_compile_req(); // to ensure tosend is never empty when there's stuff to do
-	
 	if (!newrecv && sock->recv(newrecv, block) < 0) return sock_cancel();
 	block = false;
 again:
@@ -358,8 +357,8 @@ test("URL parser")
 test("HTTP")
 {
 	test_skip("too slow");
-#define URL "http://httpbin.org/user-agent"
-#define CONTENTS "{\n  \"user-agent\": null\n}\n"
+#define URL "http://media.smwcentral.net/Alcaro/test.txt"
+#define CONTENTS "hello world"
 	{
 		string ret = HTTP::request(URL);
 		assert_eq(ret, CONTENTS);
@@ -380,15 +379,15 @@ test("HTTP")
 	
 	{
 		HTTP::req r;
-		r.url = "http://httpbin.org/post";
-		r.headers.append("Host: httpbin.org");
+		r.url = "http://media.smwcentral.net/Alcaro/test.php";
+		r.headers.append("Host: media.smwcentral.net");
 		r.postdata.append('x');
 		
 		HTTP h;
 		h.send(r);
 		h.send(r);
 		string data1 = (string)h.recv();
-		assert(data1.startswith("{\n"));
+		assert_eq(data1, "{\"post\":\"x\"}");
 		string data2 = (string)h.recv();
 		assert_eq(data2, data1);
 	}
@@ -428,8 +427,13 @@ test("HTTP")
 		assert(readies < 10);
 	}
 	
+	//httpbin response time is super slow, and super erratic
+	//it offers me unmatched flexibility in requesting strange http parameters,
+	// but doubling the test suite runtime isn't worth it
+	//getdiscordusers is chunked as well, I don't need two tests for that
+	if (false)
 	{
-		HTTP::req r("https://httpbin.org/stream-bytes/128?chunk_size=30&seed=1"); // throw in a https test too for no reason
+		HTTP::req r("https://httpbin.org/stream-bytes/128?chunk_size=30&seed=1");
 		r.userdata = 42;
 		HTTP h;
 		h.send(r);
@@ -449,6 +453,7 @@ test("HTTP")
 	}
 	
 	{
+		//throw in https for no reason
 		HTTP::rsp r = HTTP::request(HTTP::req("https://www.smwcentral.net/ajax.php?a=getdiscordusers"));
 		assert(r.success);
 		assert_eq(r.status, 200);

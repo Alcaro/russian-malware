@@ -457,7 +457,7 @@ To ensure the path is empty, the path address must be the last mappable byte in 
  execveat itself, for the same reasons as openat, but it's a rare syscall.)
 
 Either way, when execve or execveat is intercepted, the emulator asks the broker for an fd
- containing said emulator and executes that, passing the intended program to the child. After that,
+ containing said emulator and executes that, passing the intended program as argv[0]. After that,
  the emulator runs again, installs a new SIGSYS handler, and control is again passed to ld-linux.
 
 Shebangs make things trickier, as ld-linux can't handle them. They could be emulated in userspace,
@@ -483,7 +483,8 @@ O_BENEATH would solve most symlink-related issues (other than restricted directo
 
 AT_BENEATH/etc <https://lwn.net/Articles/723057/> seem similar; they're not intended for sandboxes,
  but may be close enough. I'll take a look once it's merged and my distro updates. The broker is
- still needed (to count the number of writes), but it would get a lot less requests.
+ still needed (to count the number of writes), but keeping reads in the same process would be quite
+ a lot faster.
 
 
 Results
@@ -524,10 +525,10 @@ Everything contains bugs. The following is a list of possible vulnerabilities th
     maximum impact: disk space exhaustion
 - launch_impl: failure in process::set_fds was ignored
     exploitability: extremely hard, requires resource exhaustion and then some luck
-    maximum impact: child can access (including write) some or all fds open in parent
+    maximum impact: child may be able to access (including write) some or all fds open in parent
       with the default parent, this does nothing whatsoever, unless called in strange ways where it
-        inherits some fds from the shell (extremely rare, and 90% of shell-inherited fds are lock
-        files)
+        inherits some fds from the shell (extremely rare, and most shell-inherited fds are lock
+        files anyways)
       with other parents, it can be data leak, data loss, or even a full jailbreak
 
 

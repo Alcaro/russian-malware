@@ -22,7 +22,9 @@
 #    define _CRT_NONSTDC_NO_DEPRECATE
 #    define _CRT_SECURE_NO_WARNINGS
 #  endif
+#  define STRICT
 #  include <windows.h>
+#  undef STRICT
 #endif
 
 #ifdef _MSC_VER

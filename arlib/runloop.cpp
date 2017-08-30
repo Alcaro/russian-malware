@@ -71,10 +71,10 @@ fd_mon::~fd_mon() { close(epoll_fd); }
 #endif
 
 #ifdef ARGUI_NONE
-runloop* runloop::global()
-{
-	static runloop* ret = NULL;
-	if (!ret) ret = runloop::create();
-	return ret;
-}
+//runloop* runloop::global()
+//{
+	//static runloop* ret = NULL;
+	//if (!ret) ret = runloop::create();
+	//return ret;
+//}
 #endif

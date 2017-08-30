@@ -17,7 +17,9 @@ RUN_ONCE_FN(initialize)
 	SSL_CTX_set_cipher_list(ctx, "HIGH:!DSS:!aNULL@STRENGTH");
 }
 
+#if OPENSSL_VERSION_NUMBER < 0x10002000
 static bool validate_hostname(const char * hostname, const X509 * server_cert);
+#endif
 
 class socketssl_impl : public socketssl {
 public:
@@ -35,22 +37,20 @@ public:
 		SSL_set_tlsext_host_name(ret->ssl, (const char*)domain.c_str());
 		SSL_set_fd(ret->ssl, ret->fd);
 		
-		if (!permissive)
-		{
-			SSL_set_verify(ret->ssl, SSL_VERIFY_PEER, NULL);
-		}
+		SSL_set_verify(ret->ssl, permissive ? SSL_VERIFY_NONE : SSL_VERIFY_PEER, NULL);
 		
 #if OPENSSL_VERSION_NUMBER >= 0x10100000 // >= 1.1.0
-#error test, especially set0 vs set1
-		SSL_set1_host(ssl, "example.com");
+#error test, especially [gs]et0 vs [gs]et1
+#error also check whether set_tlsext_host_name is needed
+		SSL_set1_host(ret->ssl, "example.com");
 #endif
 		
 #if OPENSSL_VERSION_NUMBER >= 0x10002000 && OPENSSL_VERSION_NUMBER < 0x10100000 // >= 1.0.2, < 1.1.0
-#error test, especially [gs]et0 vs [gs]et1
-		X509_VERIFY_PARAM* param = SSL_get0_param(ssl);
-		//optional?
-		//X509_VERIFY_PARAM_set_hostflags(param, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
-		X509_VERIFY_PARAM_set1_host(param, "example.com", 0);
+		if (!permissive)
+		{
+			X509_VERIFY_PARAM* param = SSL_get0_param(ret->ssl);
+			X509_VERIFY_PARAM_set1_host(param, domain.c_str(), 0);
+		}
 #endif
 		
 		bool ok = (SSL_connect(ret->ssl)==1);

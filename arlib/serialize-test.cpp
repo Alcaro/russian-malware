@@ -394,7 +394,7 @@ test("JSON deserialization")
 		assert_eq(item.g, 10000);
 		assert_eq(item.h, 1000000000);
 		assert_eq(item.i, 1000000000);
-		assert_eq(item.j, 1000000000000000000); // this is the hex test object, json doesn't support hex
+		assert_eq(item.j, 1000000000000000000ull); // this is the hex test object, json doesn't support hex
 	}
 	
 	{
