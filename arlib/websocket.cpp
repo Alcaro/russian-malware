@@ -33,6 +33,7 @@ bool WebSocket::connect(cstring target, arrayview<string> headers)
 	{
 		int bytes = sock->recv(msg.skip(bytesdone), true);
 		if (bytes<0) return false;
+printf("[#[wsrecv:%.*s]#]",bytes,msg.skip(bytesdone).ptr());
 		
 	again: ;
 		size_t n = msg.slice(bytesdone, bytes).find('\n');
