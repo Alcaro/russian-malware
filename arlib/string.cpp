@@ -362,4 +362,20 @@ test()
 		assert_eq(instr.fromlatin1(), u8"ø\uFFFD");
 		assert_eq(instr.fromwindows1252(), "ø€");
 	}
+	
+	{
+		cstring a(NULL);
+		cstring b = NULL;
+		cstring c; c = NULL;
+		string d(NULL);
+		string e = NULL;
+		string f; f = NULL;
+		
+		assert_eq(a, "");
+		assert_eq(b, "");
+		assert_eq(c, "");
+		assert_eq(d, "");
+		assert_eq(e, "");
+		assert_eq(f, "");
+	}
 }

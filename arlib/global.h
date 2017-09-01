@@ -77,6 +77,12 @@ typedef uint8_t byte;
 //have to include these too, they include <stddef.h> and define NULL to __null, which doesn't resolve overloads properly
 #include <string.h>
 #include <stdlib.h>
+#ifdef __unix__ // fuck this shit, behave sanely gcc
+#include <unistd.h>
+#include <pthread.h>
+#include <dirent.h>
+#include <signal.h>
+#endif
 #undef NULL
 #define NULL nullptr
 

@@ -138,8 +138,10 @@ public:
 	//cstring(const uint8_t * str, uint32_t len) { init_from(str, len); }
 	cstring(arrayview<uint8_t> bytes) { init_from_nocopy(bytes); }
 	cstring(arrayview<char> chars) { init_from_nocopy(chars.reinterpret<uint8_t>()); }
+	cstring(nullptr_t) { init_from_nocopy(""); }
 	cstring& operator=(const cstring& other) { init_from_nocopy(other); return *this; }
 	cstring& operator=(const char * str) { init_from_nocopy(str); return *this; }
+	cstring& operator=(nullptr_t) { init_from_nocopy(""); return *this; }
 	
 	explicit operator bool() const { return length() != 0; }
 	//operator const char * () const { return ptr_withnul(); }
@@ -369,9 +371,11 @@ public:
 	{
 		init_from(chars.reinterpret<uint8_t>());
 	}
+	string(nullptr_t) { init_from(""); }
 	string& operator=(const string& other) { release(); init_from(other); return *this; }
 	string& operator=(string&& other) { release(); init_from(std::move(other)); return *this; }
 	string& operator=(const char * str) { release(); init_from(str); return *this; }
+	string& operator=(nullptr_t) { release(); init_from(""); return *this; }
 	~string() { release(); }
 	
 	explicit operator bool() const { return length() != 0; }
