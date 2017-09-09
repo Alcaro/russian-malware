@@ -204,15 +204,13 @@ public:
 		          vertical ? numchildren : 1, NULL, uniform);
 	}
 	
-#define widget_create_layout_horz(...) (new widget_layout(false, false, __VA_ARGS__))
-#define widget_create_layout_vert(...) (new widget_layout(true,  false, __VA_ARGS__))
-	
 	//This one allows some widgets to take up multiple boxes of the grid. They're still stored row by
 	// row, except that there is no entry for slots that are already used.
 	//It is undefined behaviour if a widget does not fit where it belongs, if it overlaps another widget,
 	// or if it's size 0 in either direction.
 	widget_layout(unsigned int totwidth,   unsigned int totheight,   bool uniformwidths, bool uniformheights,
-	              unsigned int firstwidth, unsigned int firstheight, widget_base* firstchild, ...);
+	              unsigned int firstwidth, unsigned int firstheight, widget_base* firstchild,
+	              ...);
 #define widget_create_layout(...) (new widget_layout(__VA_ARGS__))
 	
 	//In this one, the widths/heights arrays can be NULL, which is treated as being filled with 1s.
@@ -233,6 +231,17 @@ public:
 //The widgets are stored row by row. There is no NULL terminator, because the size is known from the arguments already.
 //Uniform sizes mean that every row has the same height, and every column has the same width.
 widget_layout* widget_create_layout_grid(unsigned int width, unsigned int height, bool uniformsizes, widget_base* firstchild, ...);
+
+template<typename... Args>
+static inline widget_layout* widget_create_layout_horz(Args... children)
+{
+	return new widget_layout(false, false, children...);
+}
+template<typename... Args>
+static inline widget_layout* widget_create_layout_vert(Args... children)
+{
+	return new widget_layout(true, false, children...);
+}
 
 
 class widget_label : public widget_base { WIDGET_BASE
@@ -339,11 +348,10 @@ public:
 	widget_textbox* set_enabled(bool enable);
 	widget_textbox* focus();
 	
-	//TODO: use string or cstring
 	//The return value is guaranteed valid until the next call to any function
-	// on this object, or the next window_run[_iter], whichever comes first.
-	const char * get_text();
-	widget_textbox* set_text(const char * text);
+	// on this object, or the next mainloop dispatch, whichever comes first.
+	cstring get_text();
+	widget_textbox* set_text(cstring text);
 	//Length is the maximum amount of text entered, in units of either
 	// UTF-8 bytes, Unicode grapheme clusters, or something in between (implementation defined).
 	widget_textbox* set_length(unsigned int maxlen);
@@ -359,9 +367,9 @@ public:
 	//Note that it is not guaranteed to fire only if the text has changed; it may, for example,
 	// fire if the user selects an E and types another E on top. Or for no reason at all.
 	//Also note that 'text' is invalidated under the same conditions as get_text is.
-	widget_textbox* set_onchange(function<void(const char * text)> onchange);
+	widget_textbox* set_onchange(function<void(cstring text)> onchange);
 	//Called if the user hits Enter while this widget is focused. [TODO: Doesn't that activate the default button instead?]
-	widget_textbox* set_onactivate(function<void(const char * text)> onactivate);
+	widget_textbox* set_onactivate(function<void(cstring text)> onactivate);
 	
 public:
 	struct impl;

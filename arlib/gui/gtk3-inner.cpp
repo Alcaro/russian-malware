@@ -338,21 +338,22 @@ widget_radio* widget_radio::set_onclick(function<void(unsigned int state)> oncli
 
 
 struct widget_textbox::impl {
-	function<void(const char * text)> onchange;
-	function<void(const char * text)> onactivate;
+	function<void(cstring text)> onchange;
+	function<void(cstring text)> onactivate;
 };
 
 static void widget_textbox_onchange(GtkEntry* entry, gpointer user_data);
+static void widget_textbox_onactivate(GtkEntry* entry, gpointer user_data);
 widget_textbox::widget_textbox() : m(new impl)
 {
-	widget=gtk_entry_new();
-	widthprio=3;
-	heightprio=1;
+	widget = gtk_entry_new();
+	widthprio = 3;
+	heightprio = 1;
 	
 	gtk_entry_set_width_chars(GTK_ENTRY(widget), 5);
 	
 	g_signal_connect(widget, "changed", G_CALLBACK(widget_textbox_onchange), this);
-	m->onchange=NULL;
+	g_signal_connect(widget, "activate", G_CALLBACK(widget_textbox_onactivate), this);
 }
 
 widget_textbox::~widget_textbox()
@@ -366,15 +367,28 @@ widget_textbox* widget_textbox::set_enabled(bool enable)
 	return this;
 }
 
+static void widget_textbox_focusthis(GtkWidget* widget, gpointer user_data)
+{
+	gtk_widget_grab_focus(widget);
+	//why void* when g_signal_connect is GCallback
+	g_signal_handlers_disconnect_by_func(widget, (void*)G_CALLBACK(widget_textbox_focusthis), user_data);
+}
 widget_textbox* widget_textbox::focus()
 {
-	gtk_widget_grab_focus(GTK_WIDGET(widget));
+	if (gtk_widget_get_mapped(GTK_WIDGET(widget)))
+	{
+		gtk_widget_grab_focus(GTK_WIDGET(widget));
+	}
+	else
+	{
+		g_signal_connect(widget, "map", G_CALLBACK(widget_textbox_focusthis), this);
+	}
 	return this;
 }
 
-widget_textbox* widget_textbox::set_text(const char * text)
+widget_textbox* widget_textbox::set_text(cstring text)
 {
-	gtk_entry_set_text(GTK_ENTRY(widget), text);
+	gtk_entry_set_text(GTK_ENTRY(widget), text.c_str());
 	return this;
 }
 
@@ -404,7 +418,7 @@ widget_textbox* widget_textbox::set_invalid(bool invalid)
 				//this selection doesn't look too good, but not terrible either.
 				, -1, NULL);
 		}
-		GtkStyleContext* context=gtk_widget_get_style_context(GTK_WIDGET(widget));
+		GtkStyleContext* context = gtk_widget_get_style_context(GTK_WIDGET(widget));
 		gtk_style_context_add_provider(context, GTK_STYLE_PROVIDER(cssprovider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
 		gtk_widget_set_name(GTK_WIDGET(widget), "invalid");
 		gtk_widget_grab_focus(GTK_WIDGET(widget));
@@ -416,14 +430,14 @@ widget_textbox* widget_textbox::set_invalid(bool invalid)
 	return this;
 }
 
-const char * widget_textbox::get_text()
+cstring widget_textbox::get_text()
 {
 	return gtk_entry_get_text(GTK_ENTRY(widget));
 }
 
 static void widget_textbox_onchange(GtkEntry* entry, gpointer user_data)
 {
-	widget_textbox* obj=(widget_textbox*)user_data;
+	widget_textbox* obj = (widget_textbox*)user_data;
 	gtk_widget_set_name(GTK_WIDGET(obj->widget), "x");
 	if (obj->m->onchange)
 	{
@@ -431,22 +445,22 @@ static void widget_textbox_onchange(GtkEntry* entry, gpointer user_data)
 	}
 }
 
-widget_textbox* widget_textbox::set_onchange(function<void(const char * text)> onchange)
+widget_textbox* widget_textbox::set_onchange(function<void(cstring text)> onchange)
 {
-	m->onchange=onchange;
+	m->onchange = onchange;
 	return this;
 }
 
 static void widget_textbox_onactivate(GtkEntry* entry, gpointer user_data)
 {
-	widget_textbox* obj=(widget_textbox*)user_data;
+	widget_textbox* obj = (widget_textbox*)user_data;
 	obj->m->onactivate(gtk_entry_get_text(GTK_ENTRY(obj->widget)));
 }
 
-widget_textbox* widget_textbox::set_onactivate(function<void(const char * text)> onactivate)
+widget_textbox* widget_textbox::set_onactivate(function<void(cstring text)> onactivate)
 {
-	g_signal_connect(widget, "activate", G_CALLBACK(widget_textbox_onactivate), this);
-	m->onactivate=onactivate;
+	m->onactivate = onactivate;
+	gtk_entry_set_activates_default(GTK_ENTRY(widget), false);
 	return this;
 }
 

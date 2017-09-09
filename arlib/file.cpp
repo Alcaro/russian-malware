@@ -34,7 +34,7 @@ bool file::impl::default_unmapw(arrayvieww<byte> data)
 
 #ifdef ARLIB_TEST
 
-//criteria:
+//criteria for READONLY_FILE:
 //- must be a normal file, no /dev/*
 //- minimum 66000 bytes
 //- the first few bytes must be known, no .txt files or possibly-shebanged stuff
@@ -42,18 +42,21 @@ bool file::impl::default_unmapw(arrayvieww<byte> data)
 //- must be readable by everyone (assuming absense of sandboxes)
 //- must NOT be writable or deletable by this program
 //recommended choice: some random executable
+
+//criteria for WRITABLE_FILE:
+//- must not exist under normal operation
+//- directory must exist
+//- directory must be writable by unprivileged users
+//- no funny symbols in the name
 #ifdef _WIN32
 #define READONLY_FILE "C:/Windows/notepad.exe" // screw anything where the windows directory isn't on C:
 #define READONLY_FILE_HEAD "MZ"
+#define WRITABLE_FILE "C:/Temp/arlib-selftest.txt"
 #else
 #define READONLY_FILE "/bin/sh"
 #define READONLY_FILE_HEAD "\x7F""ELF"
+#define WRITABLE_FILE "/tmp/arlib-selftest.txt"
 #endif
-
-//criteria:
-//- no funny symbols in the name
-//- implausible name, nothing of value may be lost by deleting it
-#define WRITABLE_FILE "arlib-selftest.txt"
 
 test("file reading")
 {
