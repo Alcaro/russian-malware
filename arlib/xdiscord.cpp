@@ -407,6 +407,16 @@ void Discord::del_user(cstring guild_id, cstring user_id)
 
 void Discord::User::fetch(function<void(User)> callback)
 {
+puts("PARTIAL:NAME="+impl().username);
+puts("PARTIAL:PARTIAL="+tostring(partial()));
+	if (!partial())
+	{
+puts("PARTIAL:SHORTCIRCUIT");
+		callback(*this);
+		return;
+	}
+puts("PARTIAL:FULLFETCH");
+	
 	class x {
 		Discord* m_parent;
 		function<void(User)> callback;

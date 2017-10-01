@@ -5,6 +5,7 @@
 #include "../string.h"
 #include "../file.h"
 #include "../set.h"
+#include "../runloop.h"
 #include <stdint.h>
 #include <string.h>
 
@@ -86,11 +87,29 @@ public:
 	int sendp(cstring data, bool block = true) { return this->sendp(data.bytes(), block); }
 	int send(cstring data) { return this->send(data.bytes()); }
 	
+	//The socket will remove its callbacks when destroyed.
+	//It is safe to call this multiple times; however, 'loop' must be same for each call.
+	//If there's still data available for reading on the socket, the callbacks will be called again.
+	//If both read and write are possible and callbacks are set, read is called; it's implementation defined whether write is too.
+	//False positives are possible. Use nonblocking operations.
+	virtual void callback(runloop* loop, function<void(socket*)> cb_read, function<void(socket*)> cb_write = NULL) = 0;
+	
 	virtual ~socket() {}
+	
+	//TODO: serialize function, usable for both normal and ssl
+	//in addition to the usual copyable-data hierarchy, it needs to
+	// store/provide fds
+	// be destructive, SSL state is only usable once
+	// support erroring out, if serialization isn't implemented
+	//then remove
+	// everything after this point
+	// all implementations of active(), grep them
+	// the fd member, and associated constructor
 	
 	//Can be used to keep a socket alive across exec(). Don't use for an SSL socket, use serialize() instead.
 	static socket* create_from_fd(int fd);
 	int get_fd() { return fd; }
+	
 	
 	//Returns whether the object has buffers such that recv() or send() will return immediately, even if the fd doesn't claim it will.
 	//If select(2) will return this one, this function isn't needed.
@@ -121,7 +140,7 @@ public:
 //Nonblocking           | Yes     | ?        | Yes    | Yes     | Yes  | OpenSSL supports nonblocking, but not blocking
 //Permissive (expired)  | Yes     | ?        | Yes    | No      | No
 //Permissive (bad root) | Yes     | ?        | Yes    | Yes     | No
-//Permissive (bad name) | Yes     | ?        | Yes    | No      | No   | Bad names are very rare outside testing
+//Permissive (bad name) | Yes     | ?        | Yes    | No      | No
 //Serialize             | No      | No       | No     | Yes*    | No   | TLSe claims to support it, but I can't get it working
 //                                                                     | BearSSL is homemade and will need rewrites if upstream changes
 //Server                | No      | No       | No     | No      | No   | Likely possible on everything, I'm just lazy
@@ -146,19 +165,20 @@ public:
 	static socketssl* create_server(socket* parent);
 	//Only usable on server sockets.
 	void set_cert(array<byte> data); // Must be called exactly once.
-	void set_cert_cb(function<void(socketssl* sock, cstring hostname)> cb); // Used for SNI. The callback must call set_cert.
+	void set_cert_cb(function<void(cstring hostname)> cb); // Used for SNI. The callback must call set_cert.
 	
 	//Can be used to keep a socket alive across exec().
 	//If successful, serialize() returns the the file descriptor needed to unserialize, and the socket is deleted.
 	//On failure, returns empty and nothing happens.
-	//Only available under some implementation. Non-virtual, to fail in linker rather than runtime.
+	//Only available under some implementations. Non-virtual, to fail in linker rather than runtime.
+	//After doing this, the object is not attached to a runloop. Call callback() on it.
 	array<byte> serialize(int* fd);
 	static socketssl* deserialize(int fd, arrayview<byte> data);
 };
 
-//socket::select() works on these, but recv/send will fail
 class socketlisten : public socket {
-	socketlisten(int fd) : socket(fd) { this->fd = fd; }
+	socketlisten(int fd) : socket(fd), loop(NULL) {}
+	
 public:
 	static socketlisten* create(int port);
 	socket* accept();
@@ -166,4 +186,17 @@ public:
 	
 	int recv(arrayvieww<byte> data, bool block) { return e_not_supported; }
 	int sendp(arrayview<byte> data, bool block) { return e_not_supported; }
+	
+private:
+	runloop* loop;
+	function<void(socket*)> cb_read;
+	void on_readable(uintptr_t) { cb_read(this); }
+public:
+	//Having a socket waiting for accept() is considered a read operation. cb_write is ignored.
+	void callback(runloop* loop, function<void(socket*)> cb_read, function<void(socket*)> cb_write = NULL)
+	{
+		this->loop = loop;
+		this->cb_read = cb_read;
+		loop->set_fd(fd, cb_read ? bind_this(&socketlisten::on_readable) : NULL, NULL);
+	}
 };

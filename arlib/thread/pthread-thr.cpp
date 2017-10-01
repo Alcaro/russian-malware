@@ -23,6 +23,7 @@ static void * threadproc(void * userdata)
 void thread_create(function<void()> start)
 {
 	struct threaddata_pthread * thdat = malloc(sizeof(struct threaddata_pthread));
+	memset(thdat, 0, sizeof(threaddata_pthread));
 	thdat->func = start;
 	pthread_t thread;
 	if (pthread_create(&thread, NULL, threadproc, thdat) != 0) abort();

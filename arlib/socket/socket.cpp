@@ -124,7 +124,11 @@ namespace {
 
 class socket_impl : public socket {
 public:
-	socket_impl(int fd) : socket(fd) {}
+	socket_impl(int fd) : socket(fd), loop(NULL) {}
+	
+	runloop* loop;
+	function<void(socket*)> cb_read;
+	function<void(socket*)> cb_write;
 	
 	/*private*/ int fixret(int ret)
 	{
@@ -155,8 +159,19 @@ public:
 		return fixret(::send(fd, (char*)data.ptr(), data.size(), MSG_NOSIGNAL | (block ? 0 : MSG_DONTWAIT)));
 	}
 	
+	/*private*/ void on_readable(uintptr_t) { cb_read(this); }
+	/*private*/ void on_writable(uintptr_t) { cb_write(this); }
+	void callback(runloop* loop, function<void(socket*)> cb_read, function<void(socket*)> cb_write)
+	{
+		this->loop = loop;
+		this->cb_read = cb_read;
+		this->cb_write = cb_write;
+		loop->set_fd(fd, cb_read ? bind_this(&socket_impl::on_readable) : NULL, cb_write ? bind_this(&socket_impl::on_writable) : NULL);
+	}
+	
 	~socket_impl()
 	{
+		if (loop) loop->set_fd(fd, NULL, NULL);
 		if (fd>=0) close(fd);
 	}
 };
@@ -280,4 +295,4 @@ socket* socketlisten::accept()
 	return socket_wrap(::accept(this->fd, NULL,NULL));
 }
 
-socketlisten::~socketlisten() { close(this->fd); }
+socketlisten::~socketlisten() { if (loop) loop->set_fd(fd, NULL, NULL); close(this->fd); }

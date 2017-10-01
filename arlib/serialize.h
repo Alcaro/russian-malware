@@ -31,11 +31,13 @@
 //	template<typename T> void hex(cstring name, T& item);
 //	void hex(cstring name, arrayvieww<byte> item);
 //	
-//	//Like hex(), makes serialized data look nicer. Can be ignored.
+//	//Makes serialized data look nicer. May be ignored.
 //	void comment(cstring c);
 //	
 //	//Returns the next child name the structure expects to process. Valid only while unserializing.
 //	cstring next() const;
+//	//(BML unserializer only) Returns the value corresponding to next().
+//	cstring nextval() const;
 //};
 //
 //struct serializable {
@@ -47,7 +49,7 @@
 //	{
 //		//If unserializing, this function can be called multiple (or zero) times if the document is
 //		// corrupt. Be careful about changing any state, other than calling the serializer functions.
-//		//For most items, .item() and .hex() are enough. For containers, use everything.
+//		//For most items, .item() and .hex() are enough. For containers, do whatever.
 //		s.item("a", a);
 //	}
 //	//or (expands to the above)
@@ -148,6 +150,7 @@ class bmlunserialize_impl {
 	
 	bmlunserialize_impl(cstring bml) : p(bml) {}
 	template<typename T> friend T bmlunserialize(cstring bml);
+	template<typename T> friend void bmlunserialize_to(cstring bml, T& to);
 	
 	template<typename T> void read_item(T& out)
 	{
@@ -243,6 +246,7 @@ public:
 	}
 	
 	cstring next() const { return thisnode; }
+	cstring nextval() const { return thisval; }
 	
 	void comment(cstring c) {}
 };
@@ -253,6 +257,12 @@ template<typename T> T bmlunserialize(cstring bml)
 	bmlunserialize_impl s(bml);
 	s.read_item(out);
 	return out;
+}
+
+template<typename T> void bmlunserialize_to(cstring bml, T& to)
+{
+	bmlunserialize_impl s(bml);
+	s.read_item(to);
 }
 
 

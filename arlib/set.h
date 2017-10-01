@@ -9,7 +9,7 @@ class set : public linqbase<set<T>> {
 	//this is a hashtable, using open addressing and linear probing
 	enum { i_empty, i_deleted };
 	
-	T* m_data_;
+	T* m_data_; // length is always same as m_valid, so no explicit length - waste of space
 	uint8_t& tag(size_t id) { return *(uint8_t*)(m_data_+id); }
 	uint8_t tag(size_t id) const { return *(uint8_t*)(m_data_+id); }
 	array<bool> m_valid;
@@ -339,6 +339,13 @@ public:
 		node* ret = items.get(key);
 		if (ret) return ret->value;
 		else return def;
+	}
+	template<typename Tk2>
+	Tvalue* get_or_null(const Tk2& key)
+	{
+		node* ret = items.get(key);
+		if (ret) return &ret->value;
+		else return NULL;
 	}
 	Tvalue& get_create(const Tkey& key)
 	{

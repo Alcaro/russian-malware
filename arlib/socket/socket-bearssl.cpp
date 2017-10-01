@@ -129,6 +129,8 @@ RUN_ONCE_FN(initialize)
 #ifndef _WIN32
 	append_certs_pem_x509(file::read("/etc/ssl/certs/ca-certificates.crt"));
 #else
+	//TODO: LoadLibrary this?
+	
 	HCERTSTORE store = CertOpenSystemStore((HCRYPTPROV)NULL, "ROOT");
 	if (!store) return;
 	
@@ -201,6 +203,11 @@ public:
 		x509_noanchor_context xwc = { NULL, NULL };
 		byte iobuf[BR_SSL_BUFSIZE_BIDI];
 	} s;
+	
+	runloop* loop = NULL;
+	uintptr_t idle_id = 0;
+	function<void(socket*)> cb_read;
+	function<void(socket*)> cb_write;
 	
 	socketssl_impl(socket* parent, cstring domain, bool permissive) : socketssl(parent->get_fd())
 	{
@@ -345,6 +352,38 @@ public:
 		return buflen;
 	}
 	
+	/*private*/ bool do_cbs(bool from_cb)
+	{
+		int bearstate = br_ssl_engine_current_state(&s.sc.eng);
+		if (cb_read  && (bearstate&BR_SSL_RECVAPP)) cb_read( this);
+		if (cb_write && (bearstate&BR_SSL_SENDAPP)) cb_write(this);
+		
+		bearstate = br_ssl_engine_current_state(&s.sc.eng);
+		bool again = false;
+		if (cb_read  && (bearstate&BR_SSL_RECVAPP)) again = true;
+		if (cb_write && (bearstate&BR_SSL_SENDAPP)) again = true;
+		
+		if (from_cb)
+		{
+			if (!again) this->idle_id = 0;
+			return again;
+		}
+		
+		if (again && !this->idle_id) this->idle_id = loop->set_idle(bind_this(&socketssl_impl::idle_cb));
+		return false;
+	}
+	
+	/*private*/ void on_readable(socket*) { process_recv(false); do_cbs(false); }
+	/*private*/ void on_writable(socket*) { process_send(false); do_cbs(false); }
+	/*private*/ bool idle_cb() { return do_cbs(true); }
+	void callback(runloop* loop, function<void(socket*)> cb_read, function<void(socket*)> cb_write)
+	{
+		this->loop = loop;
+		this->cb_read = cb_read;
+		this->cb_write = cb_write;
+		sock->callback(loop, bind_this(&socketssl_impl::on_readable), bind_this(&socketssl_impl::on_writable));
+	}
+	
 	bool active(bool want_recv, bool want_send)
 	{
 		int bearstate = br_ssl_engine_current_state(&s.sc.eng);
@@ -355,11 +394,15 @@ public:
 	
 	~socketssl_impl()
 	{
+		if (loop)
+		{
+			loop->remove(idle_id);
+		}
 		if (!sock) return;
 		
 		//gracefully tear this down, not really useful but not harmful either
 		br_ssl_engine_close(&s.sc.eng);
-		br_ssl_engine_flush(&s.sc.eng, 0);
+		br_ssl_engine_flush(&s.sc.eng, false);
 		process(false);
 		//but don't worry too much about ensuring the remote gets our closure notification, it's not really useful
 	}

@@ -7,6 +7,13 @@
 #include "gui/window.h"
 #include "os.h"
 
+#ifdef __linux__
+#define WITHVALGRIND
+#endif
+#ifdef WITHVALGRIND
+#include <valgrind/memcheck.h>
+#endif
+
 struct testlist {
 	void(*func)();
 	const char * loc;
@@ -86,8 +93,7 @@ int main(int argc, char* argv[])
 	window_init(&argc, &argv);
 #endif
 	all_tests = (argc>1);
-	
-	int count[3]={0,0,0};
+	bool all_tests_twice = (argc>2);
 	
 	//flip list backwards
 	//order of static initializers is implementation defined, but this makes output better under gcc
@@ -101,33 +107,54 @@ int main(int argc, char* argv[])
 		test = next;
 	}
 	
-	test = g_testlist;
-	while (test)
+	for (int pass = 0; pass < (all_tests_twice ? 2 : 1); pass++)
 	{
-		testlist* next = test->next;
-		if (true)
+		int count[3]={0,0,0};
+		
+		test = g_testlist;
+		while (test)
 		{
-			if (test->name) printf("Testing %s (%s)...", test->name, test->loc);
-			else printf("Testing %s...", test->loc);
-			fflush(stdout);
-			_test_result = 0;
-			callstack.reset();
-			test->func();
-			count[_test_result]++;
-			if (!_test_result) puts(" pass");
+			testlist* next = test->next;
+			if (true)
+			{
+				if (test->name) printf("Testing %s (%s)...", test->name, test->loc);
+				else printf("Testing %s...", test->loc);
+				fflush(stdout);
+				_test_result = 0;
+				callstack.reset();
+				test->func();
+				count[_test_result]++;
+				if (!_test_result) puts(" pass");
+			}
+			else
+			{
+				if (test->name) printf("Skipping %s (%s)\n", test->name, test->loc);
+				else printf("Skipping %s\n", test->loc);
+				count[2]++;
+			}
+			test = next;
 		}
-		else
+		printf("Passed %i, failed %i", count[0], count[1]);
+		if (count[2]) printf(", skipped %i", count[2]);
+		puts("");
+		
+#ifdef WITHVALGRIND
+		if (all_tests_twice)
 		{
-			if (test->name) printf("Skipping %s (%s)\n", test->name, test->loc);
-			else printf("Skipping %s\n", test->loc);
-			count[2]++;
+			if (pass==0)
+			{
+				//discard everything leaked in first pass
+				VALGRIND_DISABLE_ERROR_REPORTING;
+				VALGRIND_DO_LEAK_CHECK;
+				VALGRIND_ENABLE_ERROR_REPORTING;
+			}
+			else
+			{
+				VALGRIND_DO_CHANGED_LEAK_CHECK;
+			}
 		}
-		free(test);
-		test = next;
+#endif
 	}
-	printf("Passed %i, failed %i", count[0], count[1]);
-	if (count[2]) printf(", skipped %i", count[2]);
-	puts("");
 	return 0;
 }
 

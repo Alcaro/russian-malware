@@ -3,7 +3,7 @@
 #include "string.h"
 
 //A bytepipe accepts an infinite amount of bytes and returns them, first one first.
-//Guaranteed amortized O(n) no matter how many bytes are pushed at the time.
+//Guaranteed amortized O(n) no matter how many bytes are pushed at the time, except if pull_line() is used and there is no line.
 class bytepipe {
 	array<byte> buf1;
 	size_t buf1st;
@@ -83,14 +83,21 @@ public:
 	{
 		buf1st += bytes;
 	}
+	void pull_done(arrayview<byte> bytes)
+	{
+		pull_done(bytes.size());
+	}
 	//Returns the entire thing.
 	arrayview<byte> pull_buf_full()
 	{
 		if (buf1end+buf2end > buf1.size())
 		{
-			memmove(buf1.ptr(), buf1.slice(buf1st, buf1end-buf1st).ptr(), buf1end-buf1st);
-			buf1end -= buf1st;
-			buf1st = 0;
+			if (buf1st != 0)
+			{
+				memmove(buf1.ptr(), buf1.skip(buf1st).ptr(), buf1end-buf1st);
+				buf1end -= buf1st;
+				buf1st = 0;
+			}
 			if (buf1end+buf2end > buf1.size())
 			{
 				if (buf1end > buf2end) buf1.resize(buf1.size()*2);
@@ -129,6 +136,34 @@ public:
 		
 		reset();
 		return ret;
+	}
+	
+	//Returns data until and including the next \n. Doesn't acknowledge it. If there is no \n, returns an empty array.
+	arrayview<byte> pull_line()
+	{
+		byte* start = buf1.ptr()+buf1st;
+		size_t len = buf1end-buf1st;
+		byte* nl = (byte*)memchr(start, '\n', len);
+		if (nl)
+		{
+			return arrayview<byte>(start, nl+1-start);
+		}
+		
+		nl = (byte*)memchr(buf2.ptr(), '\n', buf2end);
+		if (nl)
+		{
+			size_t pos = buf1end-buf1st + nl+1-buf2.ptr();
+			return pull_buf_full().slice(0, pos);
+		}
+		
+		return NULL;
+	}
+	//Returns 'line' minus a trailing \r\n or \n. The \n must exist. Usable together with the above.
+	static arrayview<byte> trim_line(arrayview<byte> line)
+	{
+		if (line.size()==1) return NULL;
+		if (line[line.size()-2]=='\r') return line.slice(0, line.size()-2);
+		else return line.slice(0, line.size()-1);
 	}
 	
 	size_t remaining() { return buf1end-buf1st+buf2end; }

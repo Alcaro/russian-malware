@@ -94,9 +94,6 @@ public:
 		return out+"\"";
 	}
 	
-	//If you pass in data that's not valid for that mode (for example, val="foo bar" and mode=eq),
-	// then it silently switches to the lowest working mode (in the above example, quote).
-	//Since enter() implies the tag has children, it will disobey the inline modes; use node() if you want it inlined.
 	void null() { comma(); m_data += "null"; }
 	void boolean(bool b) { comma(); m_data += b ? "true" : "false"; }
 	void str(cstring s) { comma(); m_data += strwrap(s); }

@@ -337,7 +337,7 @@ static inline pid_t clone(unsigned long clone_flags, unsigned long newsp,
 	if (clone_flags&CLONE_PARENT_SETTID) return -EINVAL;
 	
 	//glibc fork() uses CHILD_{SET,CLEAR}TID to ensure a first-instruction interrupt handler getpid() is accurate
-	//PARENT_SETTID isn't, so we hijack it
+	//PARENT_SETTID is unused, so we hijack it
 	broker_req req = { br_fork };
 	int fd = do_broker_req(&req);
 	if (fd<0) return -ENOMEM; // probably accurate enough

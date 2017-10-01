@@ -87,6 +87,7 @@ void _assert_eq(const T&  actual,   const char * actual_exp,
 
 #define test(...) static void MAYBE_UNUSED JOIN(_testfunc_, __LINE__)()
 #define assert(x) ((void)(x))
+#define assert_msg(x, msg) ((void)(x),(void)(msg))
 #define assert_eq(x,y) ((void)(x==y))
 #define testcall(x) x
 #define test_skip(x) return
