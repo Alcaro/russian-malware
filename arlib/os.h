@@ -45,5 +45,9 @@ void debug_or_exit();
 //If the program is run under a debugger, this triggers a breakpoint. If not, the program crashes.
 void debug_or_abort();
 
-//Returns time since an undefined point in time, in microseconds. The epoch may vary across machines or reboots.
-uint64_t perfcounter();
+//Same epoch as time().
+uint64_t time_ms();
+uint64_t time_us(); // this will overflow in year 586524
+//No epoch; the epoch may vary across machines or reboots. May be faster. They will have same epoch as each other.
+uint64_t time_ms_ne();
+uint64_t time_us_ne();

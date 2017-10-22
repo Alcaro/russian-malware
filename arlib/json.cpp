@@ -343,7 +343,7 @@ static void testjson_error(const char * json)
 		assert(depth >= 0);
 		
 		events++;
-		assert(events < 1000); // fail on infinite error loops
+		assert_lt(events, 1000); // fail on infinite error loops
 	}
 	assert_eq(error, true);
 	assert_eq(depth, 0);

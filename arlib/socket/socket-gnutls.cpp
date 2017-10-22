@@ -54,13 +54,13 @@ static int _verify_certificate_callback(gnutls_session_t session)
 #undef CHECK
 }
 
-class socketssl_impl : public socketssl {
+class socketssl_impl : public socket {
 public:
 	socket* sock;
 	gnutls_session_t session;
 	bool block;
 	
-	socketssl_impl(socket* parent) : socketssl(parent->get_fd()), sock(parent) {}
+	socketssl_impl(socket* parent) : sock(parent) {}
 	
 	bool init(socket* parent, cstring domain, bool permissive)
 	{
@@ -132,11 +132,11 @@ public:
 		return fixretsend(gnutls_record_send(this->session, data.ptr(), data.size()));
 	}
 	
-	bool active(bool want_recv, bool want_send)
-	{
-		if (want_recv) return gnutls_record_check_pending(this->session);
-		else return false; // don't care about write, assume it always succeeds
-	}
+	//bool active(bool want_recv, bool want_send)
+	//{
+	//	if (want_recv) return gnutls_record_check_pending(this->session);
+	//	else return false; // don't care about write, assume it always succeeds
+	//}
 	
 	~socketssl_impl()
 	{

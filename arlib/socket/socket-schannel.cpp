@@ -61,7 +61,7 @@ RUN_ONCE_FN(initialize)
 	                                NULL, &SchannelCred, NULL, NULL, &cred, NULL);
 }
 
-class socketssl_impl : public socketssl {
+class socketssl_impl : public socket {
 public:
 	socket* sock;
 	CtxtHandle ssl;
@@ -316,11 +316,6 @@ public:
 		if (sock->send(arrayview<byte>(sendbuf, Buffers[0].cbBuffer + Buffers[1].cbBuffer + Buffers[2].cbBuffer)) < 0) error();
 		
 		return len;
-	}
-	
-	bool active(bool want_recv, bool want_send)
-	{
-#error fixme
 	}
 	
 	~socketssl_impl()

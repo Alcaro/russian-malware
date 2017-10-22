@@ -1,4 +1,5 @@
-#include "arlib.h"
+#include "function.h"
+#include "test.h"
 
 namespace {
 static int r42() { return 42; }

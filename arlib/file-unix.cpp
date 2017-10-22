@@ -145,7 +145,7 @@ namespace {
 		}
 		bool resize(size_t newsize)
 		{
-			return (ftruncate(this->fd, newsize)==0);
+			return (ftruncate(this->fd, newsize) == 0);
 		}
 		
 		size_t read(arrayvieww<byte> target, size_t start)
@@ -166,8 +166,8 @@ namespace {
 			//TODO: for small things (64KB? 1MB?), use malloc, it's faster
 			//http://lkml.iu.edu/hypermail/linux/kernel/0004.0/0728.html
 			size_t offset = start % pagesize;
-			void* data=::mmap(NULL, len+offset, writable ? PROT_WRITE|PROT_READ : PROT_READ, MAP_SHARED, this->fd, start-offset);
-			if (data==MAP_FAILED) return NULL;
+			void* data = ::mmap(NULL, len+offset, writable ? PROT_WRITE|PROT_READ : PROT_READ, MAP_SHARED, this->fd, start-offset);
+			if (data == MAP_FAILED) return NULL;
 			return arrayvieww<byte>((uint8_t*)data+offset, len);
 		}
 		
@@ -179,7 +179,12 @@ namespace {
 		}
 		
 		arrayvieww<byte> mmapw(size_t start, size_t len) { return mmap(true, start, len); }
-		bool unmapw(arrayvieww<byte> data) { unmap(data); return true; }
+		bool unmapw(arrayvieww<byte> data)
+		{
+			unmap(data);
+			// manpage documents no errors for the case where file writing fails, gotta assume it never does
+			return true;
+		}
 		
 		~file_unix() { close(fd); }
 	};
@@ -187,8 +192,8 @@ namespace {
 
 file::impl* file::open_impl_fs(cstring filename, mode m)
 {
-	int flags[] = { O_RDONLY, O_RDWR|O_CREAT, O_RDWR, O_RDWR|O_CREAT|O_TRUNC, O_RDWR|O_CREAT|O_EXCL };
-	int fd = ::open(filename.c_str(), flags[m]|O_CLOEXEC, 0666);
+	static const int flags[] = { O_RDONLY, O_RDWR|O_CREAT, O_RDWR, O_RDWR|O_CREAT|O_TRUNC, O_RDWR|O_CREAT|O_EXCL };
+	int fd = ::open(filename.c_str(), flags[m]|O_CLOEXEC|O_LARGEFILE, 0666);
 	if (fd<0) return NULL;
 	return new file_unix(fd);
 }

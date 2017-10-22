@@ -335,8 +335,19 @@ size_t memcmp_d(const void * a, const void * b, size_t len);
 //typedef unsigned long uint32_t;
 //typedef unsigned __int64 uint64_t;
 //typedef unsigned int size_t;
+
+//undefined behavior if 'in' is 0 or negative, or if the output would be out of range
 template<typename T> static inline T bitround(T in)
 {
+#if defined(__GNUC__) && defined(__x86_64__)
+	//this seems somewhat faster for me, and more importantly, it's smaller
+	//x64 only because I don't know if it does something stupid on other archs
+	//I'm surprised gcc doesn't detect this pattern and optimize it, it does detect a few others (like byteswap)
+	if (in == 1) return in;
+	if (sizeof(T) <= 4) return 1 + ((~(T)0) >> __builtin_clz(in - 1));
+	return 1 + ((~(T)0) >> __builtin_clzll(in - 1));
+#else
+	//TODO: https://stackoverflow.com/q/355967 for msvc
 	in--;
 	in|=in>>1;
 	in|=in>>2;
@@ -345,6 +356,7 @@ template<typename T> static inline T bitround(T in)
 	if (sizeof(in)>2) in|=in>>8>>8; // double shift to shut up bitshift-out-of-range warnings
 	if (sizeof(in)>4) in|=in>>8>>8>>8>>8;
 	in++;
+#endif
 	return in;
 }
 

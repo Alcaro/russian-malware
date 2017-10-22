@@ -91,6 +91,7 @@ public:
 	template<typename T2> arrayview<T2> reinterpret() const
 	{
 		//reject cast<string>()
+		//TODO: allow litend/etc
 		static_assert(std::is_fundamental<T>::value);
 		static_assert(std::is_fundamental<T2>::value);
 		
@@ -420,6 +421,11 @@ public:
 	array(std::initializer_list<T> c)
 	{
 		clone(arrayview<T>(c.begin(), c.size()));
+	}
+	
+	array(const T * ptr, size_t count)
+	{
+		clone(arrayview<T>(ptr, count));
 	}
 	
 	array<T> operator=(array<T> other)

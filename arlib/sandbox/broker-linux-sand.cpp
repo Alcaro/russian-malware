@@ -42,7 +42,7 @@ void sandproc::filesystem::grant_native_redir(string cpath, string ppath, int ma
 	m.type = ty_native;
 	if (!mountfds.contains(mntpath))
 	{
-		mountfds.insert(mntpath, open(mntpath, O_DIRECTORY|O_PATH));
+		mountfds.insert(mntpath, open(mntpath.c_str(), O_DIRECTORY|O_PATH));
 	}
 	m.n_fd = mountfds.get(mntpath);
 	m.numwrites = max_write;
@@ -139,7 +139,7 @@ int sandproc::filesystem::child_file(cstring pathname, int op_, int flags, mode_
 		errno = EACCES;
 		return -1;
 	}
-	while (pathname[~1]=='/') pathname = pathname.csubstr(0, ~1);
+	while (pathname[~1]=='/') pathname = pathname.substr(0, ~1);
 	
 	bool exact_path = false;
 	
@@ -202,11 +202,11 @@ int sandproc::filesystem::child_file(cstring pathname, int op_, int flags, mode_
 		
 		cstring relpath;
 		if (mlen > pathname.length()) relpath = "."; // open("/usr/include/") when that's a mountpoint
-		else relpath = pathname.csubstr(mlen, ~0);
+		else relpath = pathname.substr(mlen, ~0);
 		
-		if (op == br_open) return openat(m->n_fd, relpath, flags|O_CLOEXEC|O_NOCTTY, mode);
-		if (op == br_unlink) return unlinkat(m->n_fd, relpath, 0);
-		if (op == br_access) return faccessat(m->n_fd, relpath, flags, 0);
+		if (op == br_open) return openat(m->n_fd, relpath.c_str(), flags|O_CLOEXEC|O_NOCTTY, mode);
+		if (op == br_unlink) return unlinkat(m->n_fd, relpath.c_str(), 0);
+		if (op == br_access) return faccessat(m->n_fd, relpath.c_str(), flags, 0);
 		abort();
 	}
 	case ty_tmp:
@@ -224,7 +224,7 @@ int sandproc::filesystem::child_file(cstring pathname, int op_, int flags, mode_
 				}
 				m->numwrites--;
 				
-				fd = memfd_create(pathname, MFD_CLOEXEC);
+				fd = memfd_create(pathname.c_str(), MFD_CLOEXEC);
 				tmpfiles.insert(pathname, fd);
 			}
 			//unshare file position

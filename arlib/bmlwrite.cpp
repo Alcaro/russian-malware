@@ -90,7 +90,7 @@ string bmlwriter::escape(cstring val)
 	{
 		if (isalnum(c) || c=='.') esc+=c;
 		else if (c=='-') esc+="--";
-		else { esc+="-"+tostringhex2((uint8_t)c); needescape=true; }
+		else { esc+="-"+tostringhex<2>((uint8_t)c); needescape=true; }
 	}
 	if (needescape) return esc;
 	else return val;

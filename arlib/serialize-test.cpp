@@ -219,19 +219,13 @@ test("BML deserialization")
 	}
 	
 	//the system should not be order-sensitive
+	//in case of dupes, last one should win; extraneous nodes should be cleanly ignored
 	{
-		ser2 item = bmlunserialize<ser2>("d b=4 a=3\nc a=1 b=2");
+		ser2 item = bmlunserialize<ser2>("d b=4 a=3 q\nc a=42 b=2 a=1\nq");
 		assert_eq(item.c.a, 1);
 		assert_eq(item.c.b, 2);
 		assert_eq(item.d.a, 3);
 		assert_eq(item.d.b, 4);
-	}
-	
-	//in case of dupes, last one should win; extraneous nodes should be cleanly ignored
-	{
-		ser1 item = bmlunserialize<ser1>("a=1\nb=2\nq=0\na=3\na=4");
-		assert_eq(item.a, 4);
-		assert_eq(item.b, 2);
 	}
 	
 	//the system is allowed to loop, but only if there's bogus or extraneous nodes
@@ -309,6 +303,99 @@ test("BML deserialization")
 		assert_eq(item.data.get("foo"), "bar");
 		assert_eq(item.data.get("test"), "C:/Users/Administrator/My Documents/!TOP SECRET!.docx");
 		assert_eq(item.data.get("C:/Users/Administrator/My Documents/!TOP SECRET!.docx"), "test");
+	}
+	
+	{
+		cstring bml = R"(
+a
+ c
+  e=0
+  f=0
+ d
+  e=3
+  f=4
+a
+ c
+  e=1
+ c
+  f=2
+ q
+b
+ d
+  e=0
+  f=0
+  q=0
+  f=8
+  q f=0
+  e=7
+ c
+ c
+ c
+  e=5
+  f=6
+q
+a
+b
+ c
+ d
+c e=0
+q
+)";
+		int ace = 9;
+		int acf = 9;
+		int ade = 9;
+		int adf = 9;
+		int bce = 9;
+		int bcf = 9;
+		int bde = 9;
+		int bdf = 9;
+		
+		//this is some pretty ugly code, it's not meant to be used like this. real uses look better
+		bmlunserialize_impl s(bml);
+		
+		ser_enter(s)
+		{
+			//with properly written serializers, while/if makes no difference
+			//TODO: find a way to represent these operations that serializer can use too
+			while (s.next() == "a") ser_enter(s)
+			{
+				while (s.next() == "c") ser_enter(s)
+				{
+					s.item("e", ace);
+					s.item("f", acf);
+				}
+				while (s.next() == "d") ser_enter(s)
+				{
+					s.item("e", ade);
+					s.item("f", adf);
+				}
+			}
+			if (s.next() == "b") ser_enter(s)
+			{
+				if (s.next() == "c") ser_enter(s)
+				{
+					s.item("e", bce);
+					s.item("f", bcf);
+				}
+				if (s.next() == "d") ser_enter(s)
+				{
+					s.item("e", bde);
+					s.item("f", bdf);
+				}
+			}
+		}
+		
+		string values = tostring(ace)+tostring(acf)+tostring(ade)+tostring(adf)+
+		                tostring(bce)+tostring(bcf)+tostring(bde)+tostring(bdf);
+		assert_eq(values, "12345678");
+		assert_eq(ace, 1);
+		assert_eq(acf, 2);
+		assert_eq(ade, 3);
+		assert_eq(adf, 4);
+		assert_eq(bce, 5);
+		assert_eq(bcf, 6);
+		assert_eq(bde, 7);
+		assert_eq(bdf, 8);
 	}
 }
 

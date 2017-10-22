@@ -591,7 +591,7 @@ test("ZIP writing")
 	z3.write("nul.bin", nuls);
 	
 	array<byte> nulsc = z3.pack();
-	assert(nulsc.size() < 1024);
+	assert_lt(nulsc.size(), 1024);
 	zip z4;
 	assert(z4.init(nulsc));
 	array<byte> nulsdc = z4.read("nul.bin");

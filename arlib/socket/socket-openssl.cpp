@@ -21,12 +21,12 @@ RUN_ONCE_FN(initialize)
 static bool validate_hostname(const char * hostname, const X509 * server_cert);
 #endif
 
-class socketssl_impl : public socketssl {
+class socketssl_impl : public socket {
 public:
 	socket* sock;
 	SSL* ssl;
 	
-	socketssl_impl(socket* parent) : socketssl(parent->get_fd()), sock(parent) {}
+	socketssl_impl(socket* parent) : sock(parent) {}
 	
 	static socketssl_impl* create(socket* parent, cstring domain, bool permissive)
 	{
@@ -95,11 +95,11 @@ public:
 		return fixret(SSL_write(ssl, data.ptr(), data.size()));
 	}
 	
-	bool active(bool want_recv, bool want_send)
-	{
-		if (want_recv) return SSL_pending(ssl);
-		else return false; // don't care about write, assume it always succeeds
-	}
+	//bool active(bool want_recv, bool want_send)
+	//{
+	//	if (want_recv) return SSL_pending(ssl);
+	//	else return false; // don't care about write, assume it always succeeds
+	//}
 	
 	~socketssl_impl()
 	{

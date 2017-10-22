@@ -100,9 +100,8 @@ public:
 		else return NULL;
 	}
 	
-	//May only be used if there are no mappings alive, not even read-only.
 	bool resize(size_t newsize) { return core->resize(newsize); }
-	//Writes outside the file will extend it. If the write starts after the current size, it's zero extended. Includes mmapw.
+	//Writes outside the file will extend it. If the write starts after the current size, it's zero extended.
 	bool write(arrayview<byte> data, size_t start = 0) { return core->write(data, start); }
 	bool replace(arrayview<byte> data) { return core->replace(data); }
 	bool replace(cstring data) { return replace(data.bytes()); }
@@ -113,16 +112,21 @@ public:
 		return f.write(data);
 	}
 	
-	//Mappings must be deallocated before deleting the file object.
-	//If the underlying file is changed, it's undefined whether the mappings update. To force an update, delete and recreate the mapping.
-	//Mapping outside the file is undefined behavior.
+	//Mappings are not guaranteed to update if the underlying file changes. To force an update, delete and recreate the mapping.
+	//If the underlying file is changed while a written mapping exists, it's undefined which (if any) writes take effect.
+	//Resizing the file while a mapping exists is undefined behavior, including if the mapping is still in bounds (memimpl doesn't like that).
+	//Mappings must be deleted before deleting the file object.
 	arrayview<byte> mmap(size_t start, size_t len) const { return core->mmap(start, len); }
 	arrayview<byte> mmap() const { return this->mmap(0, this->size()); }
 	void unmap(arrayview<byte> data) const { return core->unmap(data); }
 	
 	arrayvieww<byte> mmapw(size_t start, size_t len) { return core->mmapw(start, len); }
 	arrayvieww<byte> mmapw() { return this->mmapw(0, this->size()); }
-	//If this succeeds, data written to the file is guaranteed to be written. If not, file contents are undefined.
+	//If this succeeds, data written to the file is guaranteed to be written, assuming no other writes were made in the region.
+	//If not, file contents are undefined in that range.
+	//TODO: remove return value, replace with ->sync()
+	//if failure is detected, set a flag to fail sync()
+	//actually, make all failures trip sync(), both read/write/unmapw
 	bool unmapw(arrayvieww<byte> data) { return core->unmapw(data); }
 	
 	~file() { delete core; }
@@ -150,7 +154,7 @@ private:
 		{
 			if (!datawr) return false;
 			datawr->resize(newsize);
-			datard=*datawr;
+			datard = *datawr;
 			return true;
 		}
 		
@@ -160,16 +164,16 @@ private:
 			memcpy(target.ptr(), datard.slice(start, nbyte).ptr(), nbyte);
 			return nbyte;
 		}
-		virtual bool write(arrayview<byte> newdata, size_t start = 0)
+		bool write(arrayview<byte> newdata, size_t start = 0)
 		{
 			if (!datawr) return false;
 			size_t nbyte = newdata.size();
 			datawr->reserve_noinit(start+nbyte);
 			memcpy(datawr->slice(start, nbyte).ptr(), newdata.ptr(), nbyte);
-			datard=*datawr;
+			datard = *datawr;
 			return true;
 		}
-		virtual bool replace(arrayview<byte> newdata)
+		bool replace(arrayview<byte> newdata)
 		{
 			if (!datawr) return false;
 			*datawr = newdata;

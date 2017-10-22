@@ -33,7 +33,7 @@ RUN_ONCE_FN(initialize)
 #endif
 }
 
-class socketssl_impl : public socketssl {
+class socketssl_impl : public socket {
 public:
 	socket* sock;
 	TLSContext* ssl;
@@ -92,7 +92,7 @@ public:
 		sock = NULL;
 	}
 	
-	socketssl_impl(socket* parent) : socketssl(parent->get_fd()), sock(parent) {}
+	socketssl_impl(socket* parent) : sock(parent) {}
 	static socketssl_impl* create(socket* parent, const char * domain, bool permissive)
 	{
 		if (!parent) return NULL;
@@ -143,11 +143,11 @@ public:
 		return ret;
 	}
 	
-	bool active(bool want_recv, bool want_send)
-	{
-		if (want_recv) return SSL_pending(ssl); // not available through the native interface...?
-		else return false;
-	}
+	//bool active(bool want_recv, bool want_send)
+	//{
+	//	if (want_recv) return SSL_pending(ssl); // not available through the native interface...?
+	//	else return false;
+	//}
 	
 	~socketssl_impl()
 	{

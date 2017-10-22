@@ -97,5 +97,12 @@ test("array<bool>")
 		b.reset();
 		b.resize(16);
 	}
+	
+	{
+		array<int> n;
+		n.resize(32);
+		n = n.skip(32);
+		assert_eq(n.size(), 0);
+	}
 }
 #endif

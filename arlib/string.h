@@ -161,6 +161,12 @@ public:
 	{
 		return memmem(this->ptr(), this->length(), other.ptr(), other.length()) != NULL;
 	}
+	size_t indexof(cstring other) const
+	{
+		uint8_t* ptr = (uint8_t*)memmem(this->ptr(), this->length(), other.ptr(), other.length());
+		if (ptr) return ptr - this->ptr();
+		else return (size_t)-1;
+	}
 	bool startswith(cstring other) const
 	{
 		if (other.length() > this->length()) return false;

@@ -378,4 +378,12 @@ test()
 		assert_eq(e, "");
 		assert_eq(f, "");
 	}
+	
+	{
+		cstring a = "floating munchers";
+		assert_eq(a.indexof("f"), 0);
+		assert_eq(a.indexof("l"), 1);
+		assert_eq(a.indexof("unc"), 10);
+		assert_eq(a.indexof("x"), (size_t)-1);
+	}
 }

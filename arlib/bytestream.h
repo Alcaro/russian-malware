@@ -72,9 +72,11 @@ public:
 		return end_nat_to_be(*(uint32_t*)(start+pos));
 	}
 	
-	size_t pos() { return at-start; }
+	size_t tell() { return at-start; }
 	size_t size() { return end-start; }
 	size_t remaining() { return end-at; }
+	
+	void seek(size_t pos) { at = start+pos; }
 	
 	uint32_t u24()
 	{
@@ -85,5 +87,63 @@ public:
 	uint32_t u24be()
 	{
 		return end_swap24(u24());
+	}
+};
+
+class bytestreamw {
+protected:
+	array<byte> buf;
+	
+public:
+	void bytes(arrayview<byte> data)
+	{
+		buf += data;
+	}
+	void text(cstring str)
+	{
+		buf += str.bytes();
+	}
+	void u8(uint8_t val)
+	{
+		buf += arrayview<byte>(&val, 1);
+	}
+	void u16(uint16_t val)
+	{
+		litend<uint16_t> valn = val;
+		buf += valn.bytes();
+	}
+	void u16be(uint16_t val)
+	{
+		bigend<uint16_t> valn = val;
+		buf += valn.bytes();
+	}
+	void u32(uint32_t val)
+	{
+		litend<uint32_t> valn = val;
+		buf += valn.bytes();
+	}
+	void u32be(uint32_t val)
+	{
+		bigend<uint32_t> valn = val;
+		buf += valn.bytes();
+	}
+	void u64(uint64_t val)
+	{
+		litend<uint64_t> valn = val;
+		buf += valn.bytes();
+	}
+	void u64be(uint64_t val)
+	{
+		bigend<uint64_t> valn = val;
+		buf += valn.bytes();
+	}
+	
+	arrayview<byte> peek()
+	{
+		return buf;
+	}
+	array<byte> out()
+	{
+		return std::move(buf);
 	}
 };
