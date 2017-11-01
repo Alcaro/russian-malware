@@ -50,24 +50,29 @@
 struct window_x11_info window_x11;
 #endif
 
-static bool window_init(bool require, int * argc, char * * argv[])
+void arlib_init_gui(void* args, char** & argv)
 {
+	int argc = 0;
+	while (argv[argc]) argc++;
+	
 //struct rlimit core_limits;core_limits.rlim_cur=core_limits.rlim_max=64*1024*1024;setrlimit(RLIMIT_CORE,&core_limits);
 #ifdef DEBUG
-g_log_set_always_fatal((GLogLevelFlags)(G_LOG_LEVEL_CRITICAL|G_LOG_LEVEL_WARNING));
+//g_log_set_always_fatal((GLogLevelFlags)(G_LOG_LEVEL_CRITICAL|G_LOG_LEVEL_WARNING));
 #endif
 #ifdef ARGUIPROT_X11
 	gdk_set_allowed_backends("x11");
 	XInitThreads();
 #endif
 	gtk_disable_setlocale(); // go away, you're a library like any other and have no right to mess with libc config
-	if (require)
+	
+	//TODO: replace with g_option_context_parse(gtk_get_option_group())
+	if (true) // TODO: replace with whether --nogui exists
 	{
-		gtk_init(argc, argv);
+		gtk_init(&argc, &argv);
 	}
 	else
 	{
-		if (!gtk_init_check(argc, argv)) return false;
+		if (!gtk_init_check(&argc, &argv)) return;
 	}
 	//gdk_window_add_filter(NULL,scanfilter,NULL);
 //#ifndef NO_ICON
@@ -81,17 +86,7 @@ g_log_set_always_fatal((GLogLevelFlags)(G_LOG_LEVEL_CRITICAL|G_LOG_LEVEL_WARNING
 	window_x11.screen=gdk_x11_get_default_screen();
 	window_x11.root=gdk_x11_get_default_root_xwindow();//alternatively XRootWindow(window_x11.display, window_x11.screen)
 #endif
-	return true;
-}
-
-void window_init(int * argc, char * * argv[])
-{
-	window_init(true, argc, argv);
-}
-
-bool window_try_init(int * argc, char * * argv[])
-{
-	return window_init(false, argc, argv);
+	return;
 }
 
 bool window_console_avail()

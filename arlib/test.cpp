@@ -4,8 +4,8 @@
 #endif
 #include "test.h"
 #include "array.h"
-#include "gui/window.h"
 #include "os.h"
+#include "init.h"
 
 #ifdef __linux__
 #define HAVE_VALGRIND
@@ -98,10 +98,10 @@ void _test_skip_force(cstring why)
 #undef main // the real main is #define'd to something stupid on test runs
 int main(int argc, char* argv[])
 {
+if(argc>1)abort(); // TODO: argument parser
 #ifndef ARGUI_NONE
-	window_init(&argc, &argv);
+	arlib_init(NULL, argv);
 #endif
-	srand(time(NULL)); // TODO: force this to exist everywhere
 	
 	all_tests = (argc>1);
 	bool all_tests_twice = (argc>2);

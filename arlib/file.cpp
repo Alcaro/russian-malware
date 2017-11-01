@@ -92,14 +92,16 @@ test("file reading")
 	}
 	
 	f.unmap(map);
+	
+	assert(!f.open(file::dirname(READONLY_FILE)+"")); // opening a directory should fail
 }
 
 test("file writing")
 {
 	file f;
 	
+	assert(!f.open(READONLY_FILE, file::m_wr_existing)); // keep this first, to ensure it doesn't shred anything if we're run as root
 	assert(!f.open(READONLY_FILE, file::m_write));
-	assert(!f.open(READONLY_FILE, file::m_wr_existing));
 	assert(!f.open(READONLY_FILE, file::m_replace));
 	assert(!f.open(READONLY_FILE, file::m_create_excl));
 	
@@ -114,15 +116,15 @@ test("file writing")
 	assert_eq(string(file::read(WRITABLE_FILE)), "foobar");
 	
 	assert(f.resize(3));
-	assert(f.size() == 3);
+	assert_eq(f.size(), 3);
 	assert_eq(string(file::read(WRITABLE_FILE)), "foo");
 	
 	assert(f.resize(8));
-	assert(f.size() == 8);
+	assert_eq(f.size(), 8);
 	byte expected[8]={'f','o','o',0,0,0,0,0};
 	array<byte> actual = file::read(WRITABLE_FILE);
 	assert(actual.ptr());
-	assert(actual.size()==8);
+	assert_eq(actual.size(), 8);
 	assert(!memcmp(actual.ptr(), expected, 8));
 	
 	arrayvieww<byte> map = f.mmapw();
@@ -135,7 +137,7 @@ test("file writing")
 	expected[3] = 't';
 	actual = file::read(WRITABLE_FILE);
 	assert(actual.ptr());
-	assert(actual.size()==8);
+	assert_eq(actual.size(), 8);
 	assert(!memcmp(actual.ptr(), expected, 8));
 	
 	//test the various creation modes

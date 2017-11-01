@@ -14,37 +14,6 @@
 #include <sys/mman.h>
 #include <errno.h>
 
-//#define MMAP_THRESHOLD 128*1024
-//
-////other platforms: http://stackoverflow.com/questions/1023306/finding-current-executables-path-without-proc-self-exe
-//const char * window_get_proc_path()
-//{
-//	//we could lstat it, but apparently that just returns zero on /proc on Linux.
-//	
-//	ssize_t bufsize=64;
-//	static char * linkname=NULL;
-//	if (linkname) return linkname;
-//	
-//	while (true)
-//	{
-//		linkname=malloc(bufsize);
-//		ssize_t r=readlink("/proc/self/exe", linkname, bufsize);
-//		if (r<0 || r>=bufsize)
-//		{
-//			free(linkname);
-//			if (r<0) return NULL;
-//			
-//			bufsize*=2;
-//			continue;
-//		}
-//		linkname[r]='\0';
-//		char * end=strrchr(linkname, '/');
-//		if (end) *end='\0';
-//		
-//		return linkname;
-//	}
-//}
-//
 //static void window_cwd_enter(const char * dir);
 //static void window_cwd_leave();
 //
@@ -195,6 +164,15 @@ file::impl* file::open_impl_fs(cstring filename, mode m)
 	static const int flags[] = { O_RDONLY, O_RDWR|O_CREAT, O_RDWR, O_RDWR|O_CREAT|O_TRUNC, O_RDWR|O_CREAT|O_EXCL };
 	int fd = ::open(filename.c_str(), flags[m]|O_CLOEXEC|O_LARGEFILE, 0666);
 	if (fd<0) return NULL;
+	
+	struct stat st;
+	fstat(fd, &st);
+	if (!S_ISREG(st.st_mode)) // no opening directories
+	{
+		::close(fd);
+		return NULL;
+	}
+	
 	return new file_unix(fd);
 }
 
@@ -224,4 +202,60 @@ bool file::unlink(cstring filename)
 	return unlink_fs(filename);
 }
 #endif
+
+
+static string exepath;
+cstring file::exepath() { return ::exepath; }
+
+void arlib_init_file()
+{
+	array<char> buf;
+	buf.resize(64);
+	
+	again: ;
+	ssize_t r = readlink("/proc/self/exe", buf.ptr(), buf.size());
+	if (r <= 0) abort();
+	if ((size_t)r >= buf.size())
+	{
+		buf.resize(buf.size() * 2);
+		goto again;
+	}
+	
+	buf[r] = '\0'; // this resizes if needed
+	char * end = strrchr(buf.ptr(), '/'); // a / is known to exist
+	
+	exepath = buf.slice(0, end+1 - buf.ptr());
+	
+	
+	//char * cwd_init_tmp=getcwd(NULL, 0);
+	//char * cwdend=strrchr(cwd_init_tmp, '/');
+	//if (!cwdend) cwd_init="/";
+	//else if (cwdend[1]=='/') cwd_init=cwd_init_tmp;
+	//else
+	//{
+	//	size_t cwdlen=strlen(cwd_init_tmp);
+	//	char * cwd_init_fixed=malloc(cwdlen+1+1);
+	//	memcpy(cwd_init_fixed, cwd_init_tmp, cwdlen);
+	//	cwd_init_fixed[cwdlen+0]='/';
+	//	cwd_init_fixed[cwdlen+1]='\0';
+	//	cwd_init=cwd_init_fixed;
+	//	free(cwd_init_tmp);
+	//}
+	
+//	//disable cwd
+//	//try a couple of useless directories and hope one of them works
+//	//this seems to be the best one:
+//	//- even root can't create files here
+//	//- it contains no files with a plausible name on a standard Ubuntu box
+//	//    (I have an ath9k-phy0, and a bunch of stuff with colons, nothing will ever want those filenames)
+//	//- a wild write will not do anything dangerous except turn on some lamps
+//	!chdir("/sys/class/leds/") ||
+//		//the rest are in case it's not accessible (weird chroot? not linux?), so try some random things
+//		!chdir("/sys/") ||
+//		!chdir("/dev/") ||
+//		!chdir("/home/") ||
+//		!chdir("/tmp/") ||
+//		!chdir("/");
+//	cwd_bogus = getcwd(NULL, 0); // POSIX does not specify getcwd(NULL), it's Linux-specific
+}
 #endif

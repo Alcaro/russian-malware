@@ -17,6 +17,7 @@
 #include "file.h"
 #include "function.h"
 #include "html.h"
+#include "init.h"
 #include "intwrap.h"
 #include "json.h"
 #include "linq.h"

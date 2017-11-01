@@ -8,6 +8,16 @@ echo '#include "arlib/arlib.h"' > arlib.h
 
 mkdir obj
 
+cat > main.cpp <<-EOF
+	#include "arlib.h"
+	
+	int main(int argc, char** argv)
+	{
+		arlib_init(NULL, argv);
+		return 0;
+	}
+EOF
+
 cat > .gitignore <<-EOF
 	obj/
 	$program

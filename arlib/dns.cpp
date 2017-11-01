@@ -159,6 +159,13 @@ https://tools.ietf.org/html/rfc5952
 	return "";
 }
 
+void DNS::timeout(uint16_t trid)
+{
+	query q = std::move(queries.get(trid));
+	queries.remove(trid);
+	q.callback(std::move(q.domain), ""); // don't move higher, callback could delete the dns object
+}
+
 void DNS::sock_cb(socket*)
 {
 	if (!sock) return;
@@ -166,7 +173,15 @@ void DNS::sock_cb(socket*)
 	int nbytes = sock->recv(packet);
 	if (nbytes < 0)
 	{
+		//don't inline, callback could delete the dns object
+		map<uint16_t, query> l_queries = std::move(this->queries);
+		//runloop* l_loop = this->loop; // not needed
 		sock = NULL;
+		
+		for (auto& pair : l_queries)
+		{
+			pair.value.callback(pair.value.domain, "");
+		}
 		return;
 	}
 	if (nbytes == 0) return;
@@ -239,7 +254,7 @@ test()
 	
 	autoptr<runloop> loop = runloop::create();
 	
-	assert(isdigit(DNS::default_resolver()[0]));
+	assert(isdigit(DNS::default_resolver()[0])); // TODO: fails on IPv6 ::1
 	
 	DNS dns(loop);
 	int await = 4;
@@ -259,7 +274,7 @@ test()
 		{
 			await--; if (await == 0) loop->exit();
 			assert_eq(domain, "git.io");
-			assert_neq(ip, ""); // this domain returns eight values in answer section
+			assert_neq(ip, ""); // this domain returns eight values in answer section, must be parsed properly
 		}));
 	dns.resolve("", bind_lambda([&](string domain, string ip) // this must fail
 		{

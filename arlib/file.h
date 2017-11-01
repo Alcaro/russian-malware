@@ -194,6 +194,10 @@ public:
 	//If the input path is a directory, the basename is blank.
 	static string dirname(cstring path);
 	static string basename(cstring path);
+	
+	//Returns the path of the executable.
+	//The cstring is owned by Arlib and lives forever.
+	static cstring exepath();
 private:
 	static bool unlink_fs(cstring filename);
 };

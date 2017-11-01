@@ -4,19 +4,20 @@
 //A runloop keeps track of a number of file descriptors, calling their handlers whenever the relevant operation is available.
 //There are no fairness guarantees. If an event doesn't terminate or unset itself properly, it may inhibit other fds.
 //Do not call enter() or step() while inside a callback. However, set_*(), remove() and exit() are fine.
+//Like nearly all other objects, a runloop is not thread safe.
 class runloop {
 protected:
 	runloop() {}
 public:
 	//The global runloop handles GUI events, in addition to whatever fds it's told to track. Always returns the same object.
-	//Don't call from anything other than the main thread.
+	//The global runloop belongs to the main thread. Don't delete it, or call this function from any other thread.
 	static runloop* global();
 	
 	//Using multiple runloops per thread is generally a bad idea.
 	static runloop* create();
 	
 #ifndef _WIN32 // fd isn't a defined concept on windows
-	//Callback argument is the fd, in case one object maintains multiple fds.
+	//The callback argument is the fd, to allow one object to maintain multiple fds.
 	//A fd can only be used once per runloop. If that fd is already there, it's removed prior to binding the new callbacks.
 	//If the new callbacks are both NULL, it's removed. The return value can still safely be passed to remove().
 	//If only one callback is provided, events of the other kind are ignored.
@@ -41,12 +42,30 @@ public:
 	virtual uintptr_t set_idle(function<bool()> callback) { return set_timer_rel(0, callback); }
 	
 	//Deletes an existing timer and adds a new one.
-	uintptr_t set_timer_abs(uintptr_t prev_id, time_t when, function<void()> callback) { remove(prev_id); return set_timer_abs(when, callback); }
-	uintptr_t set_timer_rel(uintptr_t prev_id, unsigned ms, function<bool()> callback) { remove(prev_id); return set_timer_rel(ms, callback); }
-	uintptr_t set_idle(uintptr_t prev_id, function<bool()> callback) { remove(prev_id); return set_idle(callback); }
+	uintptr_t set_timer_abs(uintptr_t prev_id, time_t when, function<void()> callback)
+	{
+		remove(prev_id);
+		return set_timer_abs(when, callback);
+	}
+	uintptr_t set_timer_rel(uintptr_t prev_id, unsigned ms, function<bool()> callback)
+	{
+		remove(prev_id);
+		return set_timer_rel(ms, callback);
+	}
+	uintptr_t set_idle(uintptr_t prev_id, function<bool()> callback)
+	{
+		remove(prev_id);
+		return set_idle(callback);
+	}
 	
 	//Return value from each set_*() is a token which can be used to cancel the event. remove(0) is guaranteed to be ignored.
 	virtual void remove(uintptr_t id) = 0;
+	
+	//TODO:
+	//- Slots; objects where there's no reason to have more than one per runloop (like DNS), letting them be shared among runloop users
+	//- Pipes; void submit(function<void()> cb);, which calls the callback in the given mainloop, even if called from another thread
+	//   needed to modernize 'process'
+	//   (actually, that fits fine in a slot too)
 	
 	//Executes the mainloop until ->exit() is called. Recommended for most programs.
 	virtual void enter() = 0;
@@ -55,7 +74,9 @@ public:
 	//Runs until there are no more events to process, then returns. Usable if you require control over the runloop.
 	virtual void step() = 0;
 	
-	//Deleting a non-global runloop is fine, but leave the global one alone.
-	//Don't delete a non-empty runloop, the contents will use-after-free.
-	virtual ~runloop() {}
+	//Delete all runloop contents (sockets, HTTP or anything else using sockets, etc) before deleting the loop itself,
+	// or said contents will use-after-free.
+	//You can't remove GUI stuff from the global runloop, so you can't delete it.
+	virtual ~runloop() = 0;
 };
+inline runloop::~runloop() {}

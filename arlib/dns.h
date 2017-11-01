@@ -54,10 +54,5 @@ private:
 	static string ip_to_string(arrayview<byte> ip);
 	
 	void sock_cb(socket*);
-	void timeout(uint16_t trid)
-	{
-		query& q = queries.get(trid);
-		q.callback(std::move(q.domain), "");
-		queries.remove(trid);
-	}
+	void timeout(uint16_t trid);
 };

@@ -8,7 +8,7 @@
 #include <gdk/gdkx.h>
 #endif
 
-#if GTK_MINOR_VERSION > 10 // supported versions: 3.10.8 (Ubuntu 14.04), 3.20.9 (Ubuntu 16.10)
+#if GTK_CHECK_VERSION(3,14,0)
 #define gtk_window_set_has_resize_grip(x,y) // deprecated
 #endif
 
@@ -263,12 +263,14 @@ void statusbar_set(int slot, const char * text)
 	
 	
 	width-=(this->status_count*2*2);
+#if !GTK_CHECK_VERSION(3,14,0)
 	if (gtk_window_get_resizable(this->wndw))
 	{
 		gint gripwidth;
 		gtk_widget_style_get(GTK_WIDGET(this->wndw), "resize-grip-width", &gripwidth, NULL);
 		width-=gripwidth;
 	}
+#endif
 	int lastpos=0;
 	for (int i=0;i<this->status_count;i++)
 	{

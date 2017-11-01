@@ -16,6 +16,7 @@ static void * threadproc(void * userdata)
 {
 	struct threaddata_pthread * thdat = (struct threaddata_pthread*)userdata;
 	thdat->func();
+	thdat->func.~function();
 	free(thdat);
 	return NULL;
 }
