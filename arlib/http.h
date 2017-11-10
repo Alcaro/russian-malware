@@ -23,7 +23,7 @@ public:
 		array<string> headers; // TODO: multimap
 		array<byte> postdata;
 		
-		uintptr_t userdata; // Not used by the HTTP object. It's returned unchanged in the rsp object.
+		uintptr_t userdata; // Not used by the HTTP object. It's passed unchanged in the rsp object.
 		
 		req() {}
 		req(string url) : url(url) {}
@@ -72,7 +72,7 @@ public:
 		cstring text() const { return body; }
 		
 		
-		//Ised internally. Ignore it.
+		//Used internally. Ignore it.
 		function<void(rsp)> callback;
 	};
 	

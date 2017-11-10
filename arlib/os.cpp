@@ -226,7 +226,7 @@ uint64_t time_ms()
 uint64_t time_us_ne()
 {
 	struct timespec tp;
-	clock_gettime(CLOCK_MONOTONIC, &tp); // CLOCK_MONOTONIC_RAW is better, but MONOTONIC uses vdso and skips the syscall
+	clock_gettime(CLOCK_MONOTONIC, &tp); // CLOCK_MONOTONIC_RAW makes more sense, but MONOTONIC uses vdso and skips the syscall
 	return tp.tv_sec*1000000 + tp.tv_nsec/1000;
 }
 uint64_t time_ms_ne()

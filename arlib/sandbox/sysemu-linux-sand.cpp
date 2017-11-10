@@ -294,9 +294,20 @@ static inline int do_broker_file_req(const char * pathname, broker_req_t op, int
 
 static inline int open(const char * pathname, int flags, mode_t mode = 0)
 {
+//error("open: ", pathname);
 	int fd = do_broker_file_req(pathname, br_open, flags, mode);
 	if (fd>=0 && !(flags&O_CLOEXEC)) fcntl(fd, F_SETFD, fcntl(fd, F_GETFD)&~O_CLOEXEC);
+//if (fd >= 0) error("open: ", pathname, " = ", fd);
+//else error("open: ", pathname, " = -", -fd);
 	return fd;
+}
+
+static inline int openat(int dirfd, const char * pathname, int flags, mode_t mode = 0)
+{
+	if (dirfd == AT_FDCWD) return open(pathname, flags, mode);
+	
+	error("denied syscall openat ", pathname);
+	return -ENOENT;
 }
 
 static inline int unlink(const char * pathname)
@@ -543,6 +554,7 @@ static long syscall_emul(greg_t* regs, int errno)
 	switch (ARG0)
 	{
 	WRAP3(open, char*, int, mode_t);
+	WRAP4(openat, int, char*, int, mode_t);
 	WRAP2(access, char*, int);
 	WRAP2_(stat, char*, struct stat*);
 	//treat lstat as stat

@@ -78,8 +78,8 @@ static inline Elf64_Ehdr* map_binary(int fd, uint8_t*& base, uint8_t* hbuf, size
 	{
 		if (phdr[i].p_type == PT_LOAD)
 		{
-			if (first<0) first=i;
-			last=i;
+			if (first < 0) first=i;
+			last = i;
 		}
 	}
 	size_t total_size = phdr[last].p_vaddr + phdr[last].p_memsz - ALIGN_DOWN(phdr[first].p_vaddr);
@@ -143,7 +143,8 @@ static inline Elf64_Ehdr* map_binary(int fd, uint8_t*& base, uint8_t* hbuf, size
 // the stack, it's writable. (ld-linux replaces a few auxv entries too, it's only fair.)
 typedef void(*funcptr)();
 static inline void update_auxv(Elf64_auxv_t* auxv, uint8_t* base, Elf64_Ehdr* ehdr)
-{	for (int i=0;auxv[i].a_type!=AT_NULL;i++)
+{
+	for (int i=0;auxv[i].a_type!=AT_NULL;i++)
 	{
 		//don't think ld-linux uses PHDR or PHNUM, but why not
 		if (auxv[i].a_type == AT_PHDR)

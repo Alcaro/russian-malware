@@ -232,8 +232,8 @@ The filter is installed by the locker. It's the seccomp-bpf code that rejects un
 
 The emulator runs in the child once it's locked down, and emulates an unconstrained environment. It
  intercepts various syscalls and passes them to the broker, or otherwise emulates them. It is a very
- complex component; however, as it's fully inside the sandbox, it can safely assume its inputs are
- non-hostile. Anything malicious could just as easily issue its own syscalls.
+ complex component; however, as it's fully inside the sandbox, anything malicious could easily issue
+ its own syscalls, so it doesn't need to protect against hostile inputs.
 
 
 Broker
@@ -307,8 +307,9 @@ The locker's job is long, but fairly straightforward. After broker's fork() retu
     0, 1 and 2 are kept if sandbox policy permits
 - prctl(PR_SET_PDEATHSIG, SIGKILL)
     to ensure this process dies if the broker does, taking the children with it
-    since we're in a PID namespace, we can't use getppid() to ensure the parent is still alive
-      instead, we send a dummy message to the parent, terminating if it returns SIGPIPE or EPIPE
+    we must also ensure the sandbox terminates if the parent dies prior to this, otherwise it'd outlive the sandbox
+    since we're in a PID namespace, we can't check if getppid() is 1;
+      however, we can ask our parent if it's still alive, using our socket
       we could let the emulator handle this, it won't be compromised before entering ld-linux,
         but that would make the security boundaries harder to define
 - prctl(PR_SET_NO_NEW_PRIVS)
@@ -402,8 +403,9 @@ There are many, but they all have drawbacks:
     not foolproof: breaks if I miss a syscall, across exec(), or if my allocated data structures are too small
     also way too complex
 
-Chosen solution: Ignore it, leave it unimplemented. Only a few programs need this function family.
-(This admittedly includes this one, but nested sandboxes ... let's not.)
+Chosen solution: Ignore it, leave it unimplemented (except openat(AT_FDCWD), which is just plain
+  open()). Only a few programs need this function family.
+(Programs using openat admittedly includes this one, but nested sandboxes ... let's not.)
 
 
 fork
@@ -427,9 +429,9 @@ There are other possible implementations, such as an always-allowed syscall gate
  value> (unlikely means possible, I don't like uncertainity).
 
 The child program could, of course, pass this nonsense flag itself, but that's not a security
- breach; it will only make the program mess up itself.
+ violation; it will only make the program mess up itself.
 
-Threads are currently rejected. It's theoretically possible, just wrap open()/etc in a lock, don't
+Threads are currently rejected. It's theoretically possible, just wrap open()/etc in a lock, I don't
  even need to intercept thread creation. But it's currently unimplemented.
 
 
@@ -438,8 +440,7 @@ execve
 
 Leaving execve is covered above. However, entering it isn't obvious either.
 
-To start with, execve() takes a filename - while not a security breach, it won't succeed either.
- Solution: fexecve().
+To start with, execve() takes a filename, which will fail due to chroot. Solution: fexecve().
 
 Except that's just a wrapper for execve(/proc/self/fd/123), which won't work either. I could change
  the chroot to /proc/self/fd, but that'd probably screw up on fork(). And I'm not chrooting to
@@ -530,6 +531,18 @@ Everything contains bugs. The following is a list of possible vulnerabilities th
         inherits some fds from the shell (extremely rare, and most shell-inherited fds are lock
         files anyways)
       with other parents, it can be data leak, data loss, or even a full jailbreak
+- filesystem::grant_native_redir, filesystem::child_file: open() of use-after-free garbage
+    exploitability: in theory, takes a while, but perfectly possible
+      in practice, innocent programs are very likely to hit these and fail to launch,
+        prompting administrator attention
+    maximum impact: full sandbox jailbreak
+- launch_impl: if parent process dies before its communicator fd, child may survive sandbox termination
+    exploitability: extremely hard in theory, requires a race condition during sandbox launch
+      and it's 100% impossible to do anything malicious even if you hit this race; the first code
+        executed in the child is the emulator, which opens /lib64/ld-linux-x86-64.so.2, fails, and terminates
+      and I don't know if the linux kernel allows this race condition in the first place;
+        if it tears down fds before processing PR_SET_PDEATHSIG, it doesn't even enter the emulator
+    maximum impact: in theory, outliving sandbox termination; in practice, zero
 
 
 Missing kernel features

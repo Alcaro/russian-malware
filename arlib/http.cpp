@@ -474,5 +474,9 @@ test("HTTP")
 		assert_eq(r.body[0], '[');
 		assert_eq(r.body[r.body.size()-1], ']');
 	}
+	
+	{
+		assert(!"add support for canceling requests, so timeouts can be set, then use that in xdiscord");
+	}
 }
 #endif

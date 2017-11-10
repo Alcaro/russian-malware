@@ -22,6 +22,7 @@ jne #AUDIT_ARCH_X86_64, ENOSYS
 
 ld [sysno]
 jeq #__NR_open, emulate
+jeq #__NR_openat, emulate
 jeq #__NR_stat, emulate
 jeq #__NR_lstat, emulate
 jeq #__NR_access, emulate
@@ -60,6 +61,7 @@ jeq #__NR_exit, accept
 jeq #__NR_exit_group, accept
 jeq #__NR_set_tid_address, accept
 jeq #__NR_set_robust_list, accept
+jeq #__NR_prlimit64, prlimit64
 
 jeq #__NR_fork, emulate
 jeq #__NR_vfork, emulate
@@ -144,6 +146,15 @@ jne #0x00007fff, emulate
 ld [arg2l]
 jne #0xffffefff, emulate
 jmp accept
+
+
+prlimit64:
+#most of this syscall is safe, everything I want to enforce is a hard limit and prlimit64 can't touch that
+ld [arg2h]
+jne #0, ENOSYS
+ld [arg2l]
+jeq #RLIMIT_STACK, accept
+jmp ENOSYS
 
 
 clone:

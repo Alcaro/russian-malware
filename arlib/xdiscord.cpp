@@ -72,6 +72,9 @@ void Discord::connect()
 puts("DOCONNECT");
 debug_connect = getdate();
 if (debug_target) debug_target.message("Connecting at "+debug_connect);
+	//use this as a garbage collector, kinda shitty but there's no better way to deal with timeouts
+	m_http.reset();
+	
 	connecting = true;
 	keepalive_sent = false;
 	
@@ -112,7 +115,7 @@ bool Discord::keepalive_cb()
 	
 	if (keepalive_sent)
 	{
-		if (!connecting) connect();
+		connect();
 		return true;
 	}
 	keepalive_sent = true;

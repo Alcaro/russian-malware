@@ -118,7 +118,6 @@ public:
 
 template<typename T, typename Tsrc> class t_linq : nocopy {
 public:
-	//TODO: split to two types when switching to c++17
 	Tsrc base;
 	
 	t_linq(Tsrc&& base) : base(std::move(base)) {}
@@ -155,11 +154,21 @@ public:
 		return ret;
 	}
 	
+	array<T> as_array()
+	{
+		return *this;
+	}
+	
 	operator set<T>()
 	{
 		set<T> ret;
 		for (T&& item : *this) ret.add(item);
 		return ret;
+	}
+	
+	set<T> as_set()
+	{
+		return *this;
 	}
 };
 }

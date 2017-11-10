@@ -4,8 +4,8 @@
 //#include <sys/socket.h>
 
 enum broker_req_t {
-	br_nop,       // [req only] does nothing, doesn't respond (used by launcher to check if parent is alive)
-	br_ping,      // does nothing, sends an empty response (unused)
+	br_nop,       // [req only] does nothing, doesn't respond (unused)
+	br_ping,      // does nothing, sends an empty response (used by launcher to check if parent is alive)
 	br_open,      // open(req.path, req.flags[0], req.flags[1])
 	br_unlink,    // flags unused
 	br_access,    // access(req.path, req.flags[0])

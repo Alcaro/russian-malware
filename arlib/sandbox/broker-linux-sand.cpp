@@ -37,18 +37,24 @@ void sandproc::filesystem::grant_native_redir(string cpath, string ppath, int ma
 	string pend = pp[1];
 	if (cend != pend) abort();
 	
-	cstring mntpath = pp[0]+"/"; // if ppath is "/", pp[0] is empty, so append a /
+	string mntpath = pp[0]+"/"; // if ppath is "/", pp[0] is empty, so append a /
 	
 	m.type = ty_native;
 	if (!mountfds.contains(mntpath))
 	{
-		mountfds.insert(mntpath, open(mntpath.c_str(), O_DIRECTORY|O_PATH));
+		int fd = open(mntpath, O_DIRECTORY|O_PATH);
+		if (fd < 0)
+		{
+			goto fail;
+		}
+		mountfds.insert(mntpath, fd);
 	}
 	m.n_fd = mountfds.get(mntpath);
 	m.numwrites = max_write;
 	
 	if (m.n_fd < 0)
 	{
+	fail:
 		//TODO: report error to caller
 		m.type = ty_error;
 		m.e_error = ENOENT;
@@ -81,7 +87,7 @@ sandproc::filesystem::filesystem()
 {
 	grant_errno("/", EACCES, true);
 	report_access_violation = [](cstring path, bool write){
-		puts((cstring)"sandbox: denied " + (write?"writing":"reading") + " " + path);
+		puts((string)"sandbox: denied " + (write?"writing":"reading") + " " + path);
 	};
 }
 
@@ -139,7 +145,7 @@ int sandproc::filesystem::child_file(cstring pathname, int op_, int flags, mode_
 		errno = EACCES;
 		return -1;
 	}
-	while (pathname[~1]=='/') pathname = pathname.substr(0, ~1);
+	while (pathname[~1] == '/') pathname = pathname.csubstr(0, ~1);
 	
 	bool exact_path = false;
 	
@@ -154,7 +160,7 @@ int sandproc::filesystem::child_file(cstring pathname, int op_, int flags, mode_
 		bool use;
 		if (miter.key.endswith("/"))
 		{
-			if ((pathname+"/")==miter.key)
+			if ((pathname+"/") == miter.key)
 			{
 				exact_path = true;
 				use = true;
@@ -180,13 +186,15 @@ int sandproc::filesystem::child_file(cstring pathname, int op_, int flags, mode_
 	switch (m->type)
 	{
 	case ty_error:
+	{
 		if (m->e_error & SAND_ERRNO_NOISY)
 		{
 			report_access_violation(pathname, is_write);
 		}
 		errno = m->e_error&SAND_ERRNO_MASK;
 		return -1;
-		
+	}
+	
 	case ty_native:
 	{
 		if (is_write)
@@ -202,7 +210,7 @@ int sandproc::filesystem::child_file(cstring pathname, int op_, int flags, mode_
 		
 		cstring relpath;
 		if (mlen > pathname.length()) relpath = "."; // open("/usr/include/") when that's a mountpoint
-		else relpath = pathname.substr(mlen, ~0);
+		else relpath = pathname.csubstr(mlen, ~0);
 		
 		if (op == br_open) return openat(m->n_fd, relpath.c_str(), flags|O_CLOEXEC|O_NOCTTY, mode);
 		if (op == br_unlink) return unlinkat(m->n_fd, relpath.c_str(), 0);
@@ -210,6 +218,7 @@ int sandproc::filesystem::child_file(cstring pathname, int op_, int flags, mode_
 		abort();
 	}
 	case ty_tmp:
+	{
 		if (op == br_open)
 		{
 			int fd = tmpfiles.get_or(pathname, -1);
@@ -258,6 +267,7 @@ int sandproc::filesystem::child_file(cstring pathname, int op_, int flags, mode_
 			}
 		}
 		abort();
+	}
 	default: abort();
 	}
 }

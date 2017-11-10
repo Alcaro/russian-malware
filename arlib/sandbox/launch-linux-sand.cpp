@@ -218,9 +218,13 @@ pid_t sandproc::launch_impl(array<const char*> argv, array<int> stdio_fd)
 	
 	//die on parent death
 	require(prctl(PR_SET_PDEATHSIG, SIGKILL));
-	struct broker_req req = { br_nop };
-	//ensure parent is still alive; if it's not, this fails with EPIPE (and SIGPIPE, but our caller may have ignored that)
+	
+	//ensure parent is still alive
+	//have to check for a response, it's possible that parent died during the prctl but its socket still lives
+	struct broker_req req = { br_ping };
 	require(send(3, &req, sizeof(req), MSG_EOR));
+	struct broker_rsp rsp;
+	require_eq(recv(3, &rsp, sizeof(rsp), 0), (ssize_t)sizeof(rsp));
 	
 	//revoke filesystem
 	require(chroot("/proc/sys/debug/"));
@@ -239,7 +243,6 @@ pid_t sandproc::launch_impl(array<const char*> argv, array<int> stdio_fd)
 	//0x00007FFF'FFFFF000 isn't mappable, apparently sticking SYSCALL (0F 05) at 0x00007FFF'FFFFFFFE
 	// will return to an invalid address and blow up
 	//http://elixir.free-electrons.com/linux/v4.11/source/arch/x86/include/asm/processor.h#L832
-	// (hopefully a hugepage can't be mapped there)
 	//we don't care what the last page is, as long as there is one
 	char* final_page = (char*)0x00007FFFFFFFE000;
 	require_eq(mmap(final_page+0x1000, 0x1000, PROT_READ, MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED, -1, 0), MAP_FAILED);
