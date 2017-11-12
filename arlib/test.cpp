@@ -11,7 +11,7 @@
 #define HAVE_VALGRIND
 #endif
 #ifdef HAVE_VALGRIND
-#include <valgrind/memcheck.h>
+#include "deps/valgrind/memcheck.h"
 #endif
 
 struct testlist {

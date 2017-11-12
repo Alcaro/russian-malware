@@ -247,7 +247,7 @@ runloop* runloop::global()
 #define HAVE_VALGRIND
 #endif
 #ifdef HAVE_VALGRIND
-#include <valgrind/memcheck.h>
+#include "deps/valgrind/valgrind.h"
 #else
 #define RUNNING_ON_VALGRIND false
 #endif
