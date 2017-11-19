@@ -221,6 +221,18 @@ puts("GTJ="+tostring(guilds_to_join));
 				set_user(id, member_j);
 			}
 		}
+		if (json["t"] == "CHANNEL_CREATE" || json["t"] == "CHANNEL_UPDATE")
+		{
+			cstring cid = json["d"]["id"];
+			cstring gid = json["d"]["guild_id"];
+			
+			i_channel& c = channels[cid];
+			i_guild& g = guilds[gid];
+			
+			g.channels.add(cid);
+			c.guild = gid;
+			c.name = json["d"]["name"];
+		}
 		if (json["t"] == "GUILD_MEMBER_ADD")
 		{
 			cstring guild_id = json["d"]["guild_id"];

@@ -57,6 +57,43 @@ test("TCP client with DNS") { clienttest("www.nic.ad.jp", 80, false); } // both 
 test("SSL client") { clienttest("google.com", 443, true); }
 test("SSL SNI") { clienttest("git.io", 443, true); }
 
+test("TCP client, disconnecting server")
+{
+	test_skip("too slow");
+	test_inconclusive("seriously, 30 seconds is too slow");
+	return;
+	
+	autoptr<runloop> loop = runloop::create();
+	
+	loop->set_timer_rel(60000, bind_lambda([&]()->bool { loop->exit(); assert_ret(!"timeout", false); return false; }));
+	
+	uint64_t start_ms = time_ms_ne();
+	
+	//need to provoke Shitty Server into actually dropping the connections
+	autoptr<socket> sock2;
+	loop->set_timer_rel(5000, bind_lambda([&]()->bool { sock2 = socket::create("floating.muncher.se", 9, loop); return true; }));
+	
+	autoptr<socket> sock = socket::create("floating.muncher.se", 9, loop);
+	assert(sock);
+	
+	sock->callback(loop, bind_lambda([&](socket*)
+		{
+			uint8_t buf[64];
+			int ret = sock->recv(buf);
+			assert_lte(ret, 0);
+			if (ret < 0) loop->exit();
+		}), NULL);
+	
+	loop->enter();
+	
+	//test passes if this thing notices that Shitty Server dropped it within 60 seconds
+	//Shitty will drop me after 10-20 seconds, depending on when exactly the other sockets connect
+	//Arlib will send a keepalive after 30 seconds, which will immediately return RST and return ECONNRESET
+	
+	//make sure it didn't fail because Shitty Server is down
+	assert_gt(time_ms_ne()-start_ms, 29000);
+}
+
 //TODO: test permissiveness for those
 test("SSL client, bad root") { clienttest("superfish.badssl.com", 443, true, true); }
 test("SSL client, bad name") { clienttest("wrong.host.badssl.com", 443, true, true); }

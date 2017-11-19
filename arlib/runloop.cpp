@@ -331,7 +331,7 @@ public:
 		
 		if (RUNNING_ON_VALGRIND)
 		{
-			test_skip_force("runloop latency "+tostring(max_us)+"us under Valgrind");
+			test_inconclusive("runloop latency "+tostring(max_us)+"us under Valgrind");
 		}
 	}
 };

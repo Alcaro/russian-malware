@@ -28,7 +28,7 @@ void _teststack_push(int line);
 void _teststack_pop();
 
 void _test_skip(cstring why);
-void _test_skip_force(cstring why);
+void _test_inconclusive(cstring why);
 
 //undefined behavior if T is unsigned and T2 is negative
 //I'd prefer making it compare properly, but that requires way too many conditionals.
@@ -169,7 +169,7 @@ void _assert_range(const T&  actual, const char * actual_exp,
 #define assert_fail_nostack(msg) do { _testfail((string)"\n"+msg, -1); return; } while(0)
 #define testcall(x) do { _teststack_push(__LINE__); x; _teststack_pop(); if (_test_result) return; } while(0)
 #define test_skip(x) do { _test_skip(x); if (_test_result) return; } while(0)
-#define test_skip_force(x) do { _test_skip_force(x); return; } while(0)
+#define test_inconclusive(x) do { _test_inconclusive(x); return; } while(0)
 
 #else
 
@@ -192,6 +192,6 @@ void _assert_range(const T&  actual, const char * actual_exp,
 #define assert_range(x,y,z) ((void)(x<y))
 #define testcall(x) x
 #define test_skip(x) return
-#define test_skip_force(x) return
+#define test_inconclusive(x) return
 
 #endif

@@ -34,7 +34,7 @@ _testdecl::_testdecl(void(*func)(), const char * loc, const char * name)
 }
 
 static bool all_tests;
-int _test_result; // 0 - pass or still running; 1 - fail; 2 - skipped
+int _test_result; // 0 - pass or still running; 1 - fail; 2 - skipped; 3 - inconclusive
 
 static array<int> callstack;
 void _teststack_push(int line) { callstack.append(line); }
@@ -86,12 +86,12 @@ void _test_skip(cstring why)
 	}
 }
 
-void _test_skip_force(cstring why)
+void _test_inconclusive(cstring why)
 {
 	if (!_test_result)
 	{
-		puts("skipped: "+why);
-		_test_result = 2;
+		puts("inconclusive: "+why);
+		_test_result = 3;
 	}
 }
 
@@ -120,33 +120,25 @@ if(argc>1)abort(); // TODO: argument parser
 	
 	for (int pass = 0; pass < (all_tests_twice ? 2 : 1); pass++)
 	{
-		int count[3]={0,0,0};
+		int count[4]={0,0,0};
 		
 		test = g_testlist;
 		while (test)
 		{
 			testlist* next = test->next;
-			if (true)
-			{
-				if (test->name) printf("Testing %s (%s)... ", test->name, test->loc);
-				else printf("Testing %s... ", test->loc);
-				fflush(stdout);
-				_test_result = 0;
-				callstack.reset();
-				test->func();
-				count[_test_result]++;
-				if (!_test_result) puts("pass");
-			}
-			else
-			{
-				if (test->name) printf("Skipping %s (%s)\n", test->name, test->loc);
-				else printf("Skipping %s\n", test->loc);
-				count[2]++;
-			}
+			if (test->name) printf("Testing %s (%s)... ", test->name, test->loc);
+			else printf("Testing %s... ", test->loc);
+			fflush(stdout);
+			_test_result = 0;
+			callstack.reset();
+			test->func();
+			count[_test_result]++;
+			if (!_test_result) puts("pass");
 			test = next;
 		}
 		printf("Passed %i, failed %i", count[0], count[1]);
 		if (count[2]) printf(", skipped %i", count[2]);
+		if (count[3]) printf(", inconclusive %i", count[3]);
 		puts("");
 		
 #ifdef HAVE_VALGRIND
