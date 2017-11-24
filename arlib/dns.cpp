@@ -248,7 +248,8 @@ fail:
 }
 
 #include "test.h"
-test()
+test("dummy", "runloop", "udp") {} // there are no real udp tests, the dns test is enough
+test("DNS", "udp,string", "dns")
 {
 	test_skip("kinda slow");
 	

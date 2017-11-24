@@ -2,7 +2,7 @@
 #include "test.h"
 
 #ifdef ARLIB_TEST
-test("array")
+test("array", "", "array")
 {
 	assert_eq(sizeof(array<int>), sizeof(int*)+sizeof(size_t));
 	
@@ -49,7 +49,7 @@ static string ones_zeroes(int ones, int zeroes)
 	for (int i=0;i<zeroes;i++) ret+="0";
 	return ret;
 }
-test("array<bool>")
+test("array<bool>", "", "array")
 {
 	for (int up=0;up<128;up+=13)
 	for (int down=0;down<=up;down+=13)

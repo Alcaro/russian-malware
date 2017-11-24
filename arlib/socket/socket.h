@@ -69,7 +69,7 @@ public:
 	//If both read and write are possible and both callbacks are set, read is called; it's implementation defined whether write is too.
 	//False positives are possible. Use nonblocking operations.
 	//If the socket is closed, it's considered both readable and writable.
-	virtual void callback(runloop* loop, function<void(socket*)> cb_read, function<void(socket*)> cb_write = NULL) = 0;
+	virtual void callback(function<void(socket*)> cb_read, function<void(socket*)> cb_write = NULL) = 0;
 	
 	virtual ~socket() {}
 	
@@ -78,11 +78,6 @@ public:
 	// store/provide fds
 	// be destructive, SSL state is only usable once
 	// support erroring out, if serialization isn't implemented
-	//then remove
-	// everything after this point
-	// all implementations of active(), grep them
-	// the fd member, and associated constructor
-	// all private members
 };
 
 //SSL feature matrix:

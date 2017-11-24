@@ -120,7 +120,7 @@ fail:
 	in = in.substr(1, ~0);
 }
 
-test()
+test("HTML entities", "string", "html")
 {
 	//do not use existing entities other than amp apos gt lt quot,
 	// or this will fail depending on whether it runs before or after htmlent.cpp

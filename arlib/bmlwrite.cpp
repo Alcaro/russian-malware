@@ -124,7 +124,7 @@ string bmlwriter::unescape(cstring val)
 
 
 #ifdef ARLIB_TEST
-test()
+test("BML writer", "string,array", "bml")
 {
 	{
 		bmlwriter w;

@@ -80,3 +80,7 @@ public:
 	virtual ~runloop() = 0;
 };
 inline runloop::~runloop() {}
+
+#ifdef ARLIB_TEST
+extern int arlib_runloop_depth;
+#endif

@@ -1,22 +1,55 @@
+#define WANT_VALGRIND
 #include "os.h"
 #include "thread.h"
 #include <stdlib.h>
 #include <string.h>
+#include "test.h"
 
 #ifdef __unix__
 #include <dlfcn.h>
 
+static mutex dylib_lock;
+
+static void* dylib_load_uniq(const char * filename, bool force)
+{
+	synchronized(dylib_lock)
+	{
+		//try loading it normally first, to avoid loading libc twice if not needed
+		//duplicate libcs probably don't work very well
+		void* test = dlopen(filename, RTLD_NOLOAD);
+		if (!test) return dlopen(filename, RTLD_LAZY);
+		
+		dlclose(test);
+#ifdef __linux__
+		if (mode == DLOPEN_UNIQ_FORCE)
+			return dlmopen(LM_ID_NEWLM, filename, RTLD_LAZY);
+		else
+#endif
+			return NULL;
+	}
+}
+
 bool dylib::init(const char * filename)
 {
-	deinit();
-	handle = (dylib*)dlopen(filename, RTLD_LAZY);
+	if (handle) abort();
+	synchronized(dylib_lock)
+	{
+		handle = dlopen(filename, RTLD_LAZY);
+	}
 	return handle;
 }
 
 bool dylib::init_uniq(const char * filename)
 {
-	deinit();
-	handle = (dylib*)dlmopen(LM_ID_NEWLM, filename, RTLD_LAZY);
+	if (handle) abort();
+	handle = dylib_load_uniq(filename, false);
+	return handle;
+}
+
+bool dylib::init_uniq_force(const char * filename)
+{
+	if (handle) abort();
+	handle = dylib_load_uniq(filename, true);
 	return handle;
 }
 
@@ -24,15 +57,6 @@ void* dylib::sym_ptr(const char * name)
 {
 	if (!handle) return NULL;
 	return dlsym(handle, name);
-}
-
-funcptr dylib::sym_func(const char * name)
-{
-	if (!handle) return NULL;
-	
-	funcptr ret;
-	*(void**)(&ret)=dlsym(handle, name);
-	return ret;
 }
 
 void dylib::deinit()
@@ -59,7 +83,7 @@ static HANDLE dylib_init(const char * filename, bool uniq)
 		}
 		
 		//this is so weird dependencies, for example winpthread-1.dll, can be placed beside the dll where they belong
-		char * filename_copy=strdup(filename);
+		char * filename_copy = strdup(filename);
 		char * filename_copy_slash = strrchr(filename_copy, '/');
 		if (!filename_copy_slash) filename_copy_slash = strrchr(filename_copy, '\0');
 		filename_copy_slash[0]='\0';
@@ -82,12 +106,6 @@ void* dylib::sym_ptr(const char * name)
 {
 	if (!handle) return NULL;
 	return (void*)GetProcAddress((HMODULE)handle, name);
-}
-
-funcptr dylib::sym_func(const char * name)
-{
-	if (!handle) return NULL;
-	return (funcptr)GetProcAddress((HMODULE)handle, name);
 }
 
 void dylib::deinit()
@@ -140,13 +158,8 @@ void debug_or_abort()
 #include <unistd.h>
 #include <fcntl.h>
 
-#ifdef __linux__
-#define HAVE_VALGRIND
-#endif
-#ifdef HAVE_VALGRIND
-#include "deps/valgrind/valgrind.h"
-#else
-#define RUNNING_ON_VALGRIND false
+//defined by test.h - not completely appropriate, but it is test related
+#ifndef HAVE_VALGRIND
 #define VALGRIND_PRINTF_BACKTRACE(...) ;
 #endif
 
@@ -237,8 +250,7 @@ uint64_t time_ms_ne()
 }
 #endif
 
-#include "test.h"
-test("time")
+test("time", "", "time")
 {
 	uint64_t time_u_ft = (uint64_t)time(NULL)*1000000;
 	uint64_t time_u_fm = time_ms()*1000;

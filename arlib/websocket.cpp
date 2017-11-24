@@ -14,9 +14,9 @@ void WebSocket::connect(cstring target, arrayview<string> headers)
 	if (!HTTP::parseUrl(target, false, loc)) { cb_error(); return; }
 	if (loc.proto == "wss") sock = socket::create_ssl(loc.domain, loc.port ? loc.port : 443, loop);
 	if (loc.proto == "ws")  sock = socket::create(    loc.domain, loc.port ? loc.port : 80,  loop);
-	sock->callback(loop, bind_this(&WebSocket::activity), NULL);
+	sock->callback(bind_this(&WebSocket::activity), NULL);
 	
-	sock->send(cstring(
+	sock->send(string(
 	           "GET "+loc.path+" HTTP/1.1\r\n"
 	           "Host: "+loc.domain+"\r\n"
 	           "Connection: upgrade\r\n"
@@ -39,7 +39,7 @@ void WebSocket::activity(socket*)
 	int nbyte = sock->recv(bytes);
 	if (nbyte < 0)
 	{
-puts("SOCKDEAD");
+//puts("SOCKDEAD");
 		cancel();
 		return;
 	}
@@ -89,17 +89,9 @@ again:
 	
 	size_t bodysize = msgsize-headsize;
 	
-	if (msg[0]&0x08) // throw away control messages
-	{
-//puts("RETURNSKIP:"+tostringhex(msg.slice(0,headsize))+" "+tostringhex(msg.skip(headsize)));
-		msg = msg.skip(msgsize);
-		goto again;
-	}
-	
 	arrayvieww<byte> out = msg.slice(headsize, bodysize);
-//puts("RETURN:"+tostringhex(msg.slice(0,headsize))+" "+tostringhex(out));
 	
-	if (msg[1] & 0x80) // spec says server isn't allowed to mask, for whatever absurd reason
+	if (msg[1] & 0x80) // spec says server isn't allowed to mask, so this shouldn't happen
 	{
 		uint8_t key[4];
 		key[0] = msg[headsize-4+0];
@@ -112,16 +104,19 @@ again:
 		}
 	}
 	
-	bool binary = ((msg[0]&0x7)==2);
-	if (binary)
-	{
-		if (cb_bin) cb_bin(out);
-		else cb_str(out);
-	}
-	else
+	int type = (msg[0] & 0x0F);
+//puts("RETURN:"+tostringhex(msg.slice(0,headsize))+" "+tostringhex(out));
+	if (type == t_ping) send(msg, t_pong);
+	
+	if (type == t_text)
 	{
 		if (cb_str) cb_str(out);
 		else cb_bin(out);
+	}
+	if (type == t_binary)
+	{
+		if (cb_bin) cb_bin(out);
+		else cb_str(out);
 	}
 	
 	if (!sock) // happens if cb_str doesn't like that input and resets websocket
@@ -133,16 +128,16 @@ again:
 	goto again;
 }
 
-void WebSocket::send(arrayview<byte> message, bool binary)
+void WebSocket::send(arrayview<byte> message, int type)
 {
 	if (!sock) return;
 	
 	bytestreamw header;
-	header.u8(0x80 | (binary ? 0x2 : 0x1)); // frame-FIN, opcode
+	header.u8(0x80 | type); // frame-FIN, opcode
 	if (message.size() <= 125)
 	{
 		//apparently specially crafted websocket packets could confuse proxies and whatever
-		//not a problem for me, not gonna mask properly
+		//not a problem for me, my users aren't hostile (and that'd be the proxy's fault, not mine), not gonna mask properly
 		//obvious follow up question: why is websocket on port 443 when it acts nothing like http
 		header.u8(message.size() | 0x80);
 	}
@@ -171,15 +166,14 @@ void WebSocket::send(arrayview<byte> message, bool binary)
 
 #include "test.h"
 #ifdef ARLIB_TEST
-test()
+test("WebSocket", "tcp,ssl,bytepipe", "websocket")
 {
 	test_skip("kinda slow");
-	socket::wrap_ssl(NULL, "", NULL); // bearssl takes forever to initialize, do it outside the runloop check
 	
 	autoptr<runloop> loop = runloop::create();
 	string str;
-	function<void(string)> cb_str = bind_lambda([&](string str_inner){ assert_eq(str, ""); str = str_inner; loop->exit(); });
-	function<void()> cb_error = bind_lambda([&](){ loop->exit(); assert(false); });
+	function<void(string)> cb_str = bind_lambda([&](string str_inner){ loop->exit(); assert_eq(str, ""); str = str_inner; });
+	function<void()> cb_error = bind_lambda([&](){ loop->exit(); assert(!"should be unreachable"); });
 	
 	function<string()> recvstr = bind_lambda([&]()->string { str = ""; loop->enter(); string ret = str; return ret; });
 	

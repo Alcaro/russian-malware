@@ -141,7 +141,7 @@ template<typename T> void testundec(const char * S, T V)
 	assert_eq(fromstring(S, a), true);
 	assert_eq(a, V);
 }
-test()
+test("string conversion", "", "string")
 {
 	testcall(testunhex<unsigned char     >("aa", 0xaa));
 	testcall(testunhex<unsigned char     >("AA", 0xAA));

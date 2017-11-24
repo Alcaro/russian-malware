@@ -264,12 +264,9 @@ ifeq ($(ARSOCKET),1)
   else ifeq ($(ARSOCKET_SSL),bearssl)
     CFLAGS_ARLIB += -DARLIB_SSL_BEARSSL
     SOURCES_ARLIB += arlib/socket/bear-ser.c
-    OBJS_LATE += arlib/deps/bearssl-0.4/build/libbearssl.a
-    ifeq ($(OS),windows)
-      CONF_LFLAGS += -lcrypt32
-    endif
-arlib/deps/bearssl-0.4/build/libbearssl.a:
-	$(MAKE) -C arlib/deps/bearssl-0.4/ CFLAGS='$(OPTFLAGS)' lib
+    OBJS_LATE += arlib/deps/bearssl-0.5/build/libbearssl.a
+arlib/deps/bearssl-0.5/build/libbearssl.a:
+	$(MAKE) -C arlib/deps/bearssl-0.5/ CFLAGS='$(OPTFLAGS)' lib
   else ifeq ($(ARSOCKET_SSL),tlse)
     CFLAGS_ARLIB += -DARLIB_SSL_TLSE
     SOURCES_NOWARN += arlib/deps/tlse.c

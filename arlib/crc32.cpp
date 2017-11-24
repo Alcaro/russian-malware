@@ -71,7 +71,7 @@ uint32_t crc32_update(arrayview<uint8_t> data, uint32_t crc)
 
 
 #include "test.h"
-test()
+test("crc32", "", "crc32")
 {
 	string test = "foobar";
 	assert_eq(crc32(test.bytes()), 0x9EF61F95);

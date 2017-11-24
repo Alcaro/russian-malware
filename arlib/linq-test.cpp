@@ -25,7 +25,7 @@ int AAAAAAAAAAAAAAAAAAAAAAA()
 #endif
 
 #ifdef ARLIB_TEST
-test()
+test("LINQ", "array,set", "linq")
 {
 	{
 		array<int> x = { 1, 2, 3 };

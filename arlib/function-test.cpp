@@ -20,7 +20,7 @@ public:
 int adder::n_adders = 0;
 }
 
-test()
+test("function", "", "function")
 {
 	{
 		function<int()> r42w = r42;

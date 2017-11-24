@@ -106,7 +106,7 @@ struct ser12 {
 	SERIALIZE(data);
 };
 
-test("BML serialization")
+test("BML serialization", "bml", "serialize")
 {
 	{
 		ser1 item;
@@ -202,7 +202,7 @@ test("BML serialization")
 	}
 }
 
-test("BML deserialization")
+test("BML deserialization", "bml", "serialize")
 {
 	{
 		ser1 item = bmlunserialize<ser1>("a=1\nb=2");
@@ -399,7 +399,7 @@ q
 	}
 }
 
-test("JSON deserialization")
+test("JSON deserialization", "json", "serialize")
 {
 	{
 		int x = jsonunserialize<int>("42");

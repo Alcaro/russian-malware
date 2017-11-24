@@ -2,7 +2,7 @@
 extern "C" {
 #endif
 
-#include "../deps/bearssl-0.4/inc/bearssl.h"
+#include "../deps/bearssl-0.5/inc/bearssl.h"
 
 //This file exports the following two functions and struct:
 
@@ -23,9 +23,9 @@ void br_ssl_client_freeze(br_frozen_ssl_client_context* fr, br_ssl_client_contex
 //- br_ssl_engine_set_x509
 //- br_ssl_engine_set_buffer
 //- br_ssl_client_reset (other than the domain name, which may differ, or even be NULL)
-//- The list of trust anchors in the x509
+//- The list of trust anchors in the x509, including order
 //Can not be used to upgrade BearSSL versions (not even tiny patches), due to T0-relative pointers.
-// Likely to break on BearSSL versions other than 0.4, it depends on lots of implementation details. May work, but don't test your luck.
+// Likely to break on BearSSL versions other than 0.5, it depends on lots of implementation details. May work, but don't test your luck.
 //The frozen context will be scrambled and may not be used afterwards.
 // This is a bug, but since cloning a SSL context is illegal anyways, it's considered acceptable.
 void br_ssl_client_unfreeze(br_frozen_ssl_client_context* fr, br_ssl_client_context* cc, br_x509_minimal_context* xc);

@@ -4,9 +4,9 @@
 #include "../file.h"
 #include "../stringconv.h"
 #include "../thread.h"
-//Possible BearSSL improvements (not all of it is worth the effort; some may have been fixed since the version I tested):
-//- (0.4) serialization that I didn't have to write myself
-//- (0.3) extern "C" in header
+#include "../base64.h"
+//Possible BearSSL improvements (not all of it is worth the effort; paren is last tested version, some may have been fixed since then):
+//- (0.5) serialization that I didn't have to write myself
 //- (0.3) official sample code demonstrating how to load /etc/ssl/certs/ca-certificates.crt
 //    preferably putting most of it in BearSSL itself, but seems hard to implement without malloc
 //- (0.3) more bool and int8_t, less int and char
@@ -19,9 +19,9 @@
 //    (not sure if that's the only ones)
 //- (0.4) tools/client.c: typo minium: "ERROR: duplicate minium ClientHello length"
 
-extern "C" {
-#include "../deps/bearssl-0.4/inc/bearssl.h"
+#include "../deps/bearssl-0.5/inc/bearssl.h"
 
+extern "C" {
 //see bear-ser.c for docs
 typedef struct br_frozen_ssl_client_context_ {
 	br_ssl_client_context cc;
@@ -34,11 +34,11 @@ void br_ssl_client_unfreeze(br_frozen_ssl_client_context* fr, br_ssl_client_cont
 
 
 
+
 //most of this is copied from bearssl-0.3/tools/certs.c and files.c, somewhat rewritten
 
-//these have destructors; they're not needed,
-//but GCC bug 19661 says I can't get them out.
-static array<array<byte>> certs_blobs;
+//I'd prefer to get rid of this one's destructor, it's not needed,
+//but GCC bug 19661 says I can't do that.
 static array<br_x509_trust_anchor> certs;
 
 static void bytes_append(void* dest_ctx, const void * src, size_t len)
@@ -47,7 +47,9 @@ static void bytes_append(void* dest_ctx, const void * src, size_t len)
 }
 static byte* blobdup(arrayview<byte> blob)
 {
-	return certs_blobs.append(blob).ptr();
+	byte* newblob = malloc(blob.size()); // intentional leak; doesn't matter, initialize() only runs once
+	memcpy(newblob, blob.ptr(), blob.size());
+	return newblob;
 }
 static bool append_cert_x509(arrayview<byte> xc)
 {
@@ -55,29 +57,30 @@ static bool append_cert_x509(arrayview<byte> xc)
 	
 	br_x509_decoder_context dc;
 	
-	array<byte>& vdn = certs_blobs.append();
+	array<byte> vdn;
 	br_x509_decoder_init(&dc, bytes_append, &vdn);
 	br_x509_decoder_push(&dc, xc.ptr(), xc.size());
 	br_x509_pkey* pk = br_x509_decoder_get_pkey(&dc);
 	if (pk == NULL) return false;
 	
-	ta.dn.data = vdn.ptr();
 	ta.dn.len = vdn.size();
+	ta.dn.data = vdn.release().ptr(); // intentional leak
 	ta.flags = (br_x509_decoder_isCA(&dc) ? BR_X509_TA_CA : 0);
 	
-	switch (pk->key_type) {
+	switch (pk->key_type)
+	{
 	case BR_KEYTYPE_RSA:
 		ta.pkey.key_type = BR_KEYTYPE_RSA;
-		ta.pkey.key.rsa.n = blobdup(arrayview<byte>(pk->key.rsa.n, pk->key.rsa.nlen));
 		ta.pkey.key.rsa.nlen = pk->key.rsa.nlen;
-		ta.pkey.key.rsa.e = blobdup(arrayview<byte>(pk->key.rsa.e, pk->key.rsa.elen));
+		ta.pkey.key.rsa.n = blobdup(arrayview<byte>(pk->key.rsa.n, pk->key.rsa.nlen));
 		ta.pkey.key.rsa.elen = pk->key.rsa.elen;
+		ta.pkey.key.rsa.e = blobdup(arrayview<byte>(pk->key.rsa.e, pk->key.rsa.elen));
 		break;
 	case BR_KEYTYPE_EC:
 		ta.pkey.key_type = BR_KEYTYPE_EC;
 		ta.pkey.key.ec.curve = pk->key.ec.curve;
-		ta.pkey.key.ec.q = blobdup(arrayview<byte>(pk->key.ec.q, pk->key.ec.qlen));
 		ta.pkey.key.ec.qlen = pk->key.ec.qlen;
+		ta.pkey.key.ec.q = blobdup(arrayview<byte>(pk->key.ec.q, pk->key.ec.qlen));
 		break;
 	default:
 		return false;
@@ -86,41 +89,57 @@ static bool append_cert_x509(arrayview<byte> xc)
 }
 
 //unused on Windows, its cert store gives me x509s directly
-MAYBE_UNUSED static void append_certs_pem_x509(arrayview<byte> certs_pem)
+MAYBE_UNUSED static void append_certs_pem_x509(array<byte> certs_pem)
 {
-	br_pem_decoder_context pc;
-	br_pem_decoder_init(&pc);
-	array<byte> cert_this;
-	
-	while (certs_pem)
+	array<cstring> certs = cstring(certs_pem).csplit("-----BEGIN CERTIFICATE-----");
+	array<byte> buf;
+	for (cstring cert : certs)
 	{
-		size_t tlen = br_pem_decoder_push(&pc, certs_pem.ptr(), certs_pem.size());
-		certs_pem = certs_pem.skip(tlen);
+		size_t certend = cert.indexof("-----END CERTIFICATE-----");
+		if (certend == (size_t)-1) continue;
 		
-		//what a strange API, does it really need both event streaming and a callback?
-		switch (br_pem_decoder_event(&pc)) {
-		case BR_PEM_BEGIN_OBJ:
-			cert_this.reset();
-			if (!strcmp(br_pem_decoder_name(&pc), "CERTIFICATE"))
-				br_pem_decoder_setdest(&pc, bytes_append, &cert_this);
-			else
-				br_pem_decoder_setdest(&pc, NULL, NULL);
-			break;
-		
-		case BR_PEM_END_OBJ:
-			if (cert_this) append_cert_x509(cert_this);
-			break;
-		
-		case BR_PEM_ERROR:
-			certs.reset();
-			return;
-		}
+		size_t buflen = base64_dec_len(certend);
+		if (buflen > buf.size()) buf.resize(buflen);
+		size_t actuallen = base64_dec_raw(buf, NULL, cert.substr(0, certend), NULL);
+		append_cert_x509(buf.slice(0, actuallen));
 	}
 }
 
+//old version, ~9x slower (9ms->82ms) due to running the base64 decoder as a state machine
+//MAYBE_UNUSED static void append_certs_pem_x509(arrayview<byte> certs_pem)
+//{
+//	br_pem_decoder_context pc;
+//	br_pem_decoder_init(&pc);
+//	array<byte> cert_this;
+//	
+//	while (certs_pem)
+//	{
+//		size_t tlen = br_pem_decoder_push(&pc, certs_pem.ptr(), certs_pem.size());
+//		certs_pem = certs_pem.skip(tlen);
+//		
+//		//what a strange API, does it really need both event streaming and a callback?
+//		switch (br_pem_decoder_event(&pc)) {
+//		case BR_PEM_BEGIN_OBJ:
+//			cert_this.reset();
+//			if (!strcmp(br_pem_decoder_name(&pc), "CERTIFICATE"))
+//				br_pem_decoder_setdest(&pc, bytes_append, &cert_this);
+//			else
+//				br_pem_decoder_setdest(&pc, NULL, NULL);
+//			break;
+//		
+//		case BR_PEM_END_OBJ:
+//			if (cert_this) append_cert_x509(cert_this);
+//			break;
+//		
+//		case BR_PEM_ERROR:
+//			certs.reset();
+//			return;
+//		}
+//	}
+//}
+
 #ifdef _WIN32
-//seems to be no way to access the Windows cert store without crypt32.dll
-//but that's fine, cert management is boring, the useful parts remain Bear
+//crypt32.dll seems to be the only way to access the Windows cert store
 #include <wincrypt.h>
 #endif
 
@@ -129,7 +148,7 @@ RUN_ONCE_FN(initialize)
 #ifndef _WIN32
 	append_certs_pem_x509(file::read("/etc/ssl/certs/ca-certificates.crt"));
 #else
-	//TODO: LoadLibrary this?
+	//TODO: LoadLibrary this, using some decltype
 	
 	HCERTSTORE store = CertOpenSystemStore((HCRYPTPROV)NULL, "ROOT");
 	if (!store) return;
@@ -226,9 +245,20 @@ public:
 		else s.xwc.vtable = NULL;
 		br_ssl_engine_set_buffer(&s.sc.eng, s.iobuf, sizeof(s.iobuf), true);
 		br_ssl_client_reset(&s.sc, domain.c_str(), false);
+		
+		set_child_cb();
 	}
 	
-	//returns whether anything happened
+	/*private*/ void set_child_cb()
+	{
+		if (sock)
+		{
+			int bearstate = br_ssl_engine_current_state(&s.sc.eng);
+			sock->callback((bearstate & BR_SSL_RECVREC) ? bind_this(&socketssl_impl::on_readable) : NULL,
+			               (bearstate & BR_SSL_SENDREC) ? bind_this(&socketssl_impl::on_writable) : NULL);
+		}
+	}
+	
 	/*private*/ void process_send()
 	{
 		if (!sock) return;
@@ -240,10 +270,11 @@ public:
 			int bytes = sock->send(arrayview<byte>(buf, buflen));
 			if (bytes < 0) sock = NULL;
 			if (bytes > 0) br_ssl_engine_sendrec_ack(&s.sc.eng, bytes);
+			
+			set_child_cb();
 		}
 	}
 	
-	//returns whether anything happened
 	/*private*/ void process_recv()
 	{
 		if (!sock) return;
@@ -255,6 +286,8 @@ public:
 			int bytes = sock->recv(arrayvieww<byte>(buf, buflen));
 			if (bytes < 0) sock = NULL;
 			if (bytes > 0) br_ssl_engine_recvrec_ack(&s.sc.eng, bytes);
+			
+			set_child_cb();
 		}
 	}
 	
@@ -269,6 +302,8 @@ public:
 		
 		memcpy(data.ptr(), buf, buflen);
 		br_ssl_engine_recvapp_ack(&s.sc.eng, buflen);
+		
+		set_child_cb();
 		return buflen;
 	}
 	
@@ -284,6 +319,8 @@ public:
 		memcpy(buf, data.ptr(), buflen);
 		br_ssl_engine_sendapp_ack(&s.sc.eng, buflen);
 		br_ssl_engine_flush(&s.sc.eng, false);
+		
+		set_child_cb();
 		return buflen;
 	}
 	
@@ -314,12 +351,7 @@ public:
 		if (cb_read  && (bearstate&(BR_SSL_RECVAPP|BR_SSL_CLOSED))) again = true;
 		if (cb_write && (bearstate&(BR_SSL_SENDAPP|BR_SSL_CLOSED))) again = true;
 		
-		if (sock)
-		{
-			sock->callback(loop,
-			              (bearstate & BR_SSL_RECVREC) ? bind_this(&socketssl_impl::on_readable) : NULL,
-			              (bearstate & BR_SSL_SENDREC) ? bind_this(&socketssl_impl::on_writable) : NULL);
-		}
+		set_child_cb();
 		
 		if (from_cb)
 		{
@@ -335,12 +367,10 @@ public:
 	/*private*/ void on_readable(socket*) { process_recv(); do_cbs(false); }
 	/*private*/ void on_writable(socket*) { process_send(); do_cbs(false); }
 	/*private*/ bool idle_cb() { return do_cbs(true); }
-	void callback(runloop* loop, function<void(socket*)> cb_read, function<void(socket*)> cb_write)
+	void callback(function<void(socket*)> cb_read, function<void(socket*)> cb_write)
 	{
-		this->loop = loop;
 		this->cb_read = cb_read;
 		this->cb_write = cb_write;
-		sock->callback(loop, bind_this(&socketssl_impl::on_readable), bind_this(&socketssl_impl::on_writable));
 	}
 	
 	~socketssl_impl()
@@ -355,7 +385,7 @@ public:
 		br_ssl_engine_close(&s.sc.eng);
 		br_ssl_engine_flush(&s.sc.eng, false);
 		process_send();
-		//but don't worry too much about ensuring the remote gets our closure notification, it's not really useful
+		//but don't worry too much about ensuring the remote gets our closure notification
 	}
 	
 	
@@ -428,4 +458,56 @@ socket* socket::wrap_ssl(socket* inner, cstring domain, runloop* loop)
 //	
 //	return new socketssl_impl(fd, data);
 //}
+
+#include "../test.h"
+#ifdef ARLIB_TEST
+#include "../os.h"
+//this is more to initialize this thing before the actual ssl tests than a real test
+//most of them are in a runloop, initialization takes longer (9-33ms) than the runloop watchdog (3ms)
+//this is also why it provides 'tcp' rather than 'ssl';
+// if it provides 'ssl', it'd run alongside the other SSL tests and fail watchdog
+test("BearSSL init", "array", "tcp")
+{
+	test_skip("kinda slow");
+	
+	//for (size_t i=0;i<certs.size();i++)
+	//{
+	//	br_x509_trust_anchor& ta1 = certs[i];
+	//	br_x509_trust_anchor& ta2 = certs_other[i];
+	//	
+	//	assert_eq(ta1.dn.len, ta2.dn.len);
+	//	assert_eq(tostringhex(arrayview<byte>(ta1.dn.data, ta1.dn.len)),
+	//	          tostringhex(arrayview<byte>(ta2.dn.data, ta2.dn.len)));
+	//	assert_eq(ta1.flags, ta2.flags);
+	//	
+	//	assert_eq(ta1.pkey.key_type, ta2.pkey.key_type);
+	//	
+	//	switch (ta1.pkey.key_type)
+	//	{
+	//	case BR_KEYTYPE_RSA:
+	//		assert_eq(ta1.pkey.key.rsa.nlen, ta2.pkey.key.rsa.nlen);
+	//		assert_eq(tostringhex(arrayview<byte>(ta1.pkey.key.rsa.n, ta1.pkey.key.rsa.nlen)),
+	//		          tostringhex(arrayview<byte>(ta2.pkey.key.rsa.n, ta2.pkey.key.rsa.nlen)));
+	//		assert_eq(ta1.pkey.key.rsa.elen, ta2.pkey.key.rsa.elen);
+	//		assert_eq(tostringhex(arrayview<byte>(ta1.pkey.key.rsa.e, ta1.pkey.key.rsa.elen)),
+	//		          tostringhex(arrayview<byte>(ta2.pkey.key.rsa.e, ta2.pkey.key.rsa.elen)));
+	//		break;
+	//	case BR_KEYTYPE_EC:
+	//		assert_eq(ta1.pkey.key.ec.curve, ta2.pkey.key.ec.curve);
+	//		assert_eq(ta1.pkey.key.ec.qlen, ta2.pkey.key.ec.qlen);
+	//		assert_eq(tostringhex(arrayview<byte>(ta1.pkey.key.ec.q, ta1.pkey.key.ec.qlen)),
+	//		          tostringhex(arrayview<byte>(ta2.pkey.key.ec.q, ta2.pkey.key.ec.qlen)));
+	//		break;
+	//	}
+	//}
+	
+	uint64_t begin_us = time_us_ne();
+	initialize();
+	uint64_t end_us = time_us_ne();
+	if (!RUNNING_ON_VALGRIND)
+	{
+		assert_lt(end_us-begin_us, 50000); // it usually takes 10ms, but sometimes above 30
+	}
+}
+#endif
 #endif

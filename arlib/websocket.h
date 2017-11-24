@@ -8,6 +8,15 @@ class WebSocket : nocopy {
 	autoptr<socket> sock;
 	bytepipe tosend; // used to avoid sending stuff before the handshake finishes, server throws Protocol Error if I try
 	
+	enum {
+		t_text = 1,
+		t_binary = 2,
+		
+		t_close = 8,
+		t_ping = 9,
+		t_pong = 10
+	};
+	
 	array<byte> msg;
 	
 	bool inHandshake;
@@ -20,7 +29,7 @@ class WebSocket : nocopy {
 	
 	void activity(socket*);
 	
-	void send(arrayview<byte> message, bool binary);
+	void send(arrayview<byte> message, int type);
 	
 	void cancel() { sock = NULL; cb_error(); }
 	
@@ -28,8 +37,8 @@ public:
 	WebSocket(runloop* loop) : loop(loop) {}
 	void connect(cstring target, arrayview<string> headers = NULL);
 	
-	void send(arrayview<byte> message) { send(message, true); }
-	void send(cstring message) { send(message.bytes(), false); }
+	void send(arrayview<byte> message) { send(message, t_binary); }
+	void send(cstring message) { send(message.bytes(), t_text); }
 	
 	//It's fine to call both of those if you need to keep text/binary data apart. If you don't, both will go to the same one.
 	//Do this before connect(), or you may miss events, for example if the target is unparseable.

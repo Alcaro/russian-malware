@@ -682,7 +682,7 @@ static void testbml_error(const char * bml)
 	assert_eq(depth, 0);
 }
 
-test()
+test("BML parser", "string,array", "bml")
 {
 	testcall(testbml(test1, test1e));
 	testcall(testbml(test2, test2e));

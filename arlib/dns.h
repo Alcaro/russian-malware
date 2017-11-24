@@ -21,7 +21,7 @@ class DNS {
 	{
 		this->loop = loop;
 		this->sock = socket::create_udp(resolver, port, loop);
-		sock->callback(loop, bind_this(&DNS::sock_cb), NULL);
+		sock->callback(bind_this(&DNS::sock_cb), NULL);
 	}
 	
 	uint16_t pick_trid()

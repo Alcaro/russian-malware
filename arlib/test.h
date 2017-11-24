@@ -6,20 +6,10 @@
 
 #ifdef ARLIB_TEST
 
-class _test_maybeptr {
-	const char * data;
-public:
-	_test_maybeptr() : data(NULL) {}
-	_test_maybeptr(const char * data) : data(data) {}
-	
-	operator const char *() { return data; }
-};
 class _testdecl {
 public:
-	_testdecl(void(*func)(), const char * loc, const char * name);
+	_testdecl(void(*func)(), const char * loc, const char * name, const char * requires, const char * provides);
 };
-
-extern int _test_result;
 
 void _testfail(cstring why, int line);
 void _testcmpfail(cstring why, int line, cstring expected, cstring actual);
@@ -29,6 +19,8 @@ void _teststack_pop();
 
 void _test_skip(cstring why);
 void _test_inconclusive(cstring why);
+
+bool _test_should_exit();
 
 //undefined behavior if T is unsigned and T2 is negative
 //I'd prefer making it compare properly, but that requires way too many conditionals.
@@ -121,55 +113,52 @@ void _assert_range(const T&  actual, const char * actual_exp,
 	}
 }
 
+#define _test_return(...) if (_test_should_exit()) return __VA_ARGS__;
 #define TESTFUNCNAME JOIN(_testfunc, __LINE__)
-#define test(...) \
+//'name' is printed to the user, but does nothing.
+//'provides' is what feature this test is for.
+//'requires' is which features this test requires to function correctly, comma separated;
+// if not set correctly, this test could be blamed for an underlying fault.
+//If multiple tests provide the same feature, all of them must run before anything depending on it can run
+// (however, the test will run even if the prior one fails).
+//Requiring a feature that no test provides, or cyclical dependencies, causes a test failure.
+#define test(name, requires, provides) \
 	static void TESTFUNCNAME(); \
-	static KEEP_OBJECT _testdecl JOIN(_testdecl, __LINE__)(TESTFUNCNAME, __FILE__ ":" STR(__LINE__), _test_maybeptr(__VA_ARGS__)); \
+	static KEEP_OBJECT _testdecl JOIN(_testdecl, __LINE__)(TESTFUNCNAME, __FILE__ ":" STR(__LINE__), name, requires, provides); \
 	static void TESTFUNCNAME()
-#define assert_ret(x, ret) do { if (!(x)) { _testfail("\nFailed assertion " #x, __LINE__); return ret; } } while(0)
+#define assert_ret(x, ret) do { if (!(x)) { _testfail("\nFailed assertion " #x, __LINE__); _test_return(ret); } } while(0)
 #define assert(x) assert_ret(x,)
-#define assert_msg_ret(x, msg, ret) do { if (!(x)) { _testfail((string)"\nFailed assertion " #x ": "+msg, __LINE__); return ret; } } while(0)
+#define assert_msg_ret(x, msg, ret) do { if (!(x)) { _testfail((string)"\nFailed assertion " #x ": "+msg, __LINE__); _test_return(ret); } } while(0)
 #define assert_msg(x, msg) assert_msg_ret(x,msg,)
-#define assert_eq_ret(actual,expected,ret) do { \
-		_assert_eq(actual, #actual, expected, #expected, __LINE__); \
-		if (_test_result) return ret; \
+#define _assert_fn_ret(fn,actual,expected,ret) do { \
+		fn(actual, #actual, expected, #expected, __LINE__); \
+		_test_return(ret); \
 	} while(0)
+#define assert_eq_ret(actual,expected,ret) _assert_fn_ret(_assert_eq,actual,expected,ret)
 #define assert_eq(actual,expected) assert_eq_ret(actual,expected,)
-#define assert_neq_ret(actual,expected,ret) do { \
-		_assert_neq(actual, #actual, expected, #expected, __LINE__); \
-		if (_test_result) return ret; \
-	} while(0)
+#define assert_neq_ret(actual,expected,ret) _assert_fn_ret(_assert_neq,actual,expected,ret)
 #define assert_neq(actual,expected) assert_neq_ret(actual,expected,)
-#define assert_lt_ret(actual,expected,ret) do { \
-		_assert_lt(actual, #actual, expected, #expected, __LINE__); \
-		if (_test_result) return ret; \
-	} while(0)
+#define assert_lt_ret(actual,expected,ret) _assert_fn_ret(_assert_lt,actual,expected,ret)
 #define assert_lt(actual,expected) assert_lt_ret(actual,expected,)
-#define assert_lte_ret(actual,expected,ret) do { \
-		_assert_lte(actual, #actual, expected, #expected, __LINE__); \
-		if (_test_result) return ret; \
-	} while(0)
+#define assert_lte_ret(actual,expected,ret) _assert_fn_ret(_assert_lte,actual,expected,ret)
 #define assert_lte(actual,expected) assert_lte_ret(actual,expected,)
-#define assert_gt_ret(actual,expected,ret) do { \
-		_assert_gt(actual, #actual, expected, #expected, __LINE__); \
-		if (_test_result) return ret; \
-	} while(0)
+#define assert_gt_ret(actual,expected,ret) _assert_fn_ret(_assert_gt,actual,expected,ret)
 #define assert_gt(actual,expected) assert_gt_ret(actual,expected,)
-#define assert_gte_ret(actual,expected,ret) do { \
-		_assert_gte(actual, #actual, expected, #expected, __LINE__); \
-		if (_test_result) return ret; \
-	} while(0)
+#define assert_gte_ret(actual,expected,ret) _assert_fn_ret(_assert_gte,actual,expected,ret)
 #define assert_gte(actual,expected) assert_gte_ret(actual,expected,)
 #define assert_range_ret(actual,min,max,ret) do { \
 		_assert_range(actual, #actual, min, #min, max, #max, __LINE__); \
-		if (_test_result) return ret; \
+		_test_return(ret); \
 	} while(0)
 #define assert_range(actual,min,max) assert_range_ret(actual,min,max,)
-#define assert_fail(msg) do { _testfail((string)"\n"+msg, __LINE__); return; } while(0)
-#define assert_fail_nostack(msg) do { _testfail((string)"\n"+msg, -1); return; } while(0)
-#define testcall(x) do { _teststack_push(__LINE__); x; _teststack_pop(); if (_test_result) return; } while(0)
-#define test_skip(x) do { _test_skip(x); if (_test_result) return; } while(0)
-#define test_inconclusive(x) do { _test_inconclusive(x); return; } while(0)
+#define assert_fail(msg) do { _testfail((string)"\n"+msg, __LINE__); _test_return(); } while(0)
+#define assert_unreachable() do { _testfail("\nassert_unreachable() wasn't unreachable", __LINE__); _test_return(); } while(0)
+#define assert_fail_nostack(msg) do { _testfail((string)"\n"+msg, -1); _test_return(); } while(0)
+#define testcall(x) do { _teststack_push(__LINE__); x; _teststack_pop(); _test_return(); } while(0)
+#define test_skip(x) do { _test_skip(x); _test_return(); } while(0)
+#define test_inconclusive(x) do { _test_return(); } while(0)
+
+#define WANT_VALGRIND
 
 #else
 
@@ -194,4 +183,15 @@ void _assert_range(const T&  actual, const char * actual_exp,
 #define test_skip(x) return
 #define test_inconclusive(x) return
 
+#endif
+
+#ifdef WANT_VALGRIND
+#ifdef __linux__
+#define HAVE_VALGRIND
+#endif
+#ifdef HAVE_VALGRIND
+#include "deps/valgrind/memcheck.h"
+#else
+#define RUNNING_ON_VALGRIND false
+#endif
 #endif

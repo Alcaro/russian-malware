@@ -58,7 +58,7 @@ bool file::impl::default_unmapw(arrayvieww<byte> data)
 #define WRITABLE_FILE "/tmp/arlib-selftest.txt"
 #endif
 
-test("file reading")
+test("file reading", "array", "file")
 {
 	file f;
 	assert(f.open(READONLY_FILE));
@@ -96,7 +96,7 @@ test("file reading")
 	assert(!f.open(file::dirname(READONLY_FILE)+"")); // opening a directory should fail
 }
 
-test("file writing")
+test("file writing", "array", "file")
 {
 	file f;
 	
@@ -162,7 +162,7 @@ test("file writing")
 	assert(file::unlink(WRITABLE_FILE)); // ensure it properly deals with unlinking a nonexistent file
 }
 
-test("in-memory files")
+test("in-memory files", "array", "file")
 {
 	array<byte> bytes;
 	for (int i=0;i<8;i++) bytes[i]=i;

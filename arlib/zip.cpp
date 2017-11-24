@@ -497,7 +497,7 @@ template<typename T, typename U> bool member(arrayview<T> data, U item)
 	return false;
 }
 
-test("DOS timestamp conversion")
+test("DOS timestamp conversion", "", "zip")
 {
 	time_t unix = 1481402470; // 2016-12-10 20:41:10
 	uint32_t dos = 0x498AA525;
@@ -518,7 +518,7 @@ test("DOS timestamp conversion")
 	}
 }
 
-test("ZIP reading")
+test("ZIP reading", "file", "zip")
 {
 	zip z;
 	assert(z.init(arrayview<byte>(zipbytes, sizeof(zipbytes))));
@@ -547,13 +547,13 @@ test("ZIP reading")
 }
 
 static arrayview<byte> sb(const char * str) { return arrayview<byte>((uint8_t*)str, strlen(str)); }
-test("ZIP writing")
+test("ZIP writing", "file", "zip")
 {
 	zip z;
 	assert(z.init(arrayview<byte>(zipbytes, sizeof(zipbytes))));
 	
 	array<byte> zb = z.pack();
-	assert_eq(zb.size(), sizeof(zipbytes)); // this tool wipes the file attributes
+	assert_eq(zb.size(), sizeof(zipbytes));
 	
 	//puts("");
 	//puts("---------");

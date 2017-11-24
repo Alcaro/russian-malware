@@ -4,12 +4,11 @@
 //TODO: fetch howsmyssl, ensure the only failure is the session cache
 
 #ifdef ARLIB_TEST
+#include "../os.h"
 
 static void clienttest(cstring target, int port, bool ssl, bool xfail = false)
 {
 	test_skip("too slow");
-	
-	if (ssl) socket::wrap_ssl(NULL, "", NULL); // bearssl takes forever to initialize, do it outside the runloop check
 	
 	autoptr<runloop> loop = runloop::create();
 	bool timeout = false;
@@ -29,16 +28,16 @@ static void clienttest(cstring target, int port, bool ssl, bool xfail = false)
 	
 	assert_eq(sock->send(http_get.bytes()), http_get.length());
 	
-	sock->callback(loop, break_runloop, NULL);
+	sock->callback(break_runloop, NULL);
 	
-	uint8_t buf[4];
+	uint8_t buf[8];
 	size_t n_buf = 0;
-	while (n_buf < 4)
+	while (n_buf < 8)
 	{
 		testcall(loop->enter());
 		assert(!timeout);
 		
-		int bytes = sock->recv(arrayvieww<byte>(buf).skip(n_buf));
+		int bytes = sock->recv(arrayvieww<byte>(buf).slice(n_buf, 2));
 		if (xfail)
 		{
 			if (bytes == 0) continue;
@@ -49,18 +48,20 @@ static void clienttest(cstring target, int port, bool ssl, bool xfail = false)
 		n_buf += bytes;
 	}
 	
-	assert_eq(string(arrayview<byte>(buf)), "HTTP");
+	assert_eq(string(arrayview<byte>(buf)), "HTTP/1.1");
 }
 
-test("TCP client with IP") { clienttest("192.41.192.145", 80, false); } // www.nic.ad.jp
-test("TCP client with DNS") { clienttest("www.nic.ad.jp", 80, false); } // both lookup and ping time for that one are 300ms
-test("SSL client") { clienttest("google.com", 443, true); }
-test("SSL SNI") { clienttest("git.io", 443, true); }
+//this IP is www.nic.ad.jp, both lookup and ping time for that one are 300ms
+test("TCP client with IP",  "runloop", "tcp") { clienttest("192.41.192.145", 80, false); }
+test("TCP client with DNS", "dns",     "tcp") { clienttest("www.nic.ad.jp", 80, false); }
 
-test("TCP client, disconnecting server")
+test("SSL client",          "tcp",     "ssl") { clienttest("google.com", 443, true); }
+test("SSL SNI",             "tcp",     "ssl") { clienttest("git.io", 443, true); }
+
+test("TCP client, disconnecting server", "runloop,dns", "tcp")
 {
 	test_skip("too slow");
-	test_inconclusive("seriously, 30 seconds is too slow");
+	test_inconclusive("30 seconds is too slow");
 	return;
 	
 	autoptr<runloop> loop = runloop::create();
@@ -76,7 +77,7 @@ test("TCP client, disconnecting server")
 	autoptr<socket> sock = socket::create("floating.muncher.se", 9, loop);
 	assert(sock);
 	
-	sock->callback(loop, bind_lambda([&](socket*)
+	sock->callback(bind_lambda([&](socket*)
 		{
 			uint8_t buf[64];
 			int ret = sock->recv(buf);
@@ -95,9 +96,9 @@ test("TCP client, disconnecting server")
 }
 
 //TODO: test permissiveness for those
-test("SSL client, bad root") { clienttest("superfish.badssl.com", 443, true, true); }
-test("SSL client, bad name") { clienttest("wrong.host.badssl.com", 443, true, true); }
-test("SSL client, expired") { clienttest("expired.badssl.com", 443, true, true); }
+test("SSL client, bad root", "tcp", "ssl") { clienttest("superfish.badssl.com", 443, true, true); }
+test("SSL client, bad name", "tcp", "ssl") { clienttest("wrong.host.badssl.com", 443, true, true); }
+test("SSL client, expired",  "tcp", "ssl") { clienttest("expired.badssl.com", 443, true, true); }
 
 #ifdef ARLIB_SSL_BEARSSL
 /*

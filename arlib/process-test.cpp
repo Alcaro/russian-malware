@@ -25,7 +25,7 @@
 #define usleep(n) Sleep((n)/1000)
 #endif
 
-test()
+test("process", "array,string", "process")
 {
 	test_skip("kinda slow");
 	//there are a couple of race conditions here, but I believe they're all safe

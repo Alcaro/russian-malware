@@ -1,21 +1,26 @@
 /*
 run (Unix only, only tested on Linux) with:
 
-gcc -std=c99 bear-ser.c bear-ser-test.c ../deps/bearssl-0.4/build/libbearssl.a -O0 -g -o bear-ser-a &&
-gcc -std=c99 bear-ser.c bear-ser-test.c ../deps/bearssl-0.4/build/libbearssl.a -O2 -g -o bear-ser-b &&
-gcc -std=c99 bear-ser.c bear-ser-test.c ../deps/bearssl-0.4/build/libbearssl.a -O3 -g -o bear-ser-c &&
+gcc -std=c99 bear-ser.c bear-ser-test.c ../deps/bearssl-0.5/build/libbearssl.a -O0 -g -o bear-ser-a &&
+gcc -std=c99 bear-ser.c bear-ser-test.c ../deps/bearssl-0.5/build/libbearssl.a -O2 -g -o bear-ser-b &&
+gcc -std=c99 bear-ser.c bear-ser-test.c ../deps/bearssl-0.5/build/libbearssl.a -O3 -g -o bear-ser-c &&
 ./bear-ser-a
 
 yes, compile thrice, this makes functions move around and tests that freeze/unfreeze handles this properly
-make sure to use exactly BearSSL version 0.4, any change in the headers is likely to break it
+be careful about BearSSL versions; while I haven't needed to change this between 0.3, 0.4 and 0.5,
+it's pointless to take risks
+
+expected output:
+some technical crap, along with 'HTTP/1.1 500 Domain Not Found', associated headers and body; then
+another 'HTTP/1.1 500 Domain Not Found', but this one's headers/body won't terminate
 */
 
-#define _POSIX_SOURCE
+#define _POSIX_C_SOURCE 200112L
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <unistd.h>
-#include "../deps/bearssl-0.4/inc/bearssl.h"
+#include "../deps/bearssl-0.5/inc/bearssl.h"
 
 typedef struct br_frozen_ssl_client_context_ {
 	br_ssl_client_context cc;
@@ -296,6 +301,8 @@ int main(int argc, char** argv)
 #include <unistd.h>
 #include <fcntl.h>
 #include <netinet/tcp.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 
 void appdata_init(const char * host, const char * port)
 {

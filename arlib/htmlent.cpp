@@ -9,7 +9,7 @@
 //bytes is output
 
 //12.5 Named character references https://html.spec.whatwg.org/#named-character-references
-static const char entities_raw[] =
+static const char entities_raw[24577] =
 	u8"AElig\0?\u00C6\0"
 	u8"AMP\0?\u0026\0"
 	u8"Aacute\0?\u00C1\0"
@@ -2150,7 +2150,7 @@ void HTML::all_entities()
 	set_entities(entities, ARRAY_SIZE(entities));
 }
 
-test()
+test("HTML entities", "string", "html")
 {
 	HTML::all_entities();
 	assert_eq(HTML::entity_decode("&aring;"), "å");

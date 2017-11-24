@@ -2,7 +2,7 @@
 #include "test.h"
 
 #ifdef ARLIB_TEST
-test("set")
+test("set", "array", "set")
 {
 	{
 		set<int> item;
@@ -165,7 +165,7 @@ test("set")
 	}
 }
 
-test("map")
+test("map", "array", "set")
 {
 	{
 		map<int,int> item;

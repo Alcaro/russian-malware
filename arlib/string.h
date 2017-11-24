@@ -104,7 +104,8 @@ private:
 		memcpy(this, &other, sizeof(*this));
 	}
 	
-	//constant for all string implementations, but used by the implementation, so let's keep it here
+	//~0 means end of the string, ~1 is last character
+	//don't try to make -1 the last character, it makes str.substr(x, ~0) blow up
 	int32_t realpos(int32_t pos) const
 	{
 		if (pos >= 0) return pos;
@@ -473,3 +474,8 @@ inline string cstring::upper() const
 	for (size_t i=0;i<length();i++) chars[i] = toupper(chars[i]);
 	return ret;
 }
+
+//Checks if needle is one of the 'separator'-separated words in the haystack. The needle may not contain 'separator' or be empty.
+//For example, haystack "GL_EXT_FOO GL_EXT_BAR GL_EXT_QUUX" (with space as separator) contains needles
+// 'GL_EXT_FOO', 'GL_EXT_BAR' and 'GL_EXT_QUUX', but not 'GL_EXT_QUU'.
+bool strtoken(const char * haystack, const char * needle, char separator);

@@ -349,7 +349,7 @@ static void testjson_error(const char * json)
 	assert_eq(depth, 0);
 }
 
-test("JSON parser")
+test("JSON parser", "string", "json")
 {
 	testcall(testjson(test1, test1e));
 	testcall(testjson(test2, test2e));
@@ -379,7 +379,7 @@ test("JSON parser")
 
 
 
-test("JSON container")
+test("JSON container", "string,array", "json")
 {
 	{
 		JSON json("7");

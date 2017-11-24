@@ -136,17 +136,17 @@ namespace {
 
 class socket_raw : public socket {
 public:
-	socket_raw(int fd) : fd(fd) {}
+	socket_raw(int fd, runloop* loop) : fd(fd), loop(loop) {}
 	
 	int fd;
 	runloop* loop = NULL;
 	function<void(socket*)> cb_read;
 	function<void(socket*)> cb_write;
 	
-	static socket* create(int fd)
+	static socket* create(int fd, runloop* loop)
 	{
 		if (fd<0) return NULL;
-		return new socket_raw(fd);
+		return new socket_raw(fd, loop);
 	}
 	
 	/*private*/ int fixret(int ret)
@@ -174,9 +174,8 @@ public:
 	
 	/*private*/ void on_readable(uintptr_t) { cb_read(this); }
 	/*private*/ void on_writable(uintptr_t) { cb_write(this); }
-	void callback(runloop* loop, function<void(socket*)> cb_read, function<void(socket*)> cb_write)
+	void callback(function<void(socket*)> cb_read, function<void(socket*)> cb_write)
 	{
-		this->loop = loop;
 		this->cb_read = cb_read;
 		this->cb_write = cb_write;
 		loop->set_fd(fd,
@@ -186,21 +185,22 @@ public:
 	
 	~socket_raw()
 	{
-		if (loop) loop->set_fd(fd, NULL, NULL);
-		if (fd>=0) close(fd);
+		loop->set_fd(fd, NULL, NULL);
+		close(fd);
 	}
 };
 
 class socket_raw_udp : public socket {
 public:
-	socket_raw_udp(int fd, sockaddr * addr, socklen_t addrlen) : fd(fd), peeraddr((uint8_t*)addr, addrlen)
+	socket_raw_udp(int fd, sockaddr * addr, socklen_t addrlen, runloop* loop)
+		: fd(fd), loop(loop), peeraddr((uint8_t*)addr, addrlen)
 	{
 		peeraddr_cmp.resize(addrlen);
 	}
 	
 	int fd;
 	
-	runloop* loop = NULL;
+	runloop* loop;
 	function<void(socket*)> cb_read;
 	function<void(socket*)> cb_write;
 	
@@ -237,9 +237,8 @@ public:
 	
 	/*private*/ void on_readable(uintptr_t) { cb_read(this); }
 	/*private*/ void on_writable(uintptr_t) { cb_write(this); }
-	void callback(runloop* loop, function<void(socket*)> cb_read, function<void(socket*)> cb_write)
+	void callback(function<void(socket*)> cb_read, function<void(socket*)> cb_write)
 	{
-		this->loop = loop;
 		this->cb_read = cb_read;
 		this->cb_write = cb_write;
 		loop->set_fd(fd,
@@ -249,8 +248,8 @@ public:
 	
 	~socket_raw_udp()
 	{
-		if (loop) loop->set_fd(fd, NULL, NULL);
-		if (fd>=0) close(fd);
+		loop->set_fd(fd, NULL, NULL);
+		close(fd);
 	}
 };
 
@@ -258,8 +257,8 @@ class socketwrap : public socket {
 public:
 	socket* i_connect(cstring domain, cstring ip, int port)
 	{
-		socket* ret = socket_raw::create(connect(ip, port));
-		if (ret && this->ssl) ret = socket::wrap_ssl(ret, domain, loop);
+		socket* ret = socket_raw::create(connect(ip, port), this->loop);
+		if (ret && this->ssl) ret = socket::wrap_ssl(ret, domain, this->loop);
 		return ret;
 	}
 	
@@ -309,8 +308,7 @@ public:
 			if (!idle_id) idle_id = loop->set_idle(bind_this(&socketwrap::on_idle));
 			return;
 		}
-		child->callback(loop,
-		                cb_read            ? bind_this(&socketwrap::on_readable) : NULL,
+		child->callback(cb_read            ? bind_this(&socketwrap::on_readable) : NULL,
 		                tosend.remaining() ? bind_this(&socketwrap::on_writable) : NULL);
 		if (cb_write && !idle_id) idle_id = loop->set_idle(bind_this(&socketwrap::on_idle));
 	}
@@ -354,9 +352,8 @@ public:
 		else { idle_id = 0; return false; }
 		return true;
 	}
-	void callback(runloop* loop, function<void(socket*)> cb_read, function<void(socket*)> cb_write)
+	void callback(function<void(socket*)> cb_read, function<void(socket*)> cb_write)
 	{
-		this->loop = loop;
 		this->cb_read = cb_read;
 		this->cb_write = cb_write;
 		set_loop();
@@ -387,7 +384,7 @@ socket* socket::create_udp(cstring domain, int port, runloop* loop)
 	if (!addr) return NULL;
 	
 	int fd = mksocket(addr->ai_family, addr->ai_socktype | SOCK_CLOEXEC | SOCK_NONBLOCK, addr->ai_protocol);
-	socket* ret = new socket_raw_udp(fd, addr->ai_addr, addr->ai_addrlen);
+	socket* ret = new socket_raw_udp(fd, addr->ai_addr, addr->ai_addrlen, loop);
 	freeaddrinfo(addr);
 	//TODO: add the wrapper
 	

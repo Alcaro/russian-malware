@@ -236,7 +236,61 @@ static string fromlatin1(cstring in, bool windows1252)
 string cstring::fromlatin1()      const { return ::fromlatin1(*this, false); }
 string cstring::fromwindows1252() const { return ::fromlatin1(*this, true); }
 
-test()
+bool strtoken(const char * haystack, const char * needle, char separator)
+{
+	//token lists are annoyingly complex to parse
+	//I suspect 'people using fixed-size buffers, then extension list grows and app explodes'
+	// isn't the only reason GL_EXTENSIONS string was deprecated from OpenGL
+	int nlen = strlen(needle);
+	while (true)
+	{
+		const char * found = strstr(haystack, needle);
+		if (!found) break;
+		
+		if ((found==haystack || found[-1]==separator) && // ensure the match is the start of a word
+				(found[nlen]==separator || found[nlen]=='\0')) // ensure the match is the end of a word
+		{
+			return true;
+		}
+		
+		haystack = strchr(found, separator); // try again, could've found GL_foobar_limited when looking for GL_foobar
+		if (!haystack) return false;
+	}
+	return false;
+}
+
+test("strtoken", "", "string")
+{
+	assert(strtoken("aa", "aa", ' '));
+	assert(!strtoken("aa", "a", ' '));
+	assert(!strtoken("aa", "aaa", ' '));
+	assert(strtoken("aa aa aa aa", "aa", ' '));
+	assert(!strtoken("aa aa aa aa", "a", ' '));
+	assert(!strtoken("aa aa aa aa", "aaa", ' '));
+	assert(!strtoken("12345", "1234", ' '));
+	assert(!strtoken("12345", "2345", ' '));
+	assert(!strtoken("12345", "234", ' '));
+	assert(strtoken("1234 123456 2345 123456 0123456 012345 12345 12345", "12345", ' '));
+	assert(strtoken("a b b", "a", ' '));
+	assert(strtoken("b a b", "a", ' '));
+	assert(strtoken("b b a", "a", ' '));
+	
+	assert(strtoken("aa", "aa", ','));
+	assert(!strtoken("aa", "a", ','));
+	assert(!strtoken("aa", "aaa", ','));
+	assert(strtoken("aa,aa,aa,aa", "aa", ','));
+	assert(!strtoken("aa,aa,aa,aa", "a", ','));
+	assert(!strtoken("aa,aa,aa,aa", "aaa", ','));
+	assert(!strtoken("12345", "1234", ','));
+	assert(!strtoken("12345", "2345", ','));
+	assert(!strtoken("12345", "234", ','));
+	assert(strtoken("1234,123456,2345,123456,0123456,012345,12345,12345", "12345", ','));
+	assert(strtoken("a,b,b", "a", ','));
+	assert(strtoken("b,a,b", "a", ','));
+	assert(strtoken("b,b,a", "a", ','));
+}
+
+test("string", "", "string")
 {
 	{
 		const char * g = "hi";
@@ -252,6 +306,7 @@ test()
 		assert_eq(a, "hi!");
 		assert_eq(b, "hi!");
 		
+		assert_eq((char)a[~1], '!');
 		
 		//a.replace(1,1, "ello");
 		//assert_eq(a, "hello!");

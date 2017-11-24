@@ -243,16 +243,7 @@ runloop* runloop::global()
 #include "os.h"
 
 #ifdef ARLIB_TEST
-#ifdef __linux__
-#define HAVE_VALGRIND
-#endif
-#ifdef HAVE_VALGRIND
-#include "deps/valgrind/valgrind.h"
-#else
-#define RUNNING_ON_VALGRIND false
-#endif
-
-
+int arlib_runloop_depth = 0;
 class runloop_blocktest : public runloop {
 	runloop* loop;
 	
@@ -262,6 +253,8 @@ class runloop_blocktest : public runloop {
 	uint64_t thissecond = 0;
 	/*private*/ void begin()
 	{
+		arlib_runloop_depth++;
+		
 		uint64_t new_us = time_us_ne();
 		if (new_us/1000000 != us/1000000) thissecond = 0;
 		thissecond++;
@@ -270,13 +263,15 @@ class runloop_blocktest : public runloop {
 	}
 	/*private*/ void end()
 	{
+		arlib_runloop_depth--;
+		
 		uint64_t new_us = time_us_ne();
 		uint64_t diff = new_us-us;
 		if (max_us < diff) max_us = diff;
 		assert_lt(diff, lim_us);
 	}
 	
-	//don't carelessly inline into the lambdas, sometimes lambdas are deallocated by the callbacks 'this' is a use-after-free
+	//don't carelessly inline into the lambdas; sometimes lambdas are deallocated by the callbacks, so 'this' is a use-after-free
 	/*private*/ void do_cb(function<void(uintptr_t)> cb, uintptr_t arg)
 	{
 		this->begin();
@@ -354,7 +349,7 @@ static void test_runloop(bool is_global)
 	//must be before the other one, loop->enter() must be called to ensure it doesn't actually run
 	loop->remove(loop->set_timer_rel(50, bind_lambda([]()->bool { assert_ret(!"should not be called", false); return false; })));
 	
-	//don't put this scoped
+	//don't put this scoped, id is used later
 	uintptr_t id = loop->set_timer_rel(20, bind_lambda([&]()->bool
 		{
 			assert_neq_ret(id, 0, true);
@@ -381,11 +376,15 @@ static void test_runloop(bool is_global)
 	
 	if (!is_global) delete loop;
 }
-test("global runloop")
+test("global runloop", "function,array,set,time", "runloop")
 {
 	test_runloop(true);
 }
-test("private runloop")
+test("private runloop", "function,array,set,time", "runloop")
 {
 	test_runloop(false); // it's technically illegal to create a runloop on the main thread, but nobody's gonna notice
+}
+test("x","","")
+{
+	assert(!"create a GSource-like interface, the bookkeeping needed for the current setup is nasty");
 }

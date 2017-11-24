@@ -26,7 +26,7 @@ static void pull(bytepipe& p, size_t& t_read, size_t& t_written, bool all, size_
 	assert_eq(p.remaining(), t_written-t_read);
 }
 
-test()
+test("bytepipe", "array", "bytepipe")
 {
 	size_t r = 0;
 	size_t w = 0;

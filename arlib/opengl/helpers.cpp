@@ -28,47 +28,6 @@ bool aropengl::create(context* core)
 
 
 
-//Checks if needle is one of the space-separated words in the haystack. The needle may not contain spaces or be empty.
-static bool strtoken(const char * haystack, const char * needle)
-{
-	//this is annoyingly complex to parse
-	//I suspect 'people using fixed-size buffers, then extension list grows and app explodes'
-	// isn't the only reason the GL_EXTENSIONS string was deprecated
-	int nlen = strlen(needle);
-	while (true)
-	{
-		const char * found = strstr(haystack, needle);
-		if (!found) break;
-		
-		if ((found==haystack || found[-1]==' ') && // ensure the match is the start of a word
-				(found[nlen]==' ' || found[nlen]=='\0')) // ensure the match is the end of a word
-		{
-			return true;
-		}
-		
-		haystack = strchr(found, ' '); // try again, could've found GL_foobar_limited when looking for GL_foobar
-		if (!haystack) return false;
-	}
-	return false;
-}
-
-test()
-{
-	assert(strtoken("aa", "aa"));
-	assert(!strtoken("aa", "a"));
-	assert(!strtoken("aa", "aaa"));
-	assert(strtoken("aa aa aa aa", "aa"));
-	assert(!strtoken("aa aa aa aa", "a"));
-	assert(!strtoken("aa aa aa aa", "aaa"));
-	assert(!strtoken("12345", "1234"));
-	assert(!strtoken("12345", "2345"));
-	assert(!strtoken("12345", "234"));
-	assert(strtoken("1234 123456 2345 123456 0123456 012345 12345 12345", "12345"));
-	assert(strtoken("a b b", "a"));
-	assert(strtoken("b a b", "a"));
-	assert(strtoken("b b a", "a"));
-}
-
 bool aropengl::hasExtension(const char * ext)
 {
 	aropengl& gl = *this;
@@ -85,7 +44,7 @@ bool aropengl::hasExtension(const char * ext)
 	}
 	else
 	{
-		return strtoken((char*)gl.GetString(GL_EXTENSIONS), ext);
+		return strtoken((char*)gl.GetString(GL_EXTENSIONS), ext, ' ');
 	}
 }
 

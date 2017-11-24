@@ -155,7 +155,7 @@ newsock:
 			else { resolve_err_v(&deleted, 0, rsp::e_bad_url); goto newsock; }
 		}
 		if (!sock) { resolve_err_v(&deleted, 0, rsp::e_connect); goto newsock; }
-		sock->callback(loop, bind_this(&HTTP::activity), NULL);
+		sock->callback(bind_this(&HTTP::activity), NULL);
 		
 		state = st_boundary_retried;
 		next_send = 0;
@@ -305,7 +305,7 @@ static void test_url(cstring url, cstring proto, cstring domain, int port, cstri
 {
 	test_url(url, "", proto, domain, port, path);
 }
-test("URL parser")
+test("URL parser", "", "http")
 {
 	test_url("wss://gateway.discord.gg?v=5&encoding=json", "wss", "gateway.discord.gg", 0, "/?v=5&encoding=json");
 	test_url("wss://gateway.discord.gg", "?v=5&encoding=json", "wss", "gateway.discord.gg", 0, "/?v=5&encoding=json");
@@ -314,7 +314,7 @@ test("URL parser")
 	test_url("http://example.com/foo/bar.html?baz", "?quux", "http", "example.com", 0, "/foo/bar.html?quux");
 }
 
-test("HTTP")
+test("HTTP", "tcp,ssl", "http")
 {
 	test_skip("too slow");
 	
