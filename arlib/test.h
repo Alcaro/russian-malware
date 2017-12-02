@@ -19,6 +19,7 @@ void _teststack_pop();
 
 void _test_skip(cstring why);
 void _test_inconclusive(cstring why);
+void _test_expfail(cstring why);
 
 bool _test_should_exit();
 
@@ -156,7 +157,8 @@ void _assert_range(const T&  actual, const char * actual_exp,
 #define assert_fail_nostack(msg) do { _testfail((string)"\n"+msg, -1); _test_return(); } while(0)
 #define testcall(x) do { _teststack_push(__LINE__); x; _teststack_pop(); _test_return(); } while(0)
 #define test_skip(x) do { _test_skip(x); _test_return(); } while(0)
-#define test_inconclusive(x) do { _test_return(); } while(0)
+#define test_inconclusive(x) do { _test_inconclusive(x); _test_return(); } while(0)
+#define test_expfail(x) do { _test_expfail(x); _test_return(); } while(0)
 
 #define WANT_VALGRIND
 

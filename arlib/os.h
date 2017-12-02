@@ -31,7 +31,7 @@ public:
 	//  -- POSIX dlsym, http://pubs.opengroup.org/onlinepubs/009695399/functions/dlsym.html#tag_03_112_08
 	//pretty sure the cast works fine in practice, but why not
 	//compiler optimizes it out anyways
-	funcptr dylib::sym_func(const char * name)
+	funcptr sym_func(const char * name)
 	{
 		funcptr ret;
 		*(void**)(&ret) = this->sym_ptr(name);
@@ -62,3 +62,20 @@ uint64_t time_us(); // this will overflow in year 586524
 //No epoch; the epoch may vary across machines or reboots. May be faster. ms/us will have same epoch as each other.
 uint64_t time_ms_ne();
 uint64_t time_us_ne();
+
+class timer {
+	uint64_t start;
+public:
+	timer()
+	{
+		reset();
+	}
+	void reset()
+	{
+		start = time_us_ne();
+	}
+	uint64_t time()
+	{
+		return time_us_ne() - start;
+	}
+};

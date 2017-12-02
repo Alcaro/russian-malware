@@ -2,6 +2,15 @@
 #include "test.h"
 
 #ifdef ARLIB_TEST
+static int n_instancecount;
+class instancecount {
+public:
+	instancecount() { n_instancecount++; }
+	
+	bool operator==(const instancecount& other) const { return true; }
+	size_t hash() const { return 0; }
+};
+
 test("set", "array", "set")
 {
 	{
@@ -163,6 +172,17 @@ test("set", "array", "set")
 		assert(!set1.contains(2));
 		assert(!set1.contains(3));
 	}
+	
+	{
+		n_instancecount = 0;
+		
+		set<instancecount> foo;
+		assert_eq(n_instancecount, 0);
+		instancecount n;
+		assert_eq(n_instancecount, 1);
+		foo.add(n);
+		assert_eq(n_instancecount, 1);
+	}
 }
 
 test("map", "array", "set")
@@ -276,6 +296,18 @@ test("map", "array", "set")
 			x.get_create(i); // make sure this does not invalidate existing references
 			y=42;
 		}
+	}
+	
+	{
+		n_instancecount = 0;
+		
+		map<instancecount,instancecount> foo;
+		assert_eq(n_instancecount, 0);
+		instancecount n1;
+		instancecount n2;
+		assert_eq(n_instancecount, 2);
+		foo.insert(n1, n2);
+		assert_eq(n_instancecount, 2);
 	}
 }
 #endif

@@ -4,9 +4,13 @@
 #define _GNU_SOURCE //strdup, realpath, asprintf
 #endif
 #define _strdup strdup //and windows is being windows as usual
-#define __STDC_LIMIT_MACROS //how many of these stupid things exist
-#define __STDC_FORMAT_MACROS//if I include a header, it's because I want to use its contents
-#define __STDC_CONSTANT_MACROS
+
+//these aren't needed with modern compilers, according to
+//https://stackoverflow.com/questions/8132399/how-to-printf-uint64-t-fails-with-spurious-trailing-in-format
+//#define __STDC_LIMIT_MACROS //how many of these stupid things exist
+//#define __STDC_FORMAT_MACROS//if I include a header, it's because I want to use its contents
+//#define __STDC_CONSTANT_MACROS
+
 #include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>

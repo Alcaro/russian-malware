@@ -466,9 +466,9 @@ socket* socket::wrap_ssl(socket* inner, cstring domain, runloop* loop)
 //most of them are in a runloop, initialization takes longer (9-33ms) than the runloop watchdog (3ms)
 //this is also why it provides 'tcp' rather than 'ssl';
 // if it provides 'ssl', it'd run alongside the other SSL tests and fail watchdog
-test("BearSSL init", "array", "tcp")
+test("BearSSL init", "array,base64", "tcp")
 {
-	test_skip("kinda slow");
+	//test_skip("kinda slow");
 	
 	//for (size_t i=0;i<certs.size();i++)
 	//{
@@ -506,7 +506,7 @@ test("BearSSL init", "array", "tcp")
 	uint64_t end_us = time_us_ne();
 	if (!RUNNING_ON_VALGRIND)
 	{
-		assert_lt(end_us-begin_us, 50000); // it usually takes 10ms, but sometimes above 30
+		assert_lt(end_us-begin_us, 50000); // randomly takes either 10ms or 32ms - probably depending on cpu power saving policy
 	}
 }
 #endif

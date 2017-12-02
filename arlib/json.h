@@ -35,7 +35,7 @@ public:
 	};
 	struct event {
 		int action;
-		string str; // or error message
+		string str; // or error message [TODO: actual error messages]
 		double num;
 		
 		event() : action(unset) {}
@@ -44,9 +44,7 @@ public:
 		event(int action, double num) : action(action), num(num) {}
 	};
 	
-	//Remember the cstring rules: If this cstring doesn't hold a reference, don't touch its buffer until the object is disposed.
-	//If it's originally a string, don't worry about it.
-	//It is not allowed to try to stream data into this object.
+	//You can't stream data into this object.
 	jsonparser(cstring json) : m_data(json) {}
 	event next();
 	bool errored() { return m_errored; }
@@ -54,10 +52,10 @@ public:
 private:
 	cstring m_data;
 	size_t m_pos = 0;
-	bool m_want_key = false;
+	bool m_want_key = false; // true if inside {}
+	bool m_need_value = true; // true after a comma or at the start of the object
 	
-	bool m_first = true;
-	bool m_unexpected_end = false;
+	bool m_unexpected_end = false; // used to avoid sending the same error again after the document "{" whines
 	bool m_errored = false;
 	event do_error() { m_errored=true; return { error }; }
 	
@@ -87,6 +85,7 @@ public:
 			char c = s[i];
 			if(0);
 			else if (c=='\n') out+="\\n";
+			else if (c=='\t') out += "\\t";
 			else if (c=='"') out += "\\\"";
 			else if (c=='\\') out += "\\\\";
 			else out += c;
@@ -116,96 +115,16 @@ class JSON {
 	array<JSON> chld_list;
 	map<string,JSON> chld_map;
 	
-	void construct(jsonparser& p, bool pull = true)
-	{
-		if (pull) ev = p.next();
-//if(pull)puts("1,"+tostring(ev.action));
-		if (ev.action == jsonparser::enter_list)
-		{
-			while (true)
-			{
-				jsonparser::event next = p.next();
-//puts("2,"+tostring(next.action));
-				if (next.action == jsonparser::exit_list) break;
-				JSON& child = chld_list.append();
-				child.ev = next;
-				child.construct(p, false);
-//if(next.action==jsonparser::finish)return;
-			}
-		}
-		if (ev.action == jsonparser::enter_map)
-		{
-			while (true)
-			{
-				jsonparser::event next = p.next();
-//puts("3,"+tostring(next.action));
-				if (next.action == jsonparser::exit_map) break;
-				if (next.action == jsonparser::map_key) chld_map.insert(next.str).construct(p);
-//if(next.action==jsonparser::finish)return;
-			}
-		}
-	}
-	
-	void serialize(jsonwriter& w)
-	{
-		switch (ev.action)
-		{
-		case jsonparser::unset:
-		case jsonparser::error:
-		case jsonparser::jnull:
-			w.null();
-			break;
-		case jsonparser::jtrue:
-			w.boolean(true);
-			break;
-		case jsonparser::jfalse:
-			w.boolean(false);
-			break;
-		case jsonparser::str:
-			w.str(ev.str);
-			break;
-		case jsonparser::num:
-			if (ev.num == (int)ev.num) w.num((int)ev.num);
-			else w.num(ev.num);
-			break;
-		case jsonparser::enter_list:
-			w.list_enter();
-			for (JSON& j : chld_list) j.serialize(w);
-			w.list_exit();
-			break;
-		case jsonparser::enter_map:
-			w.map_enter();
-			for (auto& e : chld_map)
-			{
-				w.map_key(e.key);
-				e.value.serialize(w);
-			}
-			w.map_exit();
-			break;
-		default: abort(); // unreachable
-		}
-	}
+	void construct(jsonparser& p, bool* ok, size_t maxdepth);
+	void serialize(jsonwriter& w);
 	
 public:
 	JSON() : ev(jsonparser::jnull) {}
 	JSON(cstring s) { parse(s); }
 	JSON(const JSON& other) = delete;
 	
-	void parse(cstring s)
-	{
-		chld_list.reset();
-		chld_map.reset();
-		
-		jsonparser p(s);
-		construct(p);
-	}
-	
-	string serialize()
-	{
-		jsonwriter w;
-		serialize(w);
-		return w.finish();
-	}
+	bool parse(cstring s);
+	string serialize();
 	
 	double num() { ev.action = jsonparser::num; return ev.num; }
 	string& str() { ev.action = jsonparser::str; return ev.str; }

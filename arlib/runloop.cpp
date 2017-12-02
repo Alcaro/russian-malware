@@ -258,7 +258,7 @@ class runloop_blocktest : public runloop {
 		uint64_t new_us = time_us_ne();
 		if (new_us/1000000 != us/1000000) thissecond = 0;
 		thissecond++;
-		if (thissecond == 1000) assert(!"1000 runloop iterations in a second");
+		if (thissecond == 100) assert(!"100 runloop iterations in one second");
 		us = new_us;
 	}
 	/*private*/ void end()
@@ -371,7 +371,7 @@ static void test_runloop(bool is_global)
 	
 	assert_eq(id, 0);
 	
-	//I could stick in some fd tests, but the socket tests exercise all plausible operations anyways.
+	//I could stick in some fd tests, but the sockets test all plausible operations anyways.
 	//Okay, they should vary which runloop they use.
 	
 	if (!is_global) delete loop;
@@ -384,7 +384,7 @@ test("private runloop", "function,array,set,time", "runloop")
 {
 	test_runloop(false); // it's technically illegal to create a runloop on the main thread, but nobody's gonna notice
 }
-test("x","","")
+test("","","")
 {
-	assert(!"create a GSource-like interface, the bookkeeping needed for the current setup is nasty");
+	test_expfail("create a GSource-like interface, the bookkeeping needed for the current setup is nasty");
 }

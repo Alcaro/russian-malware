@@ -241,7 +241,8 @@ bool strtoken(const char * haystack, const char * needle, char separator)
 	//token lists are annoyingly complex to parse
 	//I suspect 'people using fixed-size buffers, then extension list grows and app explodes'
 	// isn't the only reason GL_EXTENSIONS string was deprecated from OpenGL
-	int nlen = strlen(needle);
+	size_t nlen = strlen(needle);
+	
 	while (true)
 	{
 		const char * found = strstr(haystack, needle);
@@ -275,6 +276,13 @@ test("strtoken", "", "string")
 	assert(strtoken("b a b", "a", ' '));
 	assert(strtoken("b b a", "a", ' '));
 	
+	//blank needle not allowed
+	//assert(!strtoken("a b c", "", ' '));
+	//assert(strtoken(" a b c", "", ' '));
+	//assert(strtoken("a  b c", "", ' '));
+	//assert(strtoken("a b c ", "", ' '));
+	//assert(strtoken("", "", ' '));
+	
 	assert(strtoken("aa", "aa", ','));
 	assert(!strtoken("aa", "a", ','));
 	assert(!strtoken("aa", "aaa", ','));
@@ -288,6 +296,12 @@ test("strtoken", "", "string")
 	assert(strtoken("a,b,b", "a", ','));
 	assert(strtoken("b,a,b", "a", ','));
 	assert(strtoken("b,b,a", "a", ','));
+	
+	//assert(!strtoken("a,b,c", "", ','));
+	//assert(strtoken(",a,b,c", "", ','));
+	//assert(strtoken("a,,b,c", "", ','));
+	//assert(strtoken("a,b,c,", "", ','));
+	//assert(strtoken("", "", ','));
 }
 
 test("string", "", "string")

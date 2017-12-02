@@ -2,33 +2,35 @@
 
 static const char encode[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-static const uint8_t decode[96] = {
-#define __ 64 // invalid
-#define PA 65 // padding
+static const uint8_t decode[128] = {
+#define __ 128 // invalid
+#define PA 129 // padding
 //x0  x1  x2  x3  x4  x5  x6  x7  x8  x9  xA  xB  xC  xD  xE  xF
-                                              62, __, 62, __, 63, /* 2B-2F */ // yes, there are two 62s and 63s
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, /* 00-0F */
+  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, /* 10-1F */
+  __, __, __, __, __, __, __, __, __, __, __, 62, __, 62, __, 63, /* 20-2F */ // yes, there are two 62s and 63s
   52, 53, 54, 55, 56, 57, 58, 59, 60, 61, __, __, __, PA, __, __, /* 30-3F */
   __,  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, /* 40-4F */
   15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, __, __, __, __, 63, /* 50-5F */
   __, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, /* 60-6F */
-  41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51,                     /* 70-7A */
+  41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, __, __, __, __, __, /* 70-7F */
 };
 
 //'out' must be 3 bytes; returns number of bytes actually written, 0 if input is invalid
 static size_t base64_dec_core(uint8_t * out, const char * in)
 {
-	uint8_t c1 = in[0]-0x2B;
-	uint8_t c2 = in[1]-0x2B;
-	uint8_t c3 = in[2]-0x2B;
-	uint8_t c4 = in[3]-0x2B;
-	if (c1 > 0x7A-0x2B || c2 > 0x7A-0x2B || c3 > 0x7A-0x2B || c4 > 0x7A-0x2B) return 0;
+	uint8_t c1 = in[0];
+	uint8_t c2 = in[1];
+	uint8_t c3 = in[2];
+	uint8_t c4 = in[3];
+	if ((c1|c2|c3|c4) >= 0x80) return 0;
 	c1 = decode[c1];
 	c2 = decode[c2];
 	c3 = decode[c3];
 	c4 = decode[c4];
 	
 	size_t ret = 3;
-	if ((c1|c2|c3|c4) >= 0x40)
+	if ((c1|c2|c3|c4) >= 0x80)
 	{
 		if (c4 == PA)
 		{
@@ -41,7 +43,7 @@ static size_t base64_dec_core(uint8_t * out, const char * in)
 			}
 		}
 		
-		if ((c1|c2|c3|c4) >= 0x40) return 0;
+		if ((c1|c2|c3|c4) >= 0x80) return 0;
 	}
 	
 	//TODO: reject padded data where the bits of the partial byte aren't zero

@@ -604,6 +604,8 @@ protected:
 		//TODO: figure out what purpose this could've possibly served, given that nbytes is a multiple of 8
 		//high = (high+7)&~7; // wipe the rest of the byte, it doesn't matter
 		
+		if (low == high) return; // don't wipe bits()[8] if they're both 64
+		
 		uint8_t& byte = bits()[low/8];
 		byte &=~ (0xFF<<(low&7));
 		low = (low+7)&~7;

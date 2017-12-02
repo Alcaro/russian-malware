@@ -93,16 +93,24 @@ void _test_inconclusive(cstring why)
 	}
 }
 
+void _test_expfail(cstring why)
+{
+	if (!_test_result)
+	{
+		puts("expected-fail: "+why);
+		_test_result = 4;
+	}
+}
+
 bool _test_should_exit()
 {
 	return _test_result != 0 && arlib_runloop_depth == 0;
 }
 
 
-static void fatal(testlist* err, const char * desc)
+static void err_print(testlist* err)
 {
-	printf("test %s (at %s, requires %s, provides %s): %s\n", err->name, err->loc, err->requires, err->provides, desc);
-	abort();
+	printf("%s (at %s, requires %s, provides %s)\n", err->name, err->loc, err->requires, err->provides);
 }
 
 //whether 'a' must be before 'b'; alternatively, whether 'a' provides something 'b' requires
@@ -110,6 +118,7 @@ static void fatal(testlist* err, const char * desc)
 static bool test_requires(testlist* a, testlist* b)
 {
 	if (!*a->requires) return false;
+	if (!*b->provides) return false;
 	//kinda funny code to avoid using Arlib features before they're tested
 	//except strtoken, but even in the worst case, I can just revert it or set this to 'return false'
 	return strtoken(a->requires, b->provides, ',');
@@ -117,14 +126,15 @@ static bool test_requires(testlist* a, testlist* b)
 
 //whether 'a' must be before any test in 'list'
 //true if 'a' must be before itself
-static bool test_requires_any(testlist* a, testlist* list)
+//actually returns pointer to the preceding test
+static testlist* test_requires_any(testlist* a, testlist* list)
 {
 	while (list)
 	{
-		if (test_requires(a, list)) return true;
+		if (test_requires(a, list)) return list;
 		list = list->next;
 	}
-	return false;
+	return NULL;
 }
 
 static testlist* sort_tests(testlist* unsorted)
@@ -161,7 +171,25 @@ static testlist* sort_tests(testlist* unsorted)
 		}
 		if (!any_here)
 		{
-			fatal(unsorted, "cyclical dependency");
+			puts("error: cyclical dependency");
+			
+			testlist* a = unsorted;
+			testlist* b = unsorted;
+			do
+			{
+				a = test_requires_any(a, unsorted);
+				b = test_requires_any(b, unsorted);
+				b = test_requires_any(b, unsorted);
+			}
+			while (a != b);
+			do
+			{
+				err_print(a);
+				a = test_requires_any(a, unsorted);
+			}
+			while (a != b);
+			
+			abort();
 		}
 	}
 	
@@ -201,14 +229,16 @@ int main(int argc, char* argv[])
 			}
 			if (!found)
 			{
-				fatal(outer, "dependency on nonexistent feature");
+				puts("error: dependency on nonexistent feature");
+				err_print(outer);
+				abort();
 			}
 		}
 	}
 	
 	for (int pass = 0; pass < (all_tests_twice ? 2 : 1); pass++)
 	{
-		int count[4]={0,0,0};
+		int count[5]={0};
 		
 		testlist* test = alltests;
 		while (test)
@@ -227,6 +257,7 @@ int main(int argc, char* argv[])
 		printf("Passed %i, failed %i", count[0], count[1]);
 		if (count[2]) printf(", skipped %i", count[2]);
 		if (count[3]) printf(", inconclusive %i", count[3]);
+		if (count[4]) printf(", expected-fail %i", count[4]);
 		puts("");
 		
 #ifdef HAVE_VALGRIND
@@ -266,7 +297,7 @@ test("tests themselves (2/8)", "test1", "test2")
 test("tests themselves (8/8)", "test6,test7", "test8")
 {
 	assert_eq(testnum, 7);
-	testnum = 8;
+	testnum = 0; // for test-all-twice
 }
 test("tests themselves (7/8)", "test6", "test7")
 {
@@ -294,6 +325,6 @@ test("tests themselves (4/8)", "test2,test3", "test4")
 	testnum = 4;
 }
 
-test("x", "", "") { assert(!"use an argument parser"); }
+test("", "", "") { test_expfail("use an argument parser"); }
 #endif
 #endif

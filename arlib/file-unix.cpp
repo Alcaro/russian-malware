@@ -162,7 +162,7 @@ namespace {
 file::impl* file::open_impl_fs(cstring filename, mode m)
 {
 	static const int flags[] = { O_RDONLY, O_RDWR|O_CREAT, O_RDWR, O_RDWR|O_CREAT|O_TRUNC, O_RDWR|O_CREAT|O_EXCL };
-	int fd = ::open(filename.c_str(), flags[m]|O_CLOEXEC|O_LARGEFILE, 0666);
+	int fd = ::open(filename.c_str(), flags[m]|O_CLOEXEC, 0666);
 	if (fd<0) return NULL;
 	
 	struct stat st;

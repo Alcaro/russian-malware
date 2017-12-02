@@ -21,12 +21,13 @@ static void* dylib_load_uniq(const char * filename, bool force)
 		
 		dlclose(test);
 #ifdef __linux__
-		if (mode == DLOPEN_UNIQ_FORCE)
+		if (force)
 			return dlmopen(LM_ID_NEWLM, filename, RTLD_LAZY);
 		else
 #endif
 			return NULL;
 	}
+	return NULL; // unreachable, bug in synchronized() and/or gcc
 }
 
 bool dylib::init(const char * filename)

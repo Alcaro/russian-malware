@@ -225,7 +225,7 @@ The locker is responsible for dropping privileges, blocking every unnecessary sy
 
 The filter is installed by the locker. It's the seccomp-bpf code that rejects unauthorized syscalls.
  While it's as safety-critical as the broker, its inputs are small and simple, so there are few ways
- to inject implementation errors. However, design faults (permitting something too powerful) are
+ to exploit implementation errors. However, design faults (permitting something too powerful) are
  possible. There may also be bugs in the BPF assembler, but as its input is non-hostile, such bugs
  are equally likely to block allowed operations as allowing something forbidden, and then I'll find
  them.
@@ -354,8 +354,8 @@ Except it's not that easy; open() can take a relative path. To handle this, the 
  of the current working directory (by intercepting chdir, and getting the initial value from an
  environment variable) and turns relative paths into absolute ones.
 
-This means the sandbox behaves funnily if its current working directory is moved, but I can't think
- of any usecase where this would matter.
+This means the sandbox may behave funnily if its current working directory is moved, but I can't
+ think of any usecase where this would matter.
 
 There are, of course, other file-handling functions, such as stat(). The obvious implementation
  would be teaching the broker about them too, but I want to minimize the attack surface, so it's
@@ -483,9 +483,9 @@ O_BENEATH would solve most symlink-related issues (other than restricted directo
  ones, which can be "solved" by adding "don't do that" to the docs), but it was never merged.
 
 AT_BENEATH/etc <https://lwn.net/Articles/723057/> seem similar; they're not intended for sandboxes,
- but may be close enough. I'll take a look once it's merged and my distro updates. The broker is
- still needed (to count the number of writes), but keeping reads in the same process would be quite
- a lot faster.
+ but may be close enough. I'll take a look once (if) it's merged and my distro updates. The broker
+ is still needed (to count the number of writes), but keeping reads in the same process would be
+ quite a lot faster.
 
 
 Results
@@ -585,7 +585,8 @@ Obviously, the child can't be allowed access to the entire internet, only a whit
 
 We also need a way to ensure the child can't saturate the pipe and disrupt everything else trying to
  use the network. I believe this is best solved by wrapping the connection in a AF_LOCAL socketpair
- and letting the broker add a rate limit.
+ and letting the broker add a rate limit. This also stops the child from accessing anything
+ unauthorized via getpeername.
 
 
 Future - Sandbox-aware children

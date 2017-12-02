@@ -7,11 +7,12 @@
 template<typename T>
 class set : public linqbase<set<T>> {
 	//this is a hashtable, using open addressing and linear probing
-	enum { i_empty, i_deleted };
 	
-	T* m_data_; // length is always same as m_valid, so no explicit length - waste of space
+	enum { i_empty, i_deleted };
 	uint8_t& tag(size_t id) { return *(uint8_t*)(m_data_+id); }
 	uint8_t tag(size_t id) const { return *(uint8_t*)(m_data_+id); }
+	
+	T* m_data_; // length is always same as m_valid, so no explicit length - waste of space
 	array<bool> m_valid;
 	size_t m_count;
 	
@@ -29,7 +30,8 @@ class set : public linqbase<set<T>> {
 		{
 			if (!prev_valid[i]) continue;
 			
-			size_t pos = find_pos(prev_data[i]);
+			size_t pos = find_pos_full<true, false>(prev_data[i]);
+			//this is known to not overwrite any existing object; if it does, someone screwed up
 			memcpy(&m_data_[pos], &prev_data[i], sizeof(T));
 			m_valid[pos] = true;
 		}
@@ -47,15 +49,14 @@ class set : public linqbase<set<T>> {
 	{
 		return !m_valid[pos];
 	}
-	bool slot_deleted(size_t pos) const
-	{
-		return !m_valid[pos] && tag(pos)==i_deleted;
-	}
 	
-	template<typename T2>
-	size_t find_pos_const(const T2& item, bool* recommend_rehash = NULL) const
+	//If the object exists, returns the index where it can be found.
+	//If not, and want_empty is true, returns a suitable empty slot to insert it in, or -1 if the object should rehash.
+	//If no such object and want_empty is false, returns -1.
+	template<bool want_empty, bool want_used = true, typename T2>
+	size_t find_pos_full(const T2& item) const
 	{
-		if (recommend_rehash) *recommend_rehash = false;
+		if (!m_data_) return -1;
 		
 		size_t hashv = hash_shuffle(hash(item)) % m_valid.size();
 		size_t i = 0;
@@ -67,32 +68,40 @@ class set : public linqbase<set<T>> {
 			//I could use hashv + i+(i+1)/2 <http://stackoverflow.com/a/15770445>
 			//but due to hash_shuffle, it hurts as much as it helps.
 			size_t pos = (hashv + i) % m_valid.size();
-			if (m_valid[pos] && m_data_[pos]==item) return pos;
+			if (want_used && m_valid[pos] && m_data_[pos]==item) return pos;
 			if (!m_valid[pos])
 			{
 				if (emptyslot == (size_t)-1) emptyslot = pos;
-				if (tag(pos) == i_empty) return emptyslot;
+				if (tag(pos) == i_empty)
+				{
+					if (want_empty) return emptyslot;
+					else return -1;
+				}
 			}
 			i++;
 			if (i == m_valid.size())
 			{
 				//happens if all empty slots are i_deleted, no i_empty
-				if (recommend_rehash) *recommend_rehash = true;
-				return emptyslot;
+				return -1;
 			}
 		}
 	}
 	
 	template<typename T2>
-	size_t find_pos(const T2& item)
+	size_t find_pos_const(const T2& item) const
 	{
-		bool do_rehash;
-		size_t pos = find_pos_const(item, &do_rehash);
-		if (do_rehash)
+		return find_pos_full<false>(item);
+	}
+	
+	template<typename T2>
+	size_t find_pos_insert(const T2& item)
+	{
+		size_t pos = find_pos_full<true>(item);
+		if (pos == (size_t)-1)
 		{
 			rehash(m_valid.size());
-			if (slot_empty(pos)) return pos;
-			else return find_pos_const(item);
+			//after rehashing, there is always a suitable empty slot
+			return find_pos_full<true, false>(item);
 		}
 		return pos;
 	}
@@ -112,13 +121,13 @@ class set : public linqbase<set<T>> {
 	template<typename T2>
 	T& get_create(const T2& item)
 	{
-		size_t pos = find_pos(item);
+		size_t pos = find_pos_insert(item);
 		
 		if (!m_valid[pos])
 		{
 			grow();
-			pos = find_pos(item); // recalculate this, grow() may have moved it
-			//do not move earlier, grow() invalidates references and get_create(item_that_exists) is not allowed to do that
+			pos = find_pos_insert(item); // recalculate this, grow() may have moved it
+			//do not move grow() earlier, it invalidates references and get_create(item_that_exists) is not allowed to do that
 			
 			new(&m_data_[pos]) T(item);
 			m_valid[pos] = true;
@@ -130,7 +139,7 @@ class set : public linqbase<set<T>> {
 	
 	void construct()
 	{
-		m_data_ = calloc(8, sizeof(T));
+		m_data_ = NULL;
 		m_valid.resize(8);
 		m_count = 0;
 	}
@@ -200,7 +209,7 @@ public:
 	template<typename T2>
 	void remove(const T2& item)
 	{
-		size_t pos = find_pos(item);
+		size_t pos = find_pos_const(item);
 		
 		if (m_valid[pos])
 		{

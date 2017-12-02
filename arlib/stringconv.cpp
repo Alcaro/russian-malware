@@ -21,16 +21,15 @@
 
 //specification: if the input is a hex number, return something strtoul accepts
 //otherwise, return something that strtoul rejects
-//this means drop the 0x
+//this means replace 0x with x, if present
 static const char * drop0x(const char * in)
 {
-	if (in[0]=='0' && in[1]!='0') return in+1;
+	if (in[0]=='0' && (in[1]=='x' || in[1]=='X')) return in+1;
 	else return in;
 }
 
 #define FROMFUNCHEX(t,frt,f) \
 	FROMFUNC(t,frt,f) \
-	\
 	bool fromstringhex(cstring s, t& out) \
 	{ \
 		out = 0; \
@@ -45,27 +44,27 @@ static const char * drop0x(const char * in)
 		return true; \
 	}
 
-FROMFUNC(   signed char,    long,          strtol)
+FROMFUNC(     signed char,    signed long, strtol)
 FROMFUNCHEX(unsigned char,  unsigned long, strtoul)
-FROMFUNC(   signed short,   long,          strtol)
+FROMFUNC(     signed short,   signed long, strtol)
 FROMFUNCHEX(unsigned short, unsigned long, strtoul)
-FROMFUNC(   signed int,     long,          strtol)
+FROMFUNC(     signed int,     signed long, strtol)
 FROMFUNCHEX(unsigned int,   unsigned long, strtoul)
-FROMFUNC(   signed long,    long,          strtol)
+FROMFUNC(     signed long,    signed long, strtol)
 FROMFUNCHEX(unsigned long,  unsigned long, strtoul)
-FROMFUNC(   signed long long,   long long,          strtoll)
+FROMFUNC(     signed long long,   signed long long, strtoll)
 FROMFUNCHEX(unsigned long long, unsigned long long, strtoull)
 
 bool fromstring(cstring s, double& out)
 {
 	out = 0;
-	if (!s || isspace(s[0])) return false;
+	if (!isdigit(s[0])) return false;
 	string tmp_s = s;
 	const char * tmp_cp = tmp_s;
-	//tmp_cp = drop0x(tmp_cp);
 	char * tmp_cpo;
 	double ret = strtod(drop0x(tmp_cp), &tmp_cpo);
 	if (tmp_cpo != tmp_cp + s.length()) return false;
+	if (!isdigit(tmp_cpo[-1])) return false;
 	if (ret==HUGE_VAL || ret==-HUGE_VAL) return false;
 	out = ret;
 	return true;
@@ -86,17 +85,17 @@ bool fromstring(cstring s, bool& out)
 {
 	if (s=="false" || s=="0")
 	{
-		out=false;
+		out = false;
 		return true;
 	}
 	
 	if (s=="true" || s=="1")
 	{
-		out=true;
+		out = true;
 		return true;
 	}
 	
-	out=false;
+	out = false;
 	return false;
 }
 
@@ -146,7 +145,7 @@ test("string conversion", "", "string")
 	testcall(testunhex<unsigned char     >("aa", 0xaa));
 	testcall(testunhex<unsigned char     >("AA", 0xAA));
 	testcall(testunhex<unsigned short    >("aaaa", 0xaaaa));
-	testcall(testunhex<unsigned short    >("AAAA", 0xAAAA));
+	testcall(testunhex<unsigned short    >("AAAA", 0xAAAA)); // AAAAAAAAAAAHHHHH MOTHERLAND http://www.albinoblacksheep.com/flash/end
 	testcall(testunhex<unsigned int      >("aaaaaaaa", 0xaaaaaaaa));
 	testcall(testunhex<unsigned int      >("AAAAAAAA", 0xAAAAAAAA));
 	testcall(testunhex<unsigned long     >("aaaaaaaa", 0xaaaaaaaa)); // this is sometimes 64bit, but good enough
@@ -164,7 +163,11 @@ test("string conversion", "", "string")
 	testcall(testundec<double>("00123", 123));
 	testcall(testundec<double>("000123", 123));
 	testcall(testundec<double>("0", 0));
-	
+	testcall(testundec<double>("0e1", 0)); // this input has triggered the 0x detector, making it fail
+	testcall(testundec<double>("0e-1", 0));
+	testcall(testundec<double>("0e+1", 0));
+	testcall(testundec<double>("11e1", 110));
+	testcall(testundec<double>("11e+1", 110));
 	testcall(testundec<float>("2.5", 2.5));
 	testcall(testundec<float>("2.5e+1", 25));
 	
@@ -203,7 +206,15 @@ test("string conversion", "", "string")
 	assert(!fromstringhex(s, u));
 	
 	assert(!fromstring(" 42", u));
+	assert(!fromstring("0x42", u));
 	assert(!fromstringhex(" 42", u));
+	assert(!fromstringhex("0x42", u));
 	assert(!fromstring(" 42", f));
 	assert(!fromstring("0x42", f));
+	
+	assert(!fromstring("1e", f));
+	assert(!fromstring("1e+", f));
+	assert(!fromstring("1e-", f));
+	assert(!fromstring("1.", f));
+	assert(!fromstring(".1", f));
 }

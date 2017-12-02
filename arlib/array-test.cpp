@@ -99,6 +99,13 @@ test("array<bool>", "", "array")
 	}
 	
 	{
+		array<bool> b;
+		b.resize(65);
+		b.resize(64);
+		assert_eq(b.size(), 64);
+	}
+	
+	{
 		array<int> n;
 		n.resize(32);
 		n = n.skip(32);
