@@ -107,9 +107,14 @@ public:
 	void fs_hide(cstring path) { fs.grant_errno(path, ENOENT, false); }
 	
 	//Grants access to some system libraries present in default installations of the operating system,
-	//needed to run simple programs.
+	// needed to run simple programs.
 	//Some programs may require additional files.
 	void fs_grant_syslibs(cstring exe = "");
+	
+	void set_access_violation_cb(function<void(cstring path, bool write)> cb)
+	{
+		fs.report_access_violation = cb;
+	}
 	
 	~sandproc();
 };
@@ -131,7 +136,7 @@ public:
 	bool try_wait(int sem);
 	void release(int sem);
 	
-	//To allow synchronized(box.channel(1)) {}
+	//To allow synchronized(box.sem(1)) {}
 	struct semlock_t
 	{
 		sandcomm* parent; int id;
@@ -151,8 +156,7 @@ public:
 	//Allocates memory shared between the two processes.
 	//Limitations:
 	//- Counts as a fd_send/fd_recv pair; must be done in the same order, can overflow
-	//- May be expensive, prefer reusing allocations if needed (or use stdin/stdout)
-	//- Can't resize an allocation, you have to create a new one and copy the data
+	//- May be expensive, far moreso than normal malloc; prefer reusing allocations if needed (or use stdin/stdout)
 	//- Can fail and return NULL, obviously (if parent fails, child will too; parent may succeed if child doesn't)
 	//- The returned memory is initially zero initialized; can't resize, you have to copy the data manually
 	void* malloc(size_t bytes);

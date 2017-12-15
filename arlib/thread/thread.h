@@ -199,5 +199,6 @@ public:
 #define RUN_ONCE(fn) do { static bool first=true; if (first) fn(); first=false; } while(0)
 #define RUN_ONCE_FN(name) static void name##_core(); static void name() { RUN_ONCE(name##_core); } static void name##_core()
 #define synchronized(mutex)
+static inline size_t thread_get_id() { return 0; }
 
 #endif

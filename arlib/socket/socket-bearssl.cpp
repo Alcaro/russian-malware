@@ -225,8 +225,8 @@ public:
 	
 	runloop* loop = NULL;
 	uintptr_t idle_id = 0;
-	function<void(socket*)> cb_read;
-	function<void(socket*)> cb_write;
+	function<void()> cb_read;
+	function<void()> cb_write;
 	
 	bool* deleted_p = NULL;
 	
@@ -327,6 +327,7 @@ public:
 	/*private*/ bool do_cbs(bool from_cb)
 	{
 		//this function is known to be called only directly by the runloop, and as such, can't recurse
+		//TODO: use-after-free if the callbacks throw
 		bool deleted = false;
 		deleted_p = &deleted;
 		
@@ -338,9 +339,9 @@ public:
 		}
 		
 		int bearstate = br_ssl_engine_current_state(&s.sc.eng);
-		if (cb_read  && (bearstate&(BR_SSL_RECVAPP|BR_SSL_CLOSED))) cb_read( this);
+		if (cb_read  && (bearstate&(BR_SSL_RECVAPP|BR_SSL_CLOSED))) cb_read( );
 		if (deleted) return false;
-		if (cb_write && (bearstate&(BR_SSL_SENDAPP|BR_SSL_CLOSED))) cb_write(this);
+		if (cb_write && (bearstate&(BR_SSL_SENDAPP|BR_SSL_CLOSED))) cb_write();
 		if (deleted) return false;
 		if (bearstate & BR_SSL_CLOSED) sock = NULL;
 		
@@ -364,10 +365,10 @@ public:
 		return false;
 	}
 	
-	/*private*/ void on_readable(socket*) { process_recv(); do_cbs(false); }
-	/*private*/ void on_writable(socket*) { process_send(); do_cbs(false); }
+	/*private*/ void on_readable() { process_recv(); do_cbs(false); }
+	/*private*/ void on_writable() { process_send(); do_cbs(false); }
 	/*private*/ bool idle_cb() { return do_cbs(true); }
-	void callback(function<void(socket*)> cb_read, function<void(socket*)> cb_write)
+	void callback(function<void()> cb_read, function<void()> cb_write)
 	{
 		this->cb_read = cb_read;
 		this->cb_write = cb_write;

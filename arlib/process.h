@@ -23,6 +23,8 @@ protected:
 	int exitcode = -1;
 	
 	
+	//Closes all open file descriptors in the process, except those which are numerically strictly less than lowfd.
+	//For example, closefrom(3) would close everything except stdin/stdout/stderr.
 	static bool closefrom(int lowfd);
 	//Sets the file descriptor table to fds, closing all existing fds.
 	//If an entry is -1, the corresponding fd is closed. Duplicates in the input are allowed.

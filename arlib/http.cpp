@@ -18,17 +18,18 @@ bool HTTP::parseUrl(cstring url, bool relative, location& out)
 	{
 		url = url.substr(2, ~0);
 		
-		array<string> host_loc = url.split<1>("/");
-		out.path = "/"+host_loc[1];
-		if (!host_loc[1])
+		array<cstring> host_loc = url.csplit<1>("/");
+		if (host_loc.size() == 1)
 		{
-			host_loc = url.split<1>("?");
+			host_loc = url.csplit<1>("?");
 			if (host_loc[1])
 			{
 				out.path = "/?"+host_loc[1];
 			}
+			else out.path = "/";
 		}
-		array<string> domain_port = host_loc[0].split<1>(":");
+		else out.path = "/"+host_loc[1];
+		array<cstring> domain_port = host_loc[0].csplit<1>(":");
 		out.domain = domain_port[0];
 		if (domain_port[1])
 		{
@@ -42,17 +43,18 @@ bool HTTP::parseUrl(cstring url, bool relative, location& out)
 	}
 	else if (!relative) return false;
 	else if (url[0]=='/') out.path = url;
-	else if (url[0]=='?') out.path = out.path.split<1>("?")[0] + url;
-	else out.path = out.path.rsplit<1>("/")[0] + "/" + url;
+	else if (url[0]=='?') out.path = out.path.csplit<1>("?")[0] + url;
+	else out.path = out.path.crsplit<1>("/")[0] + "/" + url;
 	
 	return true;
 }
 
 void HTTP::send(req q, function<void(rsp)> callback)
 {
-	rsp& r = requests.append();
+	rsp_i& i = requests.append();
+	i.callback = callback;
+	rsp& r = i.r;
 	r.q = std::move(q);
-	r.callback = callback;
 	
 	if (!lasthost.proto)
 	{
@@ -69,16 +71,38 @@ void HTTP::send(req q, function<void(rsp)> callback)
 		lasthost.path = loc.path;
 	}
 	
-	activity(NULL);
+	activity(); // to create socket and compile request
+}
+
+bool HTTP::cancel(uintptr_t id)
+{
+	for (rsp_i& i : requests)
+	{
+		if (i.r.q.id == id)
+		{
+			i.r.status = rsp::e_canceled;
+			i.r.q.limit_bytes = 80000; // if we canceled something small, let it finish; if huge, let socket die
+			i.callback = NULL; // in case it holds a reference to something important
+			return true;
+		}
+	}
+	return false;
 }
 
 void HTTP::try_compile_req()
 {
+again:
 	if (next_send == requests.size()) return;
 	if (next_send > 1) return; // only pipeline two requests at once
 	if (!sock) return;
 	
-	const req& q = requests[next_send].q;
+	const rsp& r = requests[next_send].r;
+	if (r.status == rsp::e_canceled)
+	{
+		requests.remove(next_send);
+		goto again;
+	}
+	const req& q = r.q;
 	
 	cstring method = q.method;
 	if (!method) method = (q.postdata ? "POST" : "GET");
@@ -88,7 +112,7 @@ void HTTP::try_compile_req()
 	parseUrl(q.url, false, loc); // known to succeed, it was tested in send()
 	
 	bytepipe tosend;
-	tosend.push(method, " ", loc.path, " HTTP/1.1\r\n"); // FIXME: lasthost.path is wrong
+	tosend.push(method, " ", loc.path, " HTTP/1.1\r\n");
 	
 	bool httpHost = false;
 	bool httpContentLength = false;
@@ -103,7 +127,7 @@ void HTTP::try_compile_req()
 		tosend.push(head, "\r\n");
 	}
 	
-	if (!httpHost) tosend.push("Host: ", loc.domain, "\r\n"); // FIXME: lasthost.domain is wrong
+	if (!httpHost) tosend.push("Host: ", loc.domain, "\r\n");
 	if (method!="GET" && !httpContentLength) tosend.push("Content-Length: ", tostring(q.postdata.size()), "\r\n");
 	if (method!="GET" && !httpContentType)
 	{
@@ -130,7 +154,54 @@ void HTTP::try_compile_req()
 	next_send++;
 }
 
-void HTTP::activity(socket*)
+void HTTP::resolve(bool* deleted, size_t id, bool success)
+{
+	class delete_protector {
+		bool* canary;
+		bool** canary_p;
+	public:
+		delete_protector(bool* canary, bool** canary_p) : canary(canary), canary_p(canary_p)
+		{
+			*canary_p = canary;
+		}
+		~delete_protector()
+		{
+			if (canary && *canary) return;
+			else *canary_p = NULL;
+		}
+	};
+	delete_protector prot(deleted, &deleted_p); // as an object to avoid issues in HTTP::~HTTP() if i.callback() throws
+	
+	rsp_i i = std::move(requests[id]);
+	i.r.success = success;
+	
+	requests.remove(id);
+	if (next_send > id) next_send--;
+	
+	if (i.r.status != rsp::e_canceled)
+	{
+		i.callback(std::move(i.r));
+	}
+	i.callback = NULL; // destroy this before the delete_protector
+}
+
+bool HTTP::do_timeout()
+{
+	requests[0].r.status = rsp::e_timeout;
+	
+	this->timeout_id = 0;
+	
+	activity(); // can delete 'this', don't do anything fancy afterwards
+	return false;
+}
+
+void HTTP::reset_limits()
+{
+	this->bytes_in_req = 0;
+	this->timeout_id = loop->set_timer_rel(this->timeout_id, this->requests[0].r.q.limit_ms, bind_this(&HTTP::do_timeout));
+}
+
+void HTTP::activity()
 {
 	bool deleted = false;
 newsock:
@@ -159,16 +230,27 @@ newsock:
 		
 		state = st_boundary_retried;
 		next_send = 0;
+		
+		reset_limits();
 	}
 	
 	try_compile_req();
 	
 	array<byte> newrecv;
 	if (sock->recv(newrecv) < 0) { sock = NULL; goto newsock; }
-again:
-	if (!newrecv) return;
+	this->bytes_in_req += newrecv.size();
 	
-	rsp& r = requests[0];
+again:
+	rsp& r = requests[0].r;
+	
+	if (r.status == rsp::e_timeout || this->bytes_in_req > r.q.limit_bytes)
+	{
+		if (r.status != rsp::e_timeout) r.status = rsp::e_too_big;
+		sock = NULL;
+		goto req_finish;
+	}
+	
+	if (!newrecv) return;
 	
 	switch (state)
 	{
@@ -192,7 +274,7 @@ again:
 			
 			if (state == st_status)
 			{
-				if (fragment.startswith("HTTP/"))
+				if (fragment.startswith("HTTP/1."))
 				{
 					string status_i = fragment.split<2>(" ")[1];
 					fromstring(status_i, r.status);
@@ -223,7 +305,10 @@ again:
 						{
 							//valid: chunked, (compress, deflate, gzip), identity
 							//ones in parens only with Accept-Encoding
-							abort();
+							sock = NULL;
+							//e_not_http isn't completely accurate, but good enough
+							//a proper http server doesn't use this header like this
+							return resolve_err_v(NULL, 0, rsp::e_not_http);
 						}
 					}
 					else
@@ -287,8 +372,15 @@ req_finish:
 	resolve(&deleted, 0, true);
 	if (deleted) return;
 	try_compile_req();
+	reset_limits();
 	
 	goto again;
+}
+
+HTTP::~HTTP()
+{
+	if (deleted_p) *deleted_p = true;
+	loop->remove(this->timeout_id);
 }
 
 static void test_url(cstring url, cstring url2, cstring proto, cstring domain, int port, cstring path)
@@ -307,22 +399,22 @@ static void test_url(cstring url, cstring proto, cstring domain, int port, cstri
 }
 test("URL parser", "", "http")
 {
-	test_url("wss://gateway.discord.gg?v=5&encoding=json", "wss", "gateway.discord.gg", 0, "/?v=5&encoding=json");
-	test_url("wss://gateway.discord.gg", "?v=5&encoding=json", "wss", "gateway.discord.gg", 0, "/?v=5&encoding=json");
+	test_url("wss://gateway.discord.gg/?v=5&encoding=json",          "wss", "gateway.discord.gg", 0, "/?v=5&encoding=json");
+	test_url("wss://gateway.discord.gg?v=5&encoding=json",           "wss", "gateway.discord.gg", 0, "/?v=5&encoding=json");
+	test_url("wss://gateway.discord.gg", "?v=5&encoding=json",       "wss", "gateway.discord.gg", 0, "/?v=5&encoding=json");
 	test_url("http://example.com/foo/bar.html?baz", "/bar/foo.html", "http", "example.com", 0, "/bar/foo.html");
-	test_url("http://example.com/foo/bar.html?baz", "foo.html", "http", "example.com", 0, "/foo/foo.html");
-	test_url("http://example.com/foo/bar.html?baz", "?quux", "http", "example.com", 0, "/foo/bar.html?quux");
+	test_url("http://example.com/foo/bar.html?baz", "foo.html",      "http", "example.com", 0, "/foo/foo.html");
+	test_url("http://example.com/foo/bar.html?baz", "?quux",         "http", "example.com", 0, "/foo/bar.html?quux");
+	test_url("http://example.com:80/",                               "http", "example.com", 80, "/");
 }
 
 test("HTTP", "tcp,ssl", "http")
 {
 	test_skip("too slow");
 	
-	socket::wrap_ssl(NULL, "", NULL); // bearssl takes forever to initialize, do it outside the runloop check
-	
 	autoptr<runloop> loop = runloop::create();
 	HTTP::rsp r;
-	//ugly, but the alternative is nesting lambdas forever or busywait. I need a way to break it anyways
+	//ugly, but the alternative is nesting lambdas forever or busywait. and I need a way to break it anyways
 	function<void(HTTP::rsp)> break_runloop = bind_lambda([&](HTTP::rsp inner_r) { r = std::move(inner_r); loop->exit(); });
 	
 #define URL "http://media.smwcentral.net/Alcaro/test.txt"
@@ -333,7 +425,11 @@ test("HTTP", "tcp,ssl", "http")
 #define CONTENTS2 "hello world 2"
 #define CONTENTS3 "hello world 3"
 #define CONTENTS4 "hello world 4"
-	{
+//#define T puts(tostring(__LINE__));
+#ifndef T
+#define T /* */
+#endif
+	T {
 		HTTP h(loop);
 		
 		h.send(HTTP::req(URL), break_runloop);
@@ -341,7 +437,7 @@ test("HTTP", "tcp,ssl", "http")
 		assert_eq(r.text(), CONTENTS);
 	}
 	
-	{
+	T {
 		HTTP h(loop);
 		
 		h.send(HTTP::req(URL), break_runloop);
@@ -353,20 +449,20 @@ test("HTTP", "tcp,ssl", "http")
 		assert_eq(r.text(), CONTENTS);
 	}
 	
-	{
+	T {
 		HTTP h(loop);
 		
-		h.send(HTTP::req(URL), break_runloop);
-		h.send(HTTP::req(URL), break_runloop);
+		T h.send(HTTP::req(URL), break_runloop);
+		T h.send(HTTP::req(URL), break_runloop);
 		
-		loop->enter();
-		assert_eq(r.text(), CONTENTS);
-		loop->enter();
-		assert_eq(r.text(), CONTENTS);
+		T loop->enter();
+		T assert_eq(r.text(), CONTENTS);
+		T loop->enter();
+		T assert_eq(r.text(), CONTENTS);
 	}
 	
 	//ensure it doesn't mix up the URL it's supposed to request
-	{
+	T {
 		HTTP h(loop);
 		
 		function<void(HTTP::rsp)> break_runloop_testc =
@@ -405,7 +501,7 @@ test("HTTP", "tcp,ssl", "http")
 		loop->enter();
 	}
 	
-	{
+	T {
 		HTTP::req rq;
 		rq.url = "http://media.smwcentral.net/Alcaro/test.php";
 		rq.headers.append("Host: media.smwcentral.net");
@@ -420,9 +516,10 @@ test("HTTP", "tcp,ssl", "http")
 		assert_eq(r.text(), "{\"post\":\"x\"}");
 	}
 	
-	{
+	T {
 		HTTP::req rq;
 		rq.url = URL;
+		rq.limit_bytes = 2000;
 		rq.headers.append("Connection: close");
 		
 		HTTP h(loop);
@@ -435,34 +532,34 @@ test("HTTP", "tcp,ssl", "http")
 		assert_eq(r.text(), CONTENTS); // ensure it tries again
 	}
 	
-	/*
 	//httpbin response time is super slow, and super erratic
 	//it offers me unmatched flexibility in requesting strange http parameters,
 	// but doubling the test suite runtime isn't worth it
 	//getdiscordusers is chunked as well, I don't need two tests for that
-	if (false)
+	T if (false)
 	{
-		HTTP::req r("https://httpbin.org/stream-bytes/128?chunk_size=30&seed=1");
-		r.userdata = 42;
+		HTTP::req rq("https://httpbin.org/stream-bytes/128?chunk_size=30&seed=1");
+		rq.id = 42;
 		HTTP h(loop);
-		h.send(r);
-		h.send(r);
+		h.send(rq, break_runloop);
+		h.send(rq, break_runloop);
 		
-		HTTP::rsp r1 = h.recv();
+		loop->enter();
+		HTTP::rsp r1 = r;
 		assert_eq(r1.status, 200);
 		assert_eq(r1.body.size(), 128);
-		assert_eq(r1.q.userdata, 42);
+		assert_eq(r1.q.id, 42);
 		
-		HTTP::rsp r2 = h.recv();
+		loop->enter();
+		HTTP::rsp r2 = r;
 		assert_eq(r2.status, 200);
 		assert_eq(r2.body.size(), 128);
-		assert_eq(r2.q.userdata, 42);
+		assert_eq(r2.q.id, 42);
 		
 		assert_eq(tostringhex(r1.body), tostringhex(r2.body));
 	}
-	*/
 	
-	{
+	T {
 		//throw in https for no reason
 		HTTP h(loop);
 		h.send(HTTP::req("https://www.smwcentral.net/ajax.php?a=getdiscordusers"), break_runloop);
@@ -474,10 +571,23 @@ test("HTTP", "tcp,ssl", "http")
 		assert_eq(r.body[0], '[');
 		assert_eq(r.body[r.body.size()-1], ']');
 	}
-}
-
-test("","","")
-{
-	test_expfail("add support for canceling requests, so timeouts can be set, then use that in xdiscord");
+	
+	T {
+		HTTP h(loop);
+		h.send(HTTP::req("http://floating.muncher.se:99/"), break_runloop);
+		
+		loop->enter();
+		assert_eq(r.status, HTTP::rsp::e_timeout);
+	}
+	
+	T {
+		HTTP h(loop);
+		HTTP::req rq("http://www.smwcentral.net/ajax.php?a=getdiscordusers");
+		rq.limit_bytes = 2000;
+		h.send(rq, break_runloop);
+		
+		loop->enter();
+		assert_eq(r.status, HTTP::rsp::e_too_big);
+	}
 }
 #endif

@@ -166,7 +166,7 @@ void DNS::timeout(uint16_t trid)
 	q.callback(std::move(q.domain), ""); // don't move higher, callback could delete the dns object
 }
 
-void DNS::sock_cb(socket*)
+void DNS::sock_cb()
 {
 	if (!sock) return;
 	uint8_t packet[512]; // max size of unextended DNS packet

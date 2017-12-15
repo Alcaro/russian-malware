@@ -258,10 +258,10 @@ public:
     //- compare it to a static null function, I don't trust the compiler to merge it correctly
     //- use a function defined in a .cpp file - this is a single-header library and I want it to remain that way
     //nor can I use NULL/whatever in 'obj', because foreign code can find that argument just as easily as this one can
-    //solution: set obj=func=EmptyFunction for null functions
-    //- EmptyFunction doesn't use obj, it can be whatever
-    //- it is not sensitive to false negatives - even if the address of EmptyFunction changes, obj==func does not
-    //- it is not sensitive to false positives - EmptyFunction is private, and can't be aliased by anything unexpected
+    //solution: set obj=func=EmptyHandler for null functions
+    //- EmptyHandler doesn't use obj, it can be whatever
+    //- it is not sensitive to false negatives - even if the address of EmptyHandler changes, obj==func does not
+    //- it is not sensitive to false positives - EmptyHandler is private, and can't be aliased by anything unexpected
     //- it is sensitive to hostile callers, but if you call bind_ptr(func, (void*)func), you're asking for bugs.
     function()                    : func(EmptyHandler), obj((void*)EmptyHandler), ref(NULL) {}
     function(const function& rhs) : func(rhs.func), obj(rhs.obj), ref(rhs.ref)
@@ -351,8 +351,8 @@ public:
         set_to_free(func_raw_ref);
     }
 
-    //WARNING: Dangerous if mishandled! Ensure every type (including return) is either unchanged,
-    // or a fundamental type of the same size as the original.
+    //WARNING: Dangerous if mishandled! Ensure that every type (including return) is either unchanged,
+    // or a primitive type (integer, float or pointer - no structs or funny stuff) of the same size as the original.
     //I'd stick in some static_assert to enforce that, but with the variable size of the argument lists,
     // that'd be annoying. Not sure how to unpack T, either.
     template<typename T>

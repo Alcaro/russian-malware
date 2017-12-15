@@ -32,7 +32,15 @@ _testdecl::_testdecl(void(*func)(), const char * loc, const char * name, const c
 }
 
 static bool all_tests;
-static int _test_result; // 0 - pass or still running; 1 - fail; 2 - skipped; 3 - inconclusive
+
+enum err_t {
+	err_ok = 0,
+	err_fail = 1,
+	err_skip = 2,
+	err_inconclusive = 3,
+	err_expfail = 4,
+};
+static err_t result;
 
 static array<int> callstack;
 void _teststack_push(int line) { callstack.append(line); }
@@ -51,11 +59,26 @@ static string stack(int top)
 	return ret+")";
 }
 
+int nothrow_level = 0;
+static void test_throw(err_t why)
+{
+	result = why;
+	if (nothrow_level <= 0)
+	{
+		throw why;
+	}
+}
+
+void _test_nothrow(int add)
+{
+	nothrow_level += add;
+}
+
 static void _testfail(cstring why)
 {
-	if (_test_result != 1) puts(why.c_str()); // discard multiple failures from same test, they're probably caused by same thing
-	if (_test_result != 1) debug_or_ignore();
-	_test_result = 1;
+	puts(why.c_str());
+	debug_or_ignore();
+	test_throw(err_fail);
 }
 
 void _testfail(cstring why, int line)
@@ -77,34 +100,26 @@ void _testcmpfail(cstring name, int line, cstring expected, cstring actual)
 
 void _test_skip(cstring why)
 {
-	if (!all_tests && !_test_result)
+	if (result!=err_ok) return;
+	if (!all_tests)
 	{
 		puts("skipped: "+why);
-		_test_result = 2;
+		test_throw(err_skip);
 	}
 }
 
 void _test_inconclusive(cstring why)
 {
-	if (!_test_result)
-	{
-		puts("inconclusive: "+why);
-		_test_result = 3;
-	}
+	if (result!=err_ok) return;
+	puts("inconclusive: "+why);
+	test_throw(err_inconclusive);
 }
 
 void _test_expfail(cstring why)
 {
-	if (!_test_result)
-	{
-		puts("expected-fail: "+why);
-		_test_result = 4;
-	}
-}
-
-bool _test_should_exit()
-{
-	return _test_result != 0 && arlib_runloop_depth == 0;
+	if (result!=err_ok) return;
+	puts("expected-fail: "+why);
+	test_throw(err_expfail);
 }
 
 
@@ -247,11 +262,16 @@ int main(int argc, char* argv[])
 			if (test->name) printf("Testing %s (%s)... ", test->name, test->loc);
 			else printf("Testing %s... ", test->loc);
 			fflush(stdout);
-			_test_result = 0;
 			callstack.reset();
-			test->func();
-			count[_test_result]++;
-			if (!_test_result) puts("pass");
+			result = err_ok;
+			nothrow_level = 0;
+			try {
+				test->func();
+			} catch (err_t e) {
+				result = e;
+			}
+			count[result]++;
+			if (result == err_ok) puts("pass");
 			test = next;
 		}
 		printf("Passed %i, failed %i", count[0], count[1]);

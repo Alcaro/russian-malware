@@ -1,11 +1,11 @@
 #include "runloop.h"
 #include "set.h"
-
-static runloop* runloop_wrap_blocktest(runloop* inner);
+#include "test.h"
 
 #ifdef __linux__
 #include <sys/epoll.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 namespace {
 class runloop_linux : public runloop {
@@ -15,6 +15,10 @@ public:
 	
 	int epoll_fd;
 	bool exited = false;
+	
+#ifdef ARLIB_TEST
+	bool can_exit = false;
+#endif
 	
 	struct fd_cbs {
 		function<void(uintptr_t)> cb_read;
@@ -30,6 +34,11 @@ public:
 	};
 	//TODO: this should probably be a priority queue instead
 	array<timer_cb> timerinfo;
+	
+#ifdef ARLIB_THREAD
+	int submit_fds[2] = { -1, -1 };
+#endif
+	
 	
 	/*private*/ static void timespec_now(struct timespec * ts)
 	{
@@ -64,7 +73,10 @@ public:
 	
 	
 	
-	runloop_linux() { epoll_fd = epoll_create1(EPOLL_CLOEXEC); }
+	runloop_linux()
+	{
+		epoll_fd = epoll_create1(EPOLL_CLOEXEC);
+	}
 	
 	uintptr_t set_fd(uintptr_t fd, function<void(uintptr_t)> cb_read, function<void(uintptr_t)> cb_write)
 	{
@@ -194,15 +206,44 @@ public:
 		}
 	}
 	
+#ifdef ARLIB_THREAD
+	void prepare_submit()
+	{
+		if (submit_fds[0] >= 0) return;
+		pipe2(submit_fds, O_CLOEXEC);
+		this->set_fd(submit_fds[0], bind_this(&runloop_linux::submit_cb), NULL);
+	}
+	void submit(function<void()> cb)
+	{
+		write(submit_fds[1], &cb, sizeof(cb));
+		memset(&cb, 0, sizeof(cb));
+	}
+	/*private*/ void submit_cb(uintptr_t)
+	{
+		function<void()> cb;
+		read(submit_fds[0], &cb, sizeof(cb));
+		cb();
+	}
+#endif
+	
 	void enter()
 	{
+#ifdef ARLIB_TEST
+		can_exit = true;
+#endif
 		exited = false;
 		while (!exited) step(true);
+#ifdef ARLIB_TEST
+		can_exit = false;
+#endif
 	}
 	
 	void exit()
 	{
 		exited = true;
+#ifdef ARLIB_TEST
+		assert(can_exit);
+#endif
 	}
 	
 	void step()
@@ -210,13 +251,30 @@ public:
 		step(false);
 	}
 	
-	~runloop_linux() { close(epoll_fd); }
+	~runloop_linux()
+	{
+#ifdef ARLIB_THREAD
+		if (submit_fds[0] >= 0)
+		{
+			//enable if I add a check that runloop is empty before destruction
+			//for now, not needed
+			//this->set_fd(submit_fds[0], NULL, NULL);
+			close(submit_fds[0]);
+			close(submit_fds[1]);
+		}
+#endif
+		close(epoll_fd);
+	}
 };
 }
 
 runloop* runloop::create()
 {
-	return runloop_wrap_blocktest(new runloop_linux());
+	runloop* ret = new runloop_linux();
+#ifdef ARLIB_TEST
+	ret = runloop_wrap_blocktest(ret);
+#endif
+	return ret;
 }
 #endif
 
@@ -241,9 +299,9 @@ runloop* runloop::global()
 
 #include "test.h"
 #include "os.h"
+#include "thread.h"
 
 #ifdef ARLIB_TEST
-int arlib_runloop_depth = 0;
 class runloop_blocktest : public runloop {
 	runloop* loop;
 	
@@ -253,8 +311,6 @@ class runloop_blocktest : public runloop {
 	uint64_t thissecond = 0;
 	/*private*/ void begin()
 	{
-		arlib_runloop_depth++;
-		
 		uint64_t new_us = time_us_ne();
 		if (new_us/1000000 != us/1000000) thissecond = 0;
 		thissecond++;
@@ -263,12 +319,10 @@ class runloop_blocktest : public runloop {
 	}
 	/*private*/ void end()
 	{
-		arlib_runloop_depth--;
-		
 		uint64_t new_us = time_us_ne();
 		uint64_t diff = new_us-us;
 		if (max_us < diff) max_us = diff;
-		assert_lt(diff, lim_us);
+		test_nothrow(assert_lt(diff, lim_us));
 	}
 	
 	//don't carelessly inline into the lambdas; sometimes lambdas are deallocated by the callbacks, so 'this' is a use-after-free
@@ -309,6 +363,10 @@ class runloop_blocktest : public runloop {
 	}
 	void remove(uintptr_t id) { loop->remove(id); }
 	void enter() { end(); loop->enter(); begin(); }
+	
+	void prepare_submit() { loop->prepare_submit(); }
+	void submit(function<void()> cb) { loop->submit(cb); }
+	
 	void exit() { loop->exit(); }
 	void step() { end(); loop->step(); begin(); }
 	
@@ -326,19 +384,24 @@ public:
 		
 		if (RUNNING_ON_VALGRIND)
 		{
-			test_inconclusive("runloop latency "+tostring(max_us)+"us under Valgrind");
+			test_nothrow(test_inconclusive("runloop latency "+tostring(max_us)+"us under Valgrind"));
 		}
+	}
+	
+	void recycle()
+	{
+		us = time_us_ne();
 	}
 };
 
-static runloop* runloop_wrap_blocktest(runloop* inner)
+runloop* runloop_wrap_blocktest(runloop* inner)
 {
 	return new runloop_blocktest(inner);
 }
-#else
-static runloop* runloop_wrap_blocktest(runloop* inner)
+
+void runloop_blocktest_recycle(runloop* loop)
 {
-	return inner;
+	((runloop_blocktest*)loop)->recycle();
 }
 #endif
 
@@ -371,6 +434,26 @@ static void test_runloop(bool is_global)
 	
 	assert_eq(id, 0);
 	
+#ifdef ARLIB_THREAD
+	{
+		loop->prepare_submit();
+		uint64_t start_ms = time_ms_ne();
+		function<void()> threadproc = bind_lambda([loop, start_ms]()
+			{
+				while (start_ms+100 > time_ms_ne()) {}
+				function<void()> submitted = bind_lambda([loop]()
+					{
+						loop->exit();
+					});
+				loop->submit(submitted);
+			});
+		thread_create(threadproc);
+		loop->enter();
+		uint64_t end_ms = time_ms_ne();
+		assert_range(end_ms-start_ms, 75,200);
+	}
+#endif
+	
 	//I could stick in some fd tests, but the sockets test all plausible operations anyways.
 	//Okay, they should vary which runloop they use.
 	
@@ -383,8 +466,4 @@ test("global runloop", "function,array,set,time", "runloop")
 test("private runloop", "function,array,set,time", "runloop")
 {
 	test_runloop(false); // it's technically illegal to create a runloop on the main thread, but nobody's gonna notice
-}
-test("","","")
-{
-	test_expfail("create a GSource-like interface, the bookkeeping needed for the current setup is nasty");
 }

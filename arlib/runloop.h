@@ -5,7 +5,7 @@
 //There are no fairness guarantees. If an event doesn't terminate or unset itself properly, it may inhibit other fds.
 //Do not call enter() or step() while inside a callback. However, set_*(), remove() and exit() are fine.
 //Like nearly all other objects, a runloop is not thread safe.
-class runloop {
+class runloop : nocopy {
 protected:
 	runloop() {}
 public:
@@ -13,7 +13,7 @@ public:
 	//The global runloop belongs to the main thread. Don't delete it, or call this function from any other thread.
 	static runloop* global();
 	
-	//Using multiple runloops per thread is generally a bad idea.
+	//For non-primary threads. Using multiple runloops per thread is generally a bad idea.
 	static runloop* create();
 	
 #ifndef _WIN32 // fd isn't a defined concept on windows
@@ -31,7 +31,7 @@ public:
 	
 	//Runs once.
 	uintptr_t set_timer_abs(time_t when, function<void()> callback);
-	//Runs repeatedly. To stop it, remove() it, or return false from the callback. Don't do both.
+	//Runs repeatedly. To stop it, remove() it, return false from the callback, or both.
 	//Accuracy is not guaranteed; it may or may not round the timer frequency to something it finds appropriate,
 	// in either direction, and may or may not try to 'catch up' if a call is late (or early).
 	//Don't use for anything that needs tighter timing than ±1 second.
@@ -61,11 +61,18 @@ public:
 	//Return value from each set_*() is a token which can be used to cancel the event. remove(0) is guaranteed to be ignored.
 	virtual void remove(uintptr_t id) = 0;
 	
-	//TODO:
-	//- Slots; objects where there's no reason to have more than one per runloop (like DNS), letting them be shared among runloop users
-	//- Pipes; void submit(function<void()> cb);, which calls the callback in the given mainloop, even if called from another thread
-	//   needed to modernize 'process'
-	//   (actually, that fits fine in a slot too)
+#ifdef ARLIB_THREAD
+	//submit(fn) calls fn() on the runloop's thread, as soon as possible.
+	//Unlike the other functions on this object, submit() may be called from a foreign thread.
+	//prepare_submit() must be called on the owning thread before submit() is allowed.
+	//There is no way to 'unprepare' submit(), other than deleting the runloop.
+	//Make sure cb's destructor, if any, can be called from any thread.
+	virtual void prepare_submit() = 0;
+	virtual void submit(function<void()> cb) = 0;
+#endif
+	
+	//TODO: Slots, objects where there's no reason to have more than one per runloop (like DNS),
+	// letting them be shared among runloop users
 	
 	//Executes the mainloop until ->exit() is called. Recommended for most programs.
 	virtual void enter() = 0;
@@ -82,5 +89,7 @@ public:
 inline runloop::~runloop() {}
 
 #ifdef ARLIB_TEST
-extern int arlib_runloop_depth;
+runloop* runloop_wrap_blocktest(runloop* inner);
+//used if multiple tests use the global runloop, the time spent elsewhere looks like huge runloop latency
+void runloop_blocktest_recycle(runloop* loop);
 #endif

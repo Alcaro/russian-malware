@@ -9,30 +9,49 @@
 struct threaddata_win32 {
 	function<void()> func;
 };
-static DWORD WINAPI ThreadProc(LPVOID lpParameter)
+static unsigned __stdcall threadproc(void* userdata)
 {
-	struct threaddata_win32 * thdat=(struct threaddata_win32*)lpParameter;
+	threaddata_pthread* thdat = (threaddata_pthread*)userdata;
 	thdat->func();
-	free(thdat);
+	delete thdat;
 	return 0;
 }
 void thread_create(function<void()> start)
 {
-	struct threaddata_win32 * thdat=malloc(sizeof(struct threaddata_win32));
-	thdat->func=start;
+abort();//TODO: test
+	threaddata_pthread* thdat = new threaddata_pthread;
+	thdat->func = start;
 	
-	//CreateThread is not listed as a synchronization point; it probably is, but I'd rather use a pointless
-	// operation than risk a really annoying bug. It's lightweight compared to creating a thread, anyways.
-	
-	//MemoryBarrier();//gcc lacks this, and msvc lacks the gcc builtin I could use instead.
-	//And of course my gcc supports only ten out of the 137 InterlockedXxx functions. Let's pick the simplest one...
-	LONG ignored=0;
-	InterlockedIncrement(&ignored);
-	
-	HANDLE h=CreateThread(NULL, 0, ThreadProc, thdat, 0, NULL);
+	HANDLE h = (HANDLE)_beginthreadex(NULL, 0, threadproc, thdat, 0, NULL);
 	if (!h) abort();
 	CloseHandle(h);
 }
+
+
+//static DWORD WINAPI ThreadProc(LPVOID lpParameter)
+//{
+//	threaddata_pthread* thdat = (threaddata_pthread*)lpParameter;
+//	thdat->func();
+//	delete thdat;
+//	return 0;
+//}
+//void thread_create(function<void()> start)
+//{
+//	threaddata_pthread* thdat = new threaddata_pthread;
+//	thdat->func = start;
+//	
+//	//CreateThread is not listed as a synchronization point; it probably is, but I'd rather use a pointless
+//	// operation than risk a really annoying bug. It's lightweight compared to creating a thread, anyways.
+//	
+//	//MemoryBarrier();//gcc lacks this, and msvc lacks the gcc builtin I could use instead.
+//	//And of course my gcc supports only ten out of the 137 InterlockedXxx functions. Let's pick the simplest one...
+//	LONG ignored=0;
+//	InterlockedIncrement(&ignored);
+//	
+//	HANDLE h=CreateThread(NULL, 0, ThreadProc, thdat, 0, NULL);
+//	if (!h) abort();
+//	CloseHandle(h);
+//}
 
 unsigned int thread_num_cores()
 {

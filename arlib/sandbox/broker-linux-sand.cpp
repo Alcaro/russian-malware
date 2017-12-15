@@ -1,5 +1,4 @@
 #ifdef __linux__
-#ifndef ARLIB_TEST
 #include "sandbox.h"
 #include "../process.h"
 #include "../test.h"
@@ -145,7 +144,7 @@ int sandproc::filesystem::child_file(cstring pathname, int op_, int flags, mode_
 		errno = EACCES;
 		return -1;
 	}
-	while (pathname[~1] == '/') pathname = pathname.csubstr(0, ~1);
+	while (pathname[~1] == '/') pathname = pathname.substr(0, ~1);
 	
 	bool exact_path = false;
 	
@@ -210,7 +209,7 @@ int sandproc::filesystem::child_file(cstring pathname, int op_, int flags, mode_
 		
 		cstring relpath;
 		if (mlen > pathname.length()) relpath = "."; // open("/usr/include/") when that's a mountpoint
-		else relpath = pathname.csubstr(mlen, ~0);
+		else relpath = pathname.substr(mlen, ~0);
 		
 		if (op == br_open) return openat(m->n_fd, relpath.c_str(), flags|O_CLOEXEC|O_NOCTTY, mode);
 		if (op == br_unlink) return unlinkat(m->n_fd, relpath.c_str(), 0);
@@ -408,5 +407,4 @@ void sandproc::fs_grant_syslibs(cstring exe)
 		if (exepath) fs.grant_native(exepath);
 	}
 }
-#endif
 #endif

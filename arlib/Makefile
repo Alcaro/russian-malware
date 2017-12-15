@@ -19,14 +19,6 @@ define LF
 
 endef
 
-ifeq ($(V),)
-Q = @
-ECHOQ = @echo
-else
-Q =
-ECHOQ = @true
-endif
-
 ifeq ($(OS),Windows_NT)
   OS = windows
 else
@@ -40,6 +32,22 @@ else
   else
     $(error what weird OS is $(UNAME_S)?)
   endif
+endif
+
+ifeq ($(V),)
+Q = @
+ECHOQ = @echo
+else
+Q =
+#TODO: windows version
+ECHOQ = @true
+endif
+
+ifneq (,$(findstring test,$(MAKECMDGOALS)))
+  SELFTEST = 1
+endif
+ifneq (,$(findstring check,$(MAKECMDGOALS)))
+  SELFTEST = 1
 endif
 
 ARGUI ?= 0
@@ -68,7 +76,9 @@ LFLAGS =
 OBJNAME =
 CCXXFLAGS = -fvisibility=hidden -Wall
 ifneq ($(EXCEPTIONS),1)
-  CCXXFLAGS += -fno-exceptions
+  ifneq ($(SELFTEST),1)
+    CCXXFLAGS += -fno-exceptions
+  endif
 endif
 
 #double gcc bug combo:
@@ -103,13 +113,6 @@ ifeq ($(OS),windows)
 #obj/resource$(OBJNAME).o: ico/*
 #	$(RC) $(RCFLAGS) ico/minir.rc obj/resource$(OBJNAME).o
   OBJNAME = windows
-endif
-
-ifneq (,$(findstring test,$(MAKECMDGOALS)))
-  SELFTEST = 1
-endif
-ifneq (,$(findstring check,$(MAKECMDGOALS)))
-  SELFTEST = 1
 endif
 
 OPTFLAGS := -Os -fomit-frame-pointer -fmerge-all-constants -fvisibility=hidden
@@ -180,7 +183,7 @@ ifneq ($(SELFTEST),)
     SOURCES :=
     CFLAGS_ARLIB += -DARLIB_TEST -DARLIB_TESTRUNNER -DARLIB_TEST_ARLIB
   endif
-  OBJNAME += -test
+  OBJNAME := $(OBJNAME)-test
 endif
 
 ifeq ($(ARGUI),1)
@@ -309,7 +312,6 @@ CONF_CFLAGS += $(patsubst %,-D%,$(DEFINES))
 
 DOMAINS += DEFAULT ARLIB NOWARN
 
-OBJNAME := $(subst $(SPACE),,$(OBJNAME))
 SOURCES_DEFAULT := $(SOURCES)
 OBJS += $(foreach domain,$(sort $(DOMAINS)),$(call OBJMANGLE,$(domain),$(wildcard $(SOURCES_$(domain)))))
 OBJS += $(OBJS_LATE)

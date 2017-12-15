@@ -13,6 +13,7 @@ public:
 
 void _testfail(cstring why, int line);
 void _testcmpfail(cstring why, int line, cstring expected, cstring actual);
+void _test_nothrow(int add);
 
 void _teststack_push(int line);
 void _teststack_pop();
@@ -20,8 +21,6 @@ void _teststack_pop();
 void _test_skip(cstring why);
 void _test_inconclusive(cstring why);
 void _test_expfail(cstring why);
-
-bool _test_should_exit();
 
 //undefined behavior if T is unsigned and T2 is negative
 //I'd prefer making it compare properly, but that requires way too many conditionals.
@@ -127,13 +126,12 @@ void _assert_range(const T&  actual, const char * actual_exp,
 	static void TESTFUNCNAME(); \
 	static KEEP_OBJECT _testdecl JOIN(_testdecl, __LINE__)(TESTFUNCNAME, __FILE__ ":" STR(__LINE__), name, requires, provides); \
 	static void TESTFUNCNAME()
-#define assert_ret(x, ret) do { if (!(x)) { _testfail("\nFailed assertion " #x, __LINE__); _test_return(ret); } } while(0)
+#define assert_ret(x, ret) do { if (!(x)) { _testfail("\nFailed assertion " #x, __LINE__); } } while(0)
 #define assert(x) assert_ret(x,)
-#define assert_msg_ret(x, msg, ret) do { if (!(x)) { _testfail((string)"\nFailed assertion " #x ": "+msg, __LINE__); _test_return(ret); } } while(0)
+#define assert_msg_ret(x, msg, ret) do { if (!(x)) { _testfail((string)"\nFailed assertion " #x ": "+msg, __LINE__); } } while(0)
 #define assert_msg(x, msg) assert_msg_ret(x,msg,)
 #define _assert_fn_ret(fn,actual,expected,ret) do { \
 		fn(actual, #actual, expected, #expected, __LINE__); \
-		_test_return(ret); \
 	} while(0)
 #define assert_eq_ret(actual,expected,ret) _assert_fn_ret(_assert_eq,actual,expected,ret)
 #define assert_eq(actual,expected) assert_eq_ret(actual,expected,)
@@ -149,16 +147,16 @@ void _assert_range(const T&  actual, const char * actual_exp,
 #define assert_gte(actual,expected) assert_gte_ret(actual,expected,)
 #define assert_range_ret(actual,min,max,ret) do { \
 		_assert_range(actual, #actual, min, #min, max, #max, __LINE__); \
-		_test_return(ret); \
 	} while(0)
 #define assert_range(actual,min,max) assert_range_ret(actual,min,max,)
-#define assert_fail(msg) do { _testfail((string)"\n"+msg, __LINE__); _test_return(); } while(0)
-#define assert_unreachable() do { _testfail("\nassert_unreachable() wasn't unreachable", __LINE__); _test_return(); } while(0)
-#define assert_fail_nostack(msg) do { _testfail((string)"\n"+msg, -1); _test_return(); } while(0)
-#define testcall(x) do { _teststack_push(__LINE__); x; _teststack_pop(); _test_return(); } while(0)
-#define test_skip(x) do { _test_skip(x); _test_return(); } while(0)
-#define test_inconclusive(x) do { _test_inconclusive(x); _test_return(); } while(0)
-#define test_expfail(x) do { _test_expfail(x); _test_return(); } while(0)
+#define assert_fail(msg) do { _testfail((string)"\n"+msg, __LINE__); } while(0)
+#define assert_unreachable() do { _testfail("\nassert_unreachable() wasn't unreachable", __LINE__); } while(0)
+#define assert_fail_nostack(msg) do { _testfail((string)"\n"+msg, -1); } while(0)
+#define testcall(x) do { _teststack_push(__LINE__); x; _teststack_pop(); } while(0)
+#define test_skip(x) do { _test_skip(x); } while(0)
+#define test_inconclusive(x) do { _test_inconclusive(x); } while(0)
+#define test_expfail(x) do { _test_expfail(x); } while(0)
+#define test_nothrow(x) do { _test_nothrow(+1); x; _test_nothrow(-1); } while(0)
 
 #define WANT_VALGRIND
 
@@ -184,6 +182,7 @@ void _assert_range(const T&  actual, const char * actual_exp,
 #define testcall(x) x
 #define test_skip(x) return
 #define test_inconclusive(x) return
+#define test_nothrow(x) x
 
 #endif
 

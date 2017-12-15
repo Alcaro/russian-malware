@@ -196,9 +196,10 @@ extern "C" funcptr bootstrap_start(void** stack)
 
 }}
 
-//we need the stack pointer, so we need to write the bootloader's first step in asssembly
+//we need the stack pointer
 //I could take the address of an argument, but I'm pretty sure that's undefined behavior
 //and our callee also needs the stack, and I don't trust gcc to enforce a tail call
+//therefore, the bootloader's first step must be written in asssembly
 __asm__(R"(
 # asm works great with raw strings, surprised I haven't seen it elsewhere
 # guess c++ and asm is a rare combination
@@ -211,7 +212,6 @@ jmp rax
 
 
 #else
-#ifndef ARLIB_TEST
 #define STR_(x) #x
 #define STR(x) STR_(x)
 
@@ -229,5 +229,4 @@ sandbox_preload_len:
 .int my_len
 .section .text
 )");
-#endif
 #endif

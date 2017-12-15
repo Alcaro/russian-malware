@@ -71,7 +71,7 @@ BPF_STMT(BPF_LD|BPF_W|BPF_ABS, (uint32_t)(((offsetof(struct seccomp_data, args[1
 BPF_JUMP(BPF_JMP|BPF_JEQ, (uint32_t)(0x5401), 58,0),
 BPF_JUMP(BPF_JMP|BPF_JEQ, (uint32_t)(0x5413), 57,61),
 BPF_STMT(BPF_LD|BPF_W|BPF_ABS, (uint32_t)(((offsetof(struct seccomp_data, args[1])+4)))),
-BPF_JUMP(BPF_JMP|BPF_JEQ, (uint32_t)(0), 0,59),
+BPF_JUMP(BPF_JMP|BPF_JEQ, (uint32_t)(0), 0,58),
 BPF_STMT(BPF_LD|BPF_W|BPF_ABS, (uint32_t)(((offsetof(struct seccomp_data, args[1]))))),
 BPF_JUMP(BPF_JMP|BPF_JEQ, (uint32_t)(F_GETFD), 53,0),
 BPF_JUMP(BPF_JMP|BPF_JEQ, (uint32_t)(F_SETFD), 52,0),

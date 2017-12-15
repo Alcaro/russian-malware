@@ -523,7 +523,7 @@ Everything contains bugs. The following is a list of possible vulnerabilities th
  since I presented it at school.
 - filesystem: max_write was ignored
     exploitability: trivial
-    maximum impact: disk space exhaustion
+    maximum impact: disk space exhaustion - though attacker is assumed able to launch arbitrarily many sandboxes, so none in practice.
 - launch_impl: failure in process::set_fds was ignored
     exploitability: extremely hard, requires resource exhaustion and then some luck
     maximum impact: child may be able to access (including write) some or all fds open in parent
@@ -543,6 +543,9 @@ Everything contains bugs. The following is a list of possible vulnerabilities th
       and I don't know if the linux kernel allows this race condition in the first place;
         if it tears down fds before processing PR_SET_PDEATHSIG, it doesn't even enter the emulator
     maximum impact: in theory, outliving sandbox termination; in practice, zero
+- launch_impl: allocation failure could confuse sandbox about whether it's correctly launched
+    exploitability: extremely hard, requires resource exhaustion and then some luck
+    maximum impact: none; it can make parent wait forever for a nonexistent child process to exit, but child can already sleep forever
 
 
 Missing kernel features
@@ -641,8 +644,8 @@ Killing the other threads is also tricky. There's no syscall to list them, nor i
 
 But, again, it's possible: The list can be found in /proc/self/task/ and fetched by the namespace
  init, and installing a signal handler could cause any recipient thread to terminate itself. SIGSYS,
- for example, we already have a SIGSYS handler. Unless the signal is blocked, I'm not sure how
- common that is... ...but on the other hand, exec in multithreaded programs at all is probably rare.
+ for example, we already have a SIGSYS handler. Signals can be blocked, but only if it can get past
+ seccomp, which it can't. (And exec in multithreaded programs at all is rare.)
 
 However, it's a lot of effort, and since the sandbox is in a chroot, it doesn't really accomplish
  anything.
@@ -660,8 +663,8 @@ Unfortunately, ld-linux itself needs the emulator, so I'd still need an emulator
  glibc-less operation. And since I can't force my LD_PRELOAD to run before other libraries'
  constructors, this one would have to support pretty much every syscall, and I'd rather not
  implement that twice. LD_AUDIT could help, but that would load two copies of glibc in the same
- process, and I don't trust that to play nicely with threads and malloc() (it calls brk(), a
- process-global resource).
+ process, and I don't know how well that works. There is code for it in glibc, but it's likely badly
+ tested, and I don't know how much I can trust it.
 
 It would be nice, but again, not worth it.
 

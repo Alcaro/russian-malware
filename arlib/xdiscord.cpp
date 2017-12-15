@@ -72,7 +72,7 @@ void Discord::connect()
 puts("DOCONNECT");
 debug_connect = getdate();
 if (debug_target) debug_target.message("Connecting at "+debug_connect);
-	//use this as a garbage collector, kinda shitty but there's no better way to deal with timeouts
+	//use this as a garbage collector, kinda shitty but I'm too lazy to figure out where timeouts should be enforced
 	m_http.reset();
 	
 	connecting = true;

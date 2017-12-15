@@ -118,7 +118,7 @@ jmp ENOTTY_S
 fcntl:
 #int fcntl(int fd, int cmd, ... /* arg */)
 ld [arg2h]
-jne #0, ENOTTY_S
+jne #0, EINVAL
 ld [arg2l]
 
 #sets only O_CLOEXEC
@@ -150,6 +150,7 @@ jmp accept
 
 prlimit64:
 #most of this syscall is safe, everything I want to enforce is a hard limit and prlimit64 can't touch that
+#but block it anyways because why not
 ld [arg2h]
 jne #0, ENOSYS
 ld [arg2l]

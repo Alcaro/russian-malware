@@ -66,7 +66,7 @@ bool process::closefrom(int lowfd)
 			if (fd>=0 && fd!=dfd && fd>=lowfd)
 			{
 #ifdef ARLIB_TEST_ARLIB
-				if (fd >= 1024) continue; // shut up Valgrind
+				if (fd >= 1024) continue; // shut up, Valgrind
 #endif
 				close(fd); // seems like close() can't fail, per https://lwn.net/Articles/576478/
 			}

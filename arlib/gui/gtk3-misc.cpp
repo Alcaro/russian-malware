@@ -381,6 +381,10 @@ public:
 	static const GIOCondition cond_rd = (GIOCondition)(G_IO_IN |G_IO_HUP|G_IO_ERR);
 	static const GIOCondition cond_wr = (GIOCondition)(G_IO_OUT|G_IO_HUP|G_IO_ERR);
 	
+#ifdef ARLIB_THREAD
+	int submit_fds[2] = { -1, -1 };
+#endif
+	
 	/*private*/ gboolean fd_cb(gint fd, GIOCondition condition)
 	{
 		fd_cbs& cbs = fdinfo.get(fd);
@@ -474,6 +478,28 @@ public:
 	}
 	
 	
+#ifdef ARLIB_THREAD
+	void prepare_submit()
+	{
+		if (submit_fds[0] >= 0) return;
+		//leak these fds - this object only goes away on process exit
+		pipe2(submit_fds, O_CLOEXEC);
+		this->set_fd(submit_fds[0], bind_this(&runloop_gtk::submit_cb), NULL);
+	}
+	void submit(function<void()> cb)
+	{
+		write(submit_fds[1], &cb, sizeof(cb));
+		memset(&cb, 0, sizeof(cb));
+	}
+	/*private*/ void submit_cb(uintptr_t)
+	{
+		function<void()> cb;
+		read(submit_fds[0], &cb, sizeof(cb));
+		cb();
+	}
+#endif
+	
+	
 	void enter() { gtk_main(); need_exit_sync = false; }
 	void exit() { gtk_main_quit(); }
 	void step()
@@ -489,7 +515,7 @@ public:
 	
 	~runloop_gtk()
 	{
-		abort(); // illegal to call this
+		abort(); // illegal to delete this object
 	}
 	
 	void finalize()
@@ -507,8 +533,8 @@ public:
 			//we need it to exit immediately, so let's schedule a oneshot idle event saying gtk_main_quit()
 			//there could be other events at this point, but they're unlikely and harmless
 			
-			//but this is still an ugly hack. a much better solution would be creating gtk_deinit() and moving these shutdown actions there
-			//or having gtk put this in its own atexit handler
+			//but this is still an ugly hack. a much better solution would be creating gtk_deinit()
+			// and moving these shutdown actions there, or having gtk put this in its own atexit handler
 			
 			g_idle_add([](void*)->gboolean { gtk_main_quit(); return false; }, NULL);
 			gtk_main();
@@ -529,7 +555,14 @@ runloop* runloop::global()
 		//so this one most likely gets called early, while gtk is still operational
 		atexit([](){ ret->finalize(); });
 	}
+#ifdef ARLIB_TEST
+	static runloop* ret2 = NULL;
+	if (!ret2) ret2 = runloop_wrap_blocktest(ret);
+	runloop_blocktest_recycle(ret2);
+	return ret2;
+#else
 	return ret;
+#endif
 }
 
 

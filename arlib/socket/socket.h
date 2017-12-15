@@ -32,6 +32,12 @@ public:
 	static socket* create_raw(cstring ip, int port, runloop* loop);
 	static socket* wrap_ssl(socket* inner, cstring domain, runloop* loop);
 	
+#ifdef __unix__
+	//Acts like a socket. fds can be -1, meaning that end will never report activity. Having both be -1 is allowed but pointless.
+	//Takes ownership of the fds.
+	static socket* create_from_pipe(int read, int write, runloop* loop);
+#endif
+	
 	
 	enum {
 		e_lazy_dev = -1, // Whoever implemented this socket handler was lazy. Treat it as e_broken or an unknown error.
@@ -64,12 +70,12 @@ public:
 	virtual int send(arrayview<byte> data) = 0;
 	
 	//The socket will remove its callbacks when destroyed.
-	//It is safe to call this multiple times; however, 'loop' must be same for each call.
+	//It is safe to call this multiple times.
 	//If there's still data available for reading on the socket, the callbacks will be called again.
 	//If both read and write are possible and both callbacks are set, read is called; it's implementation defined whether write is too.
-	//False positives are possible. Use nonblocking operations.
+	//False positives are possible. Be prepared for the actual operations returning empty.
 	//If the socket is closed, it's considered both readable and writable.
-	virtual void callback(function<void(socket*)> cb_read, function<void(socket*)> cb_write = NULL) = 0;
+	virtual void callback(function<void()> cb_read, function<void()> cb_write = NULL) = 0;
 	
 	virtual ~socket() {}
 	

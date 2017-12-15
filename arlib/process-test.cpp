@@ -13,7 +13,7 @@
 #define CAT_STDIN "/bin/cat"
 #define CAT_STDIN_END ""
 #else
-#undef TRUE // go away windows, true !== 1 and TRUE is just stupid
+#undef TRUE // go away windows, true !== 1 is just stupid. and so is TRUE
 #define TRUE "cmd", "/c", "type NUL" // windows has no /bin/true, fake it
 #define ECHO "cmd", "/c", "echo"
 #define YES "cmd", "/c", "tree /f c:" // not actually infinite, but close enough
@@ -25,10 +25,10 @@
 #define usleep(n) Sleep((n)/1000)
 #endif
 
-test("process", "array,string", "process")
+test("process", "array,string,runloop", "process")
 {
 	test_skip("kinda slow");
-	//there are a couple of race conditions here, but I believe they're all safe
+	//there are a couple of race conditions here, but I believe none of them will cause trouble
 	{
 		process p;
 		assert(p.launch(TRUE));
@@ -173,4 +173,36 @@ test("process", "array,string", "process")
 	//	//and windows has about 50 different quote parsers anyways, impossible to know which to follow
 	//}
 }
+
+#ifdef ARLIB_SANDBOX
+#include "sandbox/sandbox.h"
+
+test("sandbox", "process", "sandbox")
+{
+	//test_skip("kinda slow");
+	
+	if (RUNNING_ON_VALGRIND) test_inconclusive("valgrind doesn't understand the sandbox");
+	
+	{
+		sandproc p;
+		bool has_access_fail = false;
+		// this will fail because can't access /lib64/ld-linux-x86-64.so.2
+		// (or /bin/true or whatever - no point caring exactly what file makes it blow up)
+		p.set_access_violation_cb(bind_lambda([&](cstring path, bool write) { has_access_fail = true; } ));
+		
+		assert(p.launch(TRUE));
+		assert_neq(p.wait(), 0);
+		assert(has_access_fail);
+	}
+	
+	{
+		sandproc p;
+		p.set_access_violation_cb(bind_lambda([&](cstring path, bool write) { assert_unreachable(); } ));
+		p.fs_grant_syslibs(TRUE);
+		
+		assert(p.launch(TRUE));
+		assert_eq(p.wait(), 0);
+	}
+}
+#endif
 #endif

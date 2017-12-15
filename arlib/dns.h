@@ -53,6 +53,6 @@ private:
 	static string read_name(bytestream& stream);
 	static string ip_to_string(arrayview<byte> ip);
 	
-	void sock_cb(socket*);
+	void sock_cb();
 	void timeout(uint16_t trid);
 };

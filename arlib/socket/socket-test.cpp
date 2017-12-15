@@ -18,7 +18,7 @@ static void clienttest(cstring target, int port, bool ssl, bool xfail = false)
 	assert(sock);
 	
 	//ugly, but the alternative is nesting lambdas forever or busywait. I need a way to break it anyways
-	function<void(socket*)> break_runloop = bind_lambda([&](socket*) { loop->exit(); });
+	function<void()> break_runloop = bind_lambda([&]() { loop->exit(); });
 	
 	cstring http_get =
 		"GET / HTTP/1.1\r\n"
@@ -77,7 +77,7 @@ test("TCP client, disconnecting server", "runloop,dns", "tcp")
 	autoptr<socket> sock = socket::create("floating.muncher.se", 9, loop);
 	assert(sock);
 	
-	sock->callback(bind_lambda([&](socket*)
+	sock->callback(bind_lambda([&]()
 		{
 			uint8_t buf[64];
 			int ret = sock->recv(buf);

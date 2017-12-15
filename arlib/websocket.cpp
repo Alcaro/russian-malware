@@ -33,7 +33,7 @@ void WebSocket::connect(cstring target, arrayview<string> headers)
 	sock->send(cstring("\r\n").bytes());
 }
 
-void WebSocket::activity(socket*)
+void WebSocket::activity()
 {
 	uint8_t bytes[4096];
 	int nbyte = sock->recv(bytes);

@@ -27,7 +27,7 @@ class WebSocket : nocopy {
 	function<void(arrayview<byte>)> cb_bin;
 	function<void()> cb_error;
 	
-	void activity(socket*);
+	void activity();
 	
 	void send(arrayview<byte> message, int type);
 	

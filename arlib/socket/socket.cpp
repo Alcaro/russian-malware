@@ -43,6 +43,19 @@ static void initialize()
 #endif
 }
 
+static int fixret(int ret)
+{
+	if (ret > 0) return ret;
+	if (ret == 0) return socket::e_closed;
+#ifdef __unix__
+	if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return 0;
+#endif
+#ifdef _WIN32
+	if (ret < 0 && WSAGetLastError() == WSAEWOULDBLOCK) return 0;
+#endif
+	return socket::e_broken;
+}
+
 static int setsockopt(int socket, int level, int option_name, const void * option_value, socklen_t option_len)
 {
 	return ::setsockopt(socket, level, option_name, (char*)/*lol windows*/option_value, option_len);
@@ -140,26 +153,13 @@ public:
 	
 	int fd;
 	runloop* loop = NULL;
-	function<void(socket*)> cb_read;
-	function<void(socket*)> cb_write;
+	function<void()> cb_read;
+	function<void()> cb_write;
 	
 	static socket* create(int fd, runloop* loop)
 	{
 		if (fd<0) return NULL;
 		return new socket_raw(fd, loop);
-	}
-	
-	/*private*/ int fixret(int ret)
-	{
-		if (ret > 0) return ret;
-		if (ret == 0) return e_closed;
-#ifdef __unix__
-		if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return 0;
-#endif
-#ifdef _WIN32
-		if (ret < 0 && WSAGetLastError() == WSAEWOULDBLOCK) return 0;
-#endif
-		return e_broken;
 	}
 	
 	int recv(arrayvieww<byte> data)
@@ -169,12 +169,12 @@ public:
 	
 	int send(arrayview<byte> data)
 	{
-		return fixret(::send(fd, (char*)data.ptr(), data.size(), MSG_NOSIGNAL));
+		return fixret(::send(this->fd, (char*)data.ptr(), data.size(), MSG_NOSIGNAL));
 	}
 	
-	/*private*/ void on_readable(uintptr_t) { cb_read(this); }
-	/*private*/ void on_writable(uintptr_t) { cb_write(this); }
-	void callback(function<void(socket*)> cb_read, function<void(socket*)> cb_write)
+	/*private*/ void on_readable(uintptr_t) { cb_read(); }
+	/*private*/ void on_writable(uintptr_t) { cb_write(); }
+	void callback(function<void()> cb_read, function<void()> cb_write)
 	{
 		this->cb_read = cb_read;
 		this->cb_write = cb_write;
@@ -201,24 +201,11 @@ public:
 	int fd;
 	
 	runloop* loop;
-	function<void(socket*)> cb_read;
-	function<void(socket*)> cb_write;
+	function<void()> cb_read;
+	function<void()> cb_write;
 	
 	array<byte> peeraddr;
 	array<byte> peeraddr_cmp;
-	
-	/*private*/ int fixret(int ret)
-	{
-		if (ret > 0) return ret;
-		if (ret == 0) return e_closed;
-#ifdef __unix__
-		if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return 0;
-#endif
-#ifdef _WIN32
-		if (ret < 0 && WSAGetLastError() == WSAEWOULDBLOCK) return 0;
-#endif
-		return e_broken;
-	}
 	
 	int recv(arrayvieww<byte> data)
 	{
@@ -235,9 +222,9 @@ public:
 		return fixret(::sendto(fd, (char*)data.ptr(), data.size(), MSG_NOSIGNAL, (sockaddr*)peeraddr.ptr(), peeraddr.size()));
 	}
 	
-	/*private*/ void on_readable(uintptr_t) { cb_read(this); }
-	/*private*/ void on_writable(uintptr_t) { cb_write(this); }
-	void callback(function<void(socket*)> cb_read, function<void(socket*)> cb_write)
+	/*private*/ void on_readable(uintptr_t) { cb_read(); }
+	/*private*/ void on_writable(uintptr_t) { cb_write(); }
+	void callback(function<void()> cb_read, function<void()> cb_write)
 	{
 		this->cb_read = cb_read;
 		this->cb_write = cb_write;
@@ -253,7 +240,8 @@ public:
 	}
 };
 
-class socketwrap : public socket {
+//A flexible socket sends a DNS request, then seamlessly opens a TCP or SSL connection to the returned IP.
+class socket_flex : public socket {
 public:
 	socket* i_connect(cstring domain, cstring ip, int port)
 	{
@@ -262,7 +250,7 @@ public:
 		return ret;
 	}
 	
-	socketwrap(cstring domain, int port, runloop* loop, bool ssl)
+	socket_flex(cstring domain, int port, runloop* loop, bool ssl)
 	{
 		this->loop = loop;
 		this->ssl = ssl;
@@ -271,7 +259,7 @@ public:
 		{
 			this->port = port;
 			dns = new DNS(loop);
-			dns->resolve(domain, bind_this(&socketwrap::dns_cb));
+			dns->resolve(domain, bind_this(&socket_flex::dns_cb));
 		}
 		set_loop();
 	}
@@ -280,43 +268,90 @@ public:
 	uint16_t port;
 	bool ssl;
 	
-	void dns_cb(string domain, string ip)
+	runloop* loop = NULL;
+	autoptr<socket> child;
+	
+	function<void()> cb_read;
+	function<void()> cb_write;
+	
+	/*private*/ void dns_cb(string domain, string ip)
 	{
 		child = i_connect(domain, ip, port);
 		dns = NULL;
 		set_loop();
+		cb_write();
 	}
 	
+	/*private*/ void set_loop()
+	{
+		if (child) child->callback(cb_read, cb_write);
+	}
+	
+	int recv(arrayvieww<byte> data)
+	{
+		if (!child)
+		{
+			if (dns) return 0;
+			else return e_broken;
+		}
+		return child->recv(data);
+	}
+	
+	int send(arrayview<byte> data)
+	{
+		if (!child)
+		{
+			if (dns) return 0;
+			else return e_broken;
+		}
+		return child->send(data);
+	}
+	
+	void callback(function<void()> cb_read, function<void()> cb_write)
+	{
+		this->cb_read = cb_read;
+		this->cb_write = cb_write;
+		
+		set_loop();
+	}
+};
+
+//Makes writes always succeed. If they fail, they're buffered in memory.
+class socketbuf : public socket {
+public:
+	socketbuf(socket* child, runloop* loop) : loop(loop), child(child) {}
+	
+	runloop* loop;
 	autoptr<socket> child;
 	
 	bytepipe tosend;
-	runloop* loop = NULL;
 	uintptr_t idle_id = 0;
-	function<void(socket*)> cb_read;
-	function<void(socket*)> cb_write; // call once when connection is done, or forever if connection is broken
+	function<void()> cb_read;
+	function<void()> cb_write; // call once when connection is done, or forever if connection is broken
 	
 	/*private*/ void cancel()
 	{
 		child = NULL;
+		set_loop();
 	}
 	
 	/*private*/ void set_loop()
 	{
 		if (!child)
 		{
-			if (dns) return;
-			if (!idle_id) idle_id = loop->set_idle(bind_this(&socketwrap::on_idle));
+			if (!idle_id) idle_id = loop->set_idle(bind_this(&socketbuf::on_idle));
 			return;
 		}
-		child->callback(cb_read            ? bind_this(&socketwrap::on_readable) : NULL,
-		                tosend.remaining() ? bind_this(&socketwrap::on_writable) : NULL);
-		if (cb_write && !idle_id) idle_id = loop->set_idle(bind_this(&socketwrap::on_idle));
+		child->callback(cb_read            ? bind_this(&socketbuf::on_readable) : NULL,
+		                tosend.remaining() ? bind_this(&socketbuf::on_writable) : NULL);
+		if (cb_write && !idle_id) idle_id = loop->set_idle(bind_this(&socketbuf::on_idle));
 	}
 	/*private*/ void trysend()
 	{
 		if (!child) return set_loop();
 		
 		arrayview<byte> bytes = tosend.pull_buf();
+		if (!bytes.size()) return;
 		int nbytes = child->send(bytes);
 		if (nbytes < 0) return cancel();
 		tosend.pull_done(nbytes);
@@ -326,39 +361,34 @@ public:
 	
 	int recv(arrayvieww<byte> data)
 	{
-		if (!child)
-		{
-			if (dns) return 0;
-			return e_broken;
-		}
+		if (!child) return e_broken;
 		return child->recv(data);
 	}
 	
 	int send(arrayview<byte> data)
 	{
-		if (!data) return 0;
-		if (!child && !dns) return e_broken;
+		if (!child) return e_broken;
 		tosend.push(data);
 		trysend();
 		return data.size();
 	}
 	
-	/*private*/ void on_readable(socket*) { cb_read(this); }
-	/*private*/ void on_writable(socket*) { trysend(); }
+	/*private*/ void on_readable() { cb_read(); }
+	/*private*/ void on_writable() { trysend(); }
 	/*private*/ bool on_idle()
 	{
-		if (!child && cb_read) cb_read(this);
-		else if (cb_write) cb_write(this);
+		if (!child && cb_read) cb_read();
+		else if (cb_write) cb_write();
 		else { idle_id = 0; return false; }
 		return true;
 	}
-	void callback(function<void(socket*)> cb_read, function<void(socket*)> cb_write)
+	void callback(function<void()> cb_read, function<void()> cb_write)
 	{
 		this->cb_read = cb_read;
 		this->cb_write = cb_write;
 		set_loop();
 	}
-	~socketwrap()
+	~socketbuf()
 	{
 		loop->remove(idle_id);
 	}
@@ -368,12 +398,12 @@ public:
 
 socket* socket::create(cstring domain, int port, runloop* loop)
 {
-	return new socketwrap(domain, port, loop, false);
+	return new socketbuf(new socket_flex(domain, port, loop, false), loop);
 }
 
 socket* socket::create_ssl(cstring domain, int port, runloop* loop)
 {
-	return new socketwrap(domain, port, loop, true);
+	return new socketbuf(new socket_flex(domain, port, loop, true), loop);
 }
 
 socket* socket::create_udp(cstring domain, int port, runloop* loop)
@@ -455,4 +485,64 @@ socket* socketlisten::accept()
 }
 
 socketlisten::~socketlisten() { if (loop) loop->set_fd(fd, NULL, NULL); close(this->fd); }
+#endif
+
+#ifdef __unix__
+namespace {
+class socket_pipe : public socket {
+public:
+	socket_pipe(int read, int write, runloop* loop) : loop(loop), fd_read(read), fd_write(write) {}
+	
+	runloop* loop;
+	
+	int fd_read;
+	int fd_write;
+	
+	function<void()> cb_read;
+	function<void()> cb_write;
+	
+	int recv(arrayvieww<byte> data)
+	{
+		return fixret(::read(this->fd_read, (char*)data.ptr(), data.size()));
+	}
+	
+	int send(arrayview<byte> data)
+	{
+		return fixret(::write(this->fd_write, (char*)data.ptr(), data.size()));
+	}
+	
+	/*private*/ void on_readable(uintptr_t) { cb_read(); }
+	/*private*/ void on_writable(uintptr_t) { cb_write(); }
+	void callback(function<void()> cb_read, function<void()> cb_write)
+	{
+		this->cb_read = cb_read;
+		this->cb_write = cb_write;
+		
+		if (fd_read >= 0) loop->set_fd(fd_read, cb_read ? bind_this(&socket_pipe::on_readable) : NULL, NULL);
+		if (fd_write >= 0) loop->set_fd(fd_write, NULL, cb_write ? bind_this(&socket_pipe::on_writable) : NULL);
+	}
+	
+	~socket_pipe()
+	{
+		if (fd_read >= 0)
+		{
+			loop->set_fd(fd_read, NULL, NULL);
+			close(fd_read);
+		}
+		if (fd_write >= 0)
+		{
+			loop->set_fd(fd_write, NULL, NULL);
+			close(fd_write);
+		}
+	}
+};
+} // close namespace
+
+socket* socket::create_from_pipe(int read, int write, runloop* loop)
+{
+	return new socket_pipe(read, write, loop);
+}
+
+#include"../test.h"
+test("","","") { test_expfail("figure out how to react to failure in socket_pipe::send"); }
 #endif

@@ -1,11 +1,10 @@
 #ifdef __linux__
-#ifndef ARLIB_TEST
 #include "sandbox.h"
 #include "../process.h"
 #include "../test.h"
 
 #include <sys/syscall.h>
-#ifdef __NR_execveat
+#ifdef __NR_execveat // force disable on old kernels
 
 #include <sys/user.h>
 #include <sys/wait.h>
@@ -99,7 +98,7 @@ template<typename T> inline T require(T x)
 	if ((long)x == -1) _exit(1);
 	return x;
 }
-//this could be an overload, but for security-critical code, explicit is better than implicit
+//this could be an overload, but for security-critical code, compact is bad
 inline void require_b(bool expected)
 {
 	if (!expected) _exit(1);
@@ -171,17 +170,17 @@ pid_t sandproc::launch_impl(array<const char*> argv, array<int> stdio_fd)
 	//putting it before clone() allows sharing it between sandbox children
 	int preld_fd = preloader_fd();
 	if (preld_fd<0)
-		return false;
+		return -1;
 	
 	int socks[2];
 	if (socketpair(AF_UNIX, SOCK_SEQPACKET|SOCK_CLOEXEC, 0, socks)<0)
-		return false;
+		return -1;
 	
 	stdio_fd.append(socks[1]);
 	stdio_fd.append(preld_fd); // we could request preld from parent, but this is easier
 	
 	int clone_flags = CLONE_NEWUSER | CLONE_NEWPID | CLONE_NEWNET | CLONE_NEWCGROUP | CLONE_NEWIPC | CLONE_NEWNS | CLONE_NEWUTS;
-	clone_flags |= SIGCHLD; // parent termination signal, must be SIGCHLD for waitpid to work properly
+	clone_flags |= SIGCHLD; // termination signal, must be SIGCHLD for waitpid to work properly
 	pid_t pid = syscall(__NR_clone, clone_flags, NULL, NULL, NULL, NULL);
 	if (pid<0) return -1;
 	if (pid>0)
@@ -263,6 +262,5 @@ pid_t sandproc::launch_impl(array<const char*> argv, array<int> stdio_fd)
 	//sand_do_the_thing(pid, sock);
 	//return 0;
 //}
-#endif
 #endif
 #endif
