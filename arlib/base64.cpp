@@ -133,8 +133,8 @@ string base64_enc(arrayview<byte> bytes);
 static void do_test(cstring enc, cstring dec)
 {
 	size_t declen_exp = dec.length();
-	if (enc[~1] == '=') declen_exp++;
-	if (enc[~2] == '=') declen_exp++;
+	if (enc[enc.length()-1] == '=') declen_exp++;
+	if (enc[enc.length()-2] == '=') declen_exp++;
 	assert_eq(base64_dec_len(enc.length()), declen_exp);
 	assert_eq(base64_enc_len(dec.length()), enc.length());
 	//assert_eq(base64_enc(dec.bytes()), enc);

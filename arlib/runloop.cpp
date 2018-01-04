@@ -210,18 +210,20 @@ public:
 	void prepare_submit()
 	{
 		if (submit_fds[0] >= 0) return;
-		pipe2(submit_fds, O_CLOEXEC);
+		if (pipe2(submit_fds, O_CLOEXEC) < 0) abort();
 		this->set_fd(submit_fds[0], bind_this(&runloop_linux::submit_cb), NULL);
 	}
-	void submit(function<void()> cb)
+	void submit(function<void()>&& cb)
 	{
-		write(submit_fds[1], &cb, sizeof(cb));
+		//full pipe should be impossible
+		if (write(submit_fds[1], &cb, sizeof(cb)) != sizeof(cb)) abort();
 		memset(&cb, 0, sizeof(cb));
 	}
 	/*private*/ void submit_cb(uintptr_t)
 	{
 		function<void()> cb;
-		read(submit_fds[0], &cb, sizeof(cb));
+		//we know the write pushed a complete one of those, we can assume we can read it out
+		if (read(submit_fds[0], &cb, sizeof(cb)) != sizeof(cb)) abort();
 		cb();
 	}
 #endif
@@ -306,23 +308,20 @@ class runloop_blocktest : public runloop {
 	runloop* loop;
 	
 	uint64_t us = 0;
-	uint64_t lim_us = 0;
-	uint64_t max_us = 0;
-	uint64_t thissecond = 0;
+	uint64_t loopdetect = 0;
 	/*private*/ void begin()
 	{
 		uint64_t new_us = time_us_ne();
-		if (new_us/1000000 != us/1000000) thissecond = 0;
-		thissecond++;
-		if (thissecond == 100) assert(!"100 runloop iterations in one second");
+		if (new_us/1000000/10 != us/1000000/10) loopdetect = 0;
+		loopdetect++;
+		if (loopdetect == 1000) assert(!"1000 runloop iterations in 10 seconds");
 		us = new_us;
 	}
 	/*private*/ void end()
 	{
 		uint64_t new_us = time_us_ne();
 		uint64_t diff = new_us-us;
-		if (max_us < diff) max_us = diff;
-		test_nothrow(assert_lt(diff, lim_us));
+		_test_runloop_latency(diff);
 	}
 	
 	//don't carelessly inline into the lambdas; sometimes lambdas are deallocated by the callbacks, so 'this' is a use-after-free
@@ -365,7 +364,7 @@ class runloop_blocktest : public runloop {
 	void enter() { end(); loop->enter(); begin(); }
 	
 	void prepare_submit() { loop->prepare_submit(); }
-	void submit(function<void()> cb) { loop->submit(cb); }
+	void submit(function<void()>&& cb) { loop->submit(std::move(cb)); }
 	
 	void exit() { loop->exit(); }
 	void step() { end(); loop->step(); begin(); }
@@ -374,23 +373,18 @@ class runloop_blocktest : public runloop {
 public:
 	runloop_blocktest(runloop* inner) : loop(inner)
 	{
-		lim_us = (RUNNING_ON_VALGRIND ? 1000000 : 3000);
 		begin();
 	}
 	~runloop_blocktest()
 	{
 		end();
 		delete loop;
-		
-		if (RUNNING_ON_VALGRIND)
-		{
-			test_nothrow(test_inconclusive("runloop latency "+tostring(max_us)+"us under Valgrind"));
-		}
 	}
 	
 	void recycle()
 	{
 		us = time_us_ne();
+		loopdetect = 0;
 	}
 };
 
@@ -441,11 +435,10 @@ static void test_runloop(bool is_global)
 		function<void()> threadproc = bind_lambda([loop, start_ms]()
 			{
 				while (start_ms+100 > time_ms_ne()) {}
-				function<void()> submitted = bind_lambda([loop]()
+				loop->submit(bind_lambda([loop]()
 					{
 						loop->exit();
-					});
-				loop->submit(submitted);
+					}));
 			});
 		thread_create(threadproc);
 		loop->enter();

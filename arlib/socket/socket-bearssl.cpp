@@ -146,7 +146,7 @@ MAYBE_UNUSED static void append_certs_pem_x509(array<byte> certs_pem)
 RUN_ONCE_FN(initialize)
 {
 #ifndef _WIN32
-	append_certs_pem_x509(file::read("/etc/ssl/certs/ca-certificates.crt"));
+	append_certs_pem_x509(file::readall("/etc/ssl/certs/ca-certificates.crt"));
 #else
 	//TODO: LoadLibrary this, using some decltype
 	

@@ -94,7 +94,7 @@ private:
 		{
 			m_inline_len = -1;
 			
-			m_data = (uint8_t*)str; // if m_owning is false, we know to not modify this
+			m_data = (uint8_t*)str;
 			m_len = len;
 			m_nul = false;
 		}
@@ -117,11 +117,14 @@ private:
 		//this function is REALLY hot, use the strongest possible optimizations
 		if (index >= 0)
 		{
+			if ((uint32_t)index > length()) debug_or_print();
+			
 			if (inlined()) return m_inline[index];
 			else if ((uint32_t)index < m_len) return m_data[index];
 			else return '\0';
 		}
 		
+		debug_or_print();
 		return getchar(realpos(index));
 	}
 	
@@ -147,7 +150,7 @@ public:
 	explicit operator bool() const { return length() != 0; }
 	//operator const char * () const { return ptr_withnul(); }
 	
-	char operator[](int index) const { return getchar(index); }
+	char operator[](int index) const { if (index < 0) debug_or_print(); return getchar(index); }
 	
 	//static string create(arrayview<uint8_t> data) { string ret=noinit(); ret.init_from(data.ptr(), data.size()); return ret; }
 	
@@ -267,6 +270,7 @@ public:
 	c_string c_str() const { return c_string(bytes(), bytes_hasterm()); }
 };
 
+
 class string : public cstring {
 	friend class cstring;
 	
@@ -314,6 +318,7 @@ class string : public cstring {
 		uint32_t index = realpos(index_);
 		if (index == length())
 		{
+			debug_or_print();
 			resize(index+1);
 		}
 		ptr()[index] = val;
@@ -360,12 +365,24 @@ public:
 		return *this;
 	}
 	
+	
 	string& operator+=(char right)
 	{
 		uint8_t tmp = right;
 		append(arrayview<uint8_t>(&tmp, 1));
 		return *this;
 	}
+	
+	string& operator+=(uint8_t right)
+	{
+		append(arrayview<uint8_t>(&right, 1));
+		return *this;
+	}
+	
+	// for other integer types, fail
+	string& operator+=(int right) = delete;
+	string& operator+=(unsigned right) = delete;
+	
 	
 	string() : cstring(noinit()) { init_from(""); }
 	string(const string& other) : cstring(noinit()) { init_from(other); }
@@ -404,9 +421,9 @@ private:
 public:
 	//Reading the NUL terminator is fine. Writing extends the string. Poking outside the string is undefined.
 	//charref operator[](uint32_t index) { return charref(this, index); }
-	charref operator[](int index) { return charref(this, index); }
+	charref operator[](int index) { if (index < 0) debug_or_print(); return charref(this, index); }
 	//char operator[](uint32_t index) const { return getchar(index); }
-	char operator[](int index) const { return getchar(index); }
+	char operator[](int index) const { if (index < 0) debug_or_print(); return getchar(index); }
 	
 	//static string create(arrayview<uint8_t> data) { string ret=noinit(); ret.init_from(data.ptr(), data.size()); return ret; }
 	
@@ -458,6 +475,10 @@ inline string operator+(const char * left, cstring right     ) { string ret=left
 inline string operator+(string&& left, char right) { left+=right; return left; }
 inline string operator+(cstring left, char right) { string ret=left; ret+=right; return ret; }
 inline string operator+(char left, cstring right) { string ret; ret[0]=left; ret+=right; return ret; }
+
+inline string operator+(string&& left, int right) = delete;
+inline string operator+(cstring left, int right) = delete;
+inline string operator+(int left, cstring right) = delete;
 
 inline string cstring::lower() const
 {

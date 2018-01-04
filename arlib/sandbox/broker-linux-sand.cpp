@@ -275,13 +275,13 @@ int sandproc::filesystem::child_file(cstring pathname, int op_, int flags, mode_
 
 void sandproc::watch_add(int sock)
 {
-	fd_mon_thread(sock, bind_this(&sandproc::on_readable), NULL);
+	loop->set_fd(sock, bind_this(&sandproc::on_readable), NULL);
 	socks.add(sock);
 }
 
 void sandproc::watch_del(int sock)
 {
-	fd_mon_thread(sock, NULL, NULL);
+	loop->set_fd(sock, NULL, NULL);
 	socks.remove(sock);
 }
 
@@ -296,7 +296,7 @@ void sandproc::send_rsp(int sock, broker_rsp* rsp, int fd)
 	}
 }
 
-void sandproc::on_readable(int sock)
+void sandproc::on_readable(uintptr_t sock)
 {
 	struct broker_req req;
 	ssize_t req_sz = recv(sock, &req, sizeof(req), MSG_DONTWAIT);
@@ -375,7 +375,7 @@ sandproc::~sandproc()
 {
 	for (int sock : socks)
 	{
-		fd_mon_thread(sock, NULL, NULL);
+		loop->set_fd(sock, NULL, NULL);
 		close(sock);
 	}
 }

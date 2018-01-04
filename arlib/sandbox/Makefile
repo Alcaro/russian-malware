@@ -1,7 +1,3 @@
-ifneq ($(ARTHREAD),1)
-  $(error the sandbox requires threads support)
-endif
-
 ifneq ($(OS),linux)
   $(error sandbox is only supported on Linux)
 endif
@@ -12,12 +8,16 @@ DEFINES += ARLIB_SANDBOX
 #enable ASLR and ensure we're usable as linker
 PRELOADER_FLAGS := -fPIC -static -shared
 #runtime libraries aren't available, don't use them and don't use anything using them
-PRELOADER_FLAGS += -nostdlib -nostartfiles -ffreestanding
-#pretty sure most of these are implied by -ffreestanding, but better safe than sorry
+PRELOADER_FLAGS += -nostdlib -nostartfiles -nodefaultlibs -ffreestanding
+#gcc sure loves inserting calls to random stuff, force it not to
+#I'd prefer if I could enable -fstack-protector, but the stack cookie is at %fs:40, which is a segfault
+#I could set it up, but that'd require a lot of assembly, leak memory, and confuse the real libc when it tries to set up %fs
+#glibc seems built without stack protector, anyways
 PRELOADER_FLAGS += -fno-stack-protector -fno-exceptions -fno-rtti -fno-jump-tables -fno-sync-libcalls
 #nothing should nor can override our symbols, and allowing it causes relocation issues
 PRELOADER_FLAGS += -fvisibility=hidden
 #AT&T assembly is ugly
+#yes, there's only ~7 lines of asm in this thing, AT&T is still ugly
 PRELOADER_FLAGS += -masm=intel
 
 #this could be in obj/, but if I put it there, Python is mandatory for building Arlib. I'd rather not.

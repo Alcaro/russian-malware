@@ -32,11 +32,12 @@ public:
 	static socket* create_raw(cstring ip, int port, runloop* loop);
 	static socket* wrap_ssl(socket* inner, cstring domain, runloop* loop);
 	
-#ifdef __unix__
-	//Acts like a socket. fds can be -1, meaning that end will never report activity. Having both be -1 is allowed but pointless.
-	//Takes ownership of the fds.
-	static socket* create_from_pipe(int read, int write, runloop* loop);
-#endif
+//what did I need this for?
+//#ifdef __unix__
+//	//Acts like a socket. fds can be -1, meaning that end will never report activity. Having both be -1 is allowed but pointless.
+//	//Takes ownership of the fds.
+//	static socket* create_from_pipe(int read, int write, runloop* loop);
+//#endif
 	
 	
 	enum {

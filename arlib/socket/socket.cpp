@@ -1,7 +1,6 @@
 #include "socket.h"
 #include "../bytepipe.h"
 #include "../dns.h"
-#include"../stringconv.h"
 
 #undef socket
 #ifdef _WIN32
@@ -272,14 +271,14 @@ public:
 	autoptr<socket> child;
 	
 	function<void()> cb_read;
-	function<void()> cb_write;
+	function<void()> cb_write; // call once when connection is ready, or forever if connection is broken
 	
 	/*private*/ void dns_cb(string domain, string ip)
 	{
 		child = i_connect(domain, ip, port);
 		dns = NULL;
 		set_loop();
-		cb_write();
+		cb_write(); // TODO: do this later
 	}
 	
 	/*private*/ void set_loop()
@@ -327,7 +326,7 @@ public:
 	bytepipe tosend;
 	uintptr_t idle_id = 0;
 	function<void()> cb_read;
-	function<void()> cb_write; // call once when connection is done, or forever if connection is broken
+	function<void()> cb_write;
 	
 	/*private*/ void cancel()
 	{
@@ -487,62 +486,63 @@ socket* socketlisten::accept()
 socketlisten::~socketlisten() { if (loop) loop->set_fd(fd, NULL, NULL); close(this->fd); }
 #endif
 
-#ifdef __unix__
-namespace {
-class socket_pipe : public socket {
-public:
-	socket_pipe(int read, int write, runloop* loop) : loop(loop), fd_read(read), fd_write(write) {}
-	
-	runloop* loop;
-	
-	int fd_read;
-	int fd_write;
-	
-	function<void()> cb_read;
-	function<void()> cb_write;
-	
-	int recv(arrayvieww<byte> data)
-	{
-		return fixret(::read(this->fd_read, (char*)data.ptr(), data.size()));
-	}
-	
-	int send(arrayview<byte> data)
-	{
-		return fixret(::write(this->fd_write, (char*)data.ptr(), data.size()));
-	}
-	
-	/*private*/ void on_readable(uintptr_t) { cb_read(); }
-	/*private*/ void on_writable(uintptr_t) { cb_write(); }
-	void callback(function<void()> cb_read, function<void()> cb_write)
-	{
-		this->cb_read = cb_read;
-		this->cb_write = cb_write;
-		
-		if (fd_read >= 0) loop->set_fd(fd_read, cb_read ? bind_this(&socket_pipe::on_readable) : NULL, NULL);
-		if (fd_write >= 0) loop->set_fd(fd_write, NULL, cb_write ? bind_this(&socket_pipe::on_writable) : NULL);
-	}
-	
-	~socket_pipe()
-	{
-		if (fd_read >= 0)
-		{
-			loop->set_fd(fd_read, NULL, NULL);
-			close(fd_read);
-		}
-		if (fd_write >= 0)
-		{
-			loop->set_fd(fd_write, NULL, NULL);
-			close(fd_write);
-		}
-	}
-};
-} // close namespace
-
-socket* socket::create_from_pipe(int read, int write, runloop* loop)
-{
-	return new socket_pipe(read, write, loop);
-}
-
-#include"../test.h"
-test("","","") { test_expfail("figure out how to react to failure in socket_pipe::send"); }
-#endif
+//what did I need this for?
+//#ifdef __unix__
+//namespace {
+//class socket_pipe : public socket {
+//public:
+//	socket_pipe(int read, int write, runloop* loop) : loop(loop), fd_read(read), fd_write(write) {}
+//	
+//	runloop* loop;
+//	
+//	int fd_read;
+//	int fd_write;
+//	
+//	function<void()> cb_read;
+//	function<void()> cb_write;
+//	
+//	int recv(arrayvieww<byte> data)
+//	{
+//		return fixret(::read(this->fd_read, (char*)data.ptr(), data.size()));
+//	}
+//	
+//	int send(arrayview<byte> data)
+//	{
+//		return fixret(::write(this->fd_write, (char*)data.ptr(), data.size()));
+//	}
+//	
+//	/*private*/ void on_readable(uintptr_t) { cb_read(); }
+//	/*private*/ void on_writable(uintptr_t) { cb_write(); }
+//	void callback(function<void()> cb_read, function<void()> cb_write)
+//	{
+//		this->cb_read = cb_read;
+//		this->cb_write = cb_write;
+//		
+//		if (fd_read >= 0) loop->set_fd(fd_read, cb_read ? bind_this(&socket_pipe::on_readable) : NULL, NULL);
+//		if (fd_write >= 0) loop->set_fd(fd_write, NULL, cb_write ? bind_this(&socket_pipe::on_writable) : NULL);
+//	}
+//	
+//	~socket_pipe()
+//	{
+//		if (fd_read >= 0)
+//		{
+//			loop->set_fd(fd_read, NULL, NULL);
+//			close(fd_read);
+//		}
+//		if (fd_write >= 0)
+//		{
+//			loop->set_fd(fd_write, NULL, NULL);
+//			close(fd_write);
+//		}
+//	}
+//};
+//} // close namespace
+//
+//socket* socket::create_from_pipe(int read, int write, runloop* loop)
+//{
+//	return new socket_pipe(read, write, loop);
+//}
+//
+//#include"../test.h"
+//test("","","") { test_expfail("figure out how to react to failure in socket_pipe::send"); }
+//#endif

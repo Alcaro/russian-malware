@@ -183,26 +183,26 @@ string string::codepoint(uint32_t cp)
 	string ret;
 	if (cp<=0x7F)
 	{
-		ret[0] = cp;
+		ret += (uint8_t)cp;
 	}
 	else if (cp<=0x07FF)
 	{
-		ret[0] = (((cp>> 6)     )|0xC0);
-		ret[1] = (((cp    )&0x3F)|0x80);
+		ret += (uint8_t)(((cp>> 6)     )|0xC0);
+		ret += (uint8_t)(((cp    )&0x3F)|0x80);
 	}
 	else if (cp>=0xD800 && cp<=0xDFFF) return "\xEF\xBF\xBD";
 	else if (cp<=0xFFFF)
 	{
-		ret[0] = (((cp>>12)&0x0F)|0xE0);
-		ret[1] = (((cp>>6 )&0x3F)|0x80);
-		ret[2] = (((cp    )&0x3F)|0x80);
+		ret += (uint8_t)(((cp>>12)&0x0F)|0xE0);
+		ret += (uint8_t)(((cp>>6 )&0x3F)|0x80);
+		ret += (uint8_t)(((cp    )&0x3F)|0x80);
 	}
 	else if (cp<=0x10FFFF)
 	{
-		ret[0] = (((cp>>18)&0x07)|0xF0);
-		ret[1] = (((cp>>12)&0x3F)|0x80);
-		ret[2] = (((cp>>6 )&0x3F)|0x80);
-		ret[3] = (((cp    )&0x3F)|0x80);
+		ret += (uint8_t)(((cp>>18)&0x07)|0xF0);
+		ret += (uint8_t)(((cp>>12)&0x3F)|0x80);
+		ret += (uint8_t)(((cp>>6 )&0x3F)|0x80);
+		ret += (uint8_t)(((cp    )&0x3F)|0x80);
 	}
 	else return "\xEF\xBF\xBD";
 	return ret;
@@ -227,7 +227,7 @@ static string fromlatin1(cstring in, bool windows1252)
 		uint8_t ch = in[i];
 		if (ch < 0x80) out += ch;
 		else if (ch < 0xA0 && windows1252) out += string::codepoint(string::cpfromwindows1252(ch));
-		else if (ch < 0xA0) out+="\xEF\xBF\xBD";
+		else if (ch < 0xA0) out += "\xEF\xBF\xBD";
 		else out += string::codepoint(ch);
 	}
 	return out;
@@ -310,17 +310,18 @@ test("string", "", "string")
 		const char * g = "hi";
 		
 		string a = g;
-		a[2]='!';
+		a += '!';
 		string b = a;
 		assert_eq(b, "hi!");
-		a[3]='!';
+		a += '!';
 		assert_eq(a, "hi!!");
 		assert_eq(b, "hi!");
 		a = b;
 		assert_eq(a, "hi!");
 		assert_eq(b, "hi!");
 		
-		assert_eq((char)a[~1], '!');
+		assert_eq(a.length(), 3);
+		assert_eq((char)a[2], '!');
 		
 		//a.replace(1,1, "ello");
 		//assert_eq(a, "hello!");

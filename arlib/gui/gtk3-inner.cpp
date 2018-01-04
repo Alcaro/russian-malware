@@ -470,6 +470,7 @@ class widget_canvas;
 
 
 
+#if defined(ARGUIPROT_X11) && defined(AROPENGL)
 struct widget_viewport::impl {
 	Window child;
 	
@@ -714,6 +715,7 @@ static void set_kb_callback(struct window * this_,
 //	
 //	return this;
 //}
+#endif
 
 
 

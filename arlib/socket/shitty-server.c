@@ -34,7 +34,9 @@ exit
 #include <signal.h>
 #include <errno.h>
 
+#ifndef DEBUG
 #define DEBUG 0
+#endif
 
 #ifndef bool
 #define bool int
@@ -134,16 +136,13 @@ static void fd_swap(int a, int b)
 
 int main()
 {
-	int* fds = NULL;
-	int nfds_prev = 0; /* whenever nextcycle arrives, discard this many sockets from the array */
-	int nfds = 0;
 	time_t nextcycle = time(NULL);
 	int listen;
 	
 	signal(SIGPIPE, SIG_IGN);
 	
-	if (listen < 0) return 1;
 	listen = listen_create(PORTNR);
+	if (listen < 0) return 1;
 	
 	while (true)
 	{
@@ -201,7 +200,7 @@ int main()
 			/* as long as we're getting data, keep the socket alive */
 			if (amount > 0 && i < nfds_prev)
 			{
-				fd_swap(i, nfds_prev);
+				if (nfds_prev < nfds) fd_swap(i, nfds_prev);
 				nfds_prev--;
 				
 				/* to ensure the one we swapped with is processed as well */

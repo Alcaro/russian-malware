@@ -269,6 +269,24 @@ public:
 		http("PATCH", "/users/@me", json);
 	}
 	
+	enum game_t {
+		gt_play = 0,
+		//gt_stream = 1, // buggy, treated as Playing unless url is present
+		gt_listen = 2,
+		gt_watch = 3,
+	};
+	void self_game(cstring game, game_t type)
+	{
+		JSON json;
+		json["op"] = 3;
+		json["d"]["game"]["name"] = game;
+		json["d"]["game"]["type"] = (int)type;
+		json["d"]["since"] = NULL; // some of these hardcoded entries are mandatory; if absent, gateway throws 'unknown opcode'
+		json["d"]["status"] = "online"; // probably discord bug
+		json["d"]["afk"] = false;
+		send_ws(json);
+	}
+	
 	void self_game(cstring game)
 	{
 		JSON json;

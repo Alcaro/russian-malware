@@ -199,8 +199,8 @@ test("string conversion", "", "string")
 	assert(!fromstring("2,5", f)); // this is not the decimal separator, has never been and will never be
 	
 	string s;
-	s[0] = '7';
-	s[1] = '\0';
+	s += '7';
+	s += '\0';
 	assert(!fromstring(s, u)); // no nul allowed
 	assert(!fromstring(s, f));
 	assert(!fromstringhex(s, u));

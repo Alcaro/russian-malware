@@ -179,7 +179,7 @@ puts("GUILD="+g.key);
 			for (JSON& chan_j : json["d"]["channels"].list())
 			{
 				cstring cid = chan_j["id"];
-				i_channel& c = channels[chan_j["id"]];
+				i_channel& c = channels.get_create(chan_j["id"]);
 				g.channels.add(cid);
 				c.guild = id;
 				c.name = chan_j["name"];
@@ -188,7 +188,7 @@ puts("GUILD="+g.key);
 			for (JSON& role_j : json["d"]["roles"].list())
 			{
 				cstring rid = role_j["id"];
-				i_role& r = roles[rid];
+				i_role& r = roles.get_create(rid);
 				g.roles.add(rid);
 				
 				r.guild = id;
@@ -327,7 +327,7 @@ void Discord::set_user_inner(JSON& json)
 	if (json["username"])
 	{
 		cstring uid = json["id"];
-		i_user& user = users[uid];
+		i_user& user = users.get_create(uid);
 		user.username = json["username"];
 		user.discriminator = json["discriminator"];
 	}
@@ -341,11 +341,11 @@ void Discord::set_user(cstring guild_id, JSON& json)
 	if (guild_id == "0") return;
 	
 	cstring uid = json["user"]["id"];
-	i_user& user = users[uid];
+	i_user& user = users.get_create(uid);
 	
 	i_guild& guild = guilds[guild_id];
 	guild.users.add(uid);
-	user.nicks[guild_id] = json["nick"];
+	user.nicks.insert(guild_id, json["nick"]);
 	
 	if (json["roles"])
 	{

@@ -1,4 +1,6 @@
 #pragma once
+
+#ifdef ARLIB_THREAD
 //This header defines several functions for atomically operating on integers or pointers.
 //You can use int32_t, uint32_t, any typedef thereof, and any pointer.
 //The following functions exist:
@@ -70,10 +72,19 @@
 
 #endif
 
-LOCKD_LOCKS(uint32_t)
-LOCKD_LOCKS(int32_t)
-LOCKD_LOCKS(uint64_t)
-LOCKD_LOCKS(int64_t)
+#define ALLINTS(x) \
+	x(signed char) \
+	x(unsigned char) \
+	x(signed short) \
+	x(unsigned short) \
+	x(signed int) \
+	x(unsigned int) \
+	x(signed long) \
+	x(unsigned long) \
+	x(signed long long) \
+	x(unsigned long long)
+
+ALLINTS(LOCKD_LOCKS)
 LOCKD_LOCKS(void*)
 
 #elif defined(_WIN32)
@@ -112,8 +123,6 @@ LOCKD_LOCKS(void*, LONGLONG, 64)
 #endif
 
 
-
-
 template<typename T> T* lock_read(T** val) { return (T*)lock_read((void**)val); }
 template<typename T> void lock_write(T** val, T* newval) { lock_write((void**)val, (void*)newval); }
 template<typename T> T* lock_cmpxchg(T** val, T* old, T* newval) { return (T*)lock_cmpxchg((void**)val, (void*)old, (void*)newval); }
@@ -127,4 +136,25 @@ template<typename T> T* lock_cmpxchg(T** val, null_only* old, T* newval) { retur
 template<typename T> T* lock_cmpxchg(T** val, T* old, null_only* newval) { return (T*)lock_cmpxchg((void**)val, (void*)old, NULL); }
 template<typename T> T* lock_cmpxchg(T** val, null_only* old, null_only* newval) { return (T*)lock_cmpxchg((void**)val, NULL, NULL); }
 template<typename T> T* lock_xchg(T** val, null_only* newval) { return (T*)lock_xchg((void**)val, NULL); }
+#endif
+
+
+
+#else
+
+#define WITH_MODEL(mod) \
+	template<typename T> T lock_read##mod(T* val) { return *val; } \
+	template<typename T> void lock_write##mod(T* val, T newval) { *val = newval; } \
+	template<typename T> T lock_cmpxchg##mod(T* val, T old, T newval) { T ret = *val; if (*val == old) *val = newval; return ret; } \
+	template<typename T> T lock_xchg##mod(T* val, T newval) { T ret = *val; *val = newval; return ret; } \
+	template<typename T> T lock_incr##mod(T* val) { return (*val)++; } \
+	template<typename T> T lock_decr##mod(T* val) { return (*val)--; } \
+
+//if single threaded, all consistency models are identical
+WITH_MODEL()
+WITH_MODEL(_acq)
+WITH_MODEL(_rel)
+WITH_MODEL(_loose)
+#undef WITH_MODEL
+
 #endif

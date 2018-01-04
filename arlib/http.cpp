@@ -5,6 +5,8 @@
 
 bool HTTP::parseUrl(cstring url, bool relative, location& out)
 {
+	if (!url) return false;
+	
 	int pos = 0;
 	while (islower(url[pos])) pos++;
 	if (url[pos]==':')
@@ -22,7 +24,7 @@ bool HTTP::parseUrl(cstring url, bool relative, location& out)
 		if (host_loc.size() == 1)
 		{
 			host_loc = url.csplit<1>("?");
-			if (host_loc[1])
+			if (host_loc.size() == 2)
 			{
 				out.path = "/?"+host_loc[1];
 			}
@@ -31,7 +33,7 @@ bool HTTP::parseUrl(cstring url, bool relative, location& out)
 		else out.path = "/"+host_loc[1];
 		array<cstring> domain_port = host_loc[0].csplit<1>(":");
 		out.domain = domain_port[0];
-		if (domain_port[1])
+		if (domain_port.size() == 2)
 		{
 			if (!fromstring(domain_port[1], out.port)) return false;
 			if (out.port <= 0 || out.port > 65535) return false;
@@ -109,7 +111,7 @@ again:
 	if (method != "GET" && next_send != 0) return;
 	
 	location loc;
-	parseUrl(q.url, false, loc); // known to succeed, it was tested in send()
+	parseUrl(q.url, false, loc); //known to succeed, it was tested in send()
 	
 	bytepipe tosend;
 	tosend.push(method, " ", loc.path, " HTTP/1.1\r\n");
@@ -187,7 +189,10 @@ void HTTP::resolve(bool* deleted, size_t id, bool success)
 
 bool HTTP::do_timeout()
 {
-	requests[0].r.status = rsp::e_timeout;
+	if (requests.size() != 0)
+	{
+		requests[0].r.status = rsp::e_timeout;
+	}
 	
 	this->timeout_id = 0;
 	
@@ -198,7 +203,10 @@ bool HTTP::do_timeout()
 void HTTP::reset_limits()
 {
 	this->bytes_in_req = 0;
-	this->timeout_id = loop->set_timer_rel(this->timeout_id, this->requests[0].r.q.limit_ms, bind_this(&HTTP::do_timeout));
+	if (requests.size() != 0)
+	{
+		this->timeout_id = loop->set_timer_rel(this->timeout_id, this->requests[0].r.q.limit_ms, bind_this(&HTTP::do_timeout));
+	}
 }
 
 void HTTP::activity()
@@ -374,6 +382,12 @@ req_finish:
 	try_compile_req();
 	reset_limits();
 	
+	if (!requests.size())
+	{
+		if (newrecv) sock_cancel(); // we shouldn't get anything at this point
+		//return immediately, so we don't poke requests[0] if that doesn't exist
+		return;
+	}
 	goto again;
 }
 
@@ -397,6 +411,12 @@ static void test_url(cstring url, cstring proto, cstring domain, int port, cstri
 {
 	test_url(url, "", proto, domain, port, path);
 }
+static void test_url_fail(cstring url, cstring url2)
+{
+	HTTP::location loc;
+	assert(HTTP::parseUrl(url, false, loc));
+	assert(!HTTP::parseUrl(url2, true, loc));
+}
 test("URL parser", "", "http")
 {
 	test_url("wss://gateway.discord.gg/?v=5&encoding=json",          "wss", "gateway.discord.gg", 0, "/?v=5&encoding=json");
@@ -406,6 +426,7 @@ test("URL parser", "", "http")
 	test_url("http://example.com/foo/bar.html?baz", "foo.html",      "http", "example.com", 0, "/foo/foo.html");
 	test_url("http://example.com/foo/bar.html?baz", "?quux",         "http", "example.com", 0, "/foo/bar.html?quux");
 	test_url("http://example.com:80/",                               "http", "example.com", 80, "/");
+	test_url_fail("http://example.com:80/", ""); // if changing this, also change assert in HTTP::try_compile_req()
 }
 
 test("HTTP", "tcp,ssl", "http")

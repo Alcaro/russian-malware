@@ -1,6 +1,8 @@
 #pragma once
 #include "../global.h"
 
+#include "atomic.h"
+
 #ifdef ARLIB_THREAD
 //Any data associated with this thread is freed once the thread procedure returns.
 //It is safe to malloc() something in one thread and free() it in another.
@@ -11,7 +13,6 @@ void thread_create(function<void()> start);
 ////Returns the number of threads to create to utilize the system resources optimally.
 //unsigned int thread_num_cores();
 
-#include "atomic.h"
 #include <string.h>
 #if defined(__unix__)
 #include <pthread.h>

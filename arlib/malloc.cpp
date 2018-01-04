@@ -65,4 +65,5 @@ void malloc_assert(bool cond)
 void* operator new(size_t n) { return malloc_check(n); }
 void* operator new[](size_t n) { return malloc_check(n); }
 void operator delete(void * p) { free(p); }
+extern "C" void __cxa_pure_virtual();
 extern "C" void __cxa_pure_virtual() { puts("__cxa_pure_virtual"); abort(); }

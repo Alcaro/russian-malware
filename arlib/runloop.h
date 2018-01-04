@@ -64,11 +64,13 @@ public:
 #ifdef ARLIB_THREAD
 	//submit(fn) calls fn() on the runloop's thread, as soon as possible.
 	//Unlike the other functions on this object, submit() may be called from a foreign thread.
+	// It may also be called reentrantly, and from signal handlers.
+	//Make sure there is no other reference to cb, otherwise there will be a race condition on the reference count.
+	virtual void submit(function<void()>&& cb) = 0;
 	//prepare_submit() must be called on the owning thread before submit() is allowed.
 	//There is no way to 'unprepare' submit(), other than deleting the runloop.
-	//Make sure cb's destructor, if any, can be called from any thread.
+	//It is safe to call prepare_submit() multiple times, even concurrently with submit().
 	virtual void prepare_submit() = 0;
-	virtual void submit(function<void()> cb) = 0;
 #endif
 	
 	//TODO: Slots, objects where there's no reason to have more than one per runloop (like DNS),
@@ -83,6 +85,7 @@ public:
 	
 	//Delete all runloop contents (sockets, HTTP or anything else using sockets, etc) before deleting the loop itself,
 	// or said contents will use-after-free.
+	// (Exception: On the non-global Linux runloop, you may have file descriptors attached during deletion.)
 	//You can't remove GUI stuff from the global runloop, so you can't delete it.
 	virtual ~runloop() = 0;
 };

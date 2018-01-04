@@ -206,6 +206,8 @@ __asm__(R"(
 .globl _start
 _start:
 mov rdi, rsp
+#hopefully the stack is properly aligned
+#TODO: check
 call bootstrap_start
 jmp rax
 )");
@@ -229,4 +231,7 @@ sandbox_preload_len:
 .int my_len
 .section .text
 )");
+
+#include "../test.h"
+test() { test_expfail("check what elf abi docs say about initial stack alignment"); }
 #endif

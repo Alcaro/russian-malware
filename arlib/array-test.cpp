@@ -51,11 +51,11 @@ static string ones_zeroes(int ones, int zeroes)
 }
 test("array<bool>", "", "array")
 {
-	for (int up=0;up<128;up+=13)
-	for (int down=0;down<=up;down+=13)
+	for (size_t up=0;up<128;up+=13)
+	for (size_t down=0;down<=up;down+=13)
 	{
 		array<bool> b;
-		for (int i=0;i<up;i++)
+		for (size_t i=0;i<up;i++)
 		{
 			assert_eq(b.size(), i);
 			b.append(true);
@@ -65,7 +65,7 @@ test("array<bool>", "", "array")
 		b.resize(down);
 		assert_eq(tostring(b), ones_zeroes(down, 0));
 		assert_eq(b.size(), down);
-		for (int i=0;i<128;i++)
+		for (size_t i=0;i<b.size();i++)
 		{
 			if (i<down) assert(b[i]);
 			else assert(!b[i]);
@@ -75,7 +75,7 @@ test("array<bool>", "", "array")
 		b.resize(up);
 		assert_eq(tostring(b), ones_zeroes(down, up-down));
 		assert_eq(b.size(), up);
-		for (int i=0;i<128;i++)
+		for (size_t i=0;i<b.size();i++)
 		{
 			if (i<down) assert(b[i]);
 			else assert(!b[i]);

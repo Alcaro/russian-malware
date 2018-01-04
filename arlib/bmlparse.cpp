@@ -321,7 +321,7 @@ bmlparser::event bmlparser::next()
 	if (m_indent_step.size() > m_indent.length())
 	{
 	handle_indent:
-		if (!m_indent_step[m_indent.length()])
+		if (!m_indent_step.get_or(m_indent.length(), false))
 		{
 			//this may throw random mix-tab-space errors that weren't present in the original,
 			// but only if the document contains mix-tab-space and this error already.
@@ -378,7 +378,7 @@ bmlparser::event bmlparser::next()
 				{
 					return event(error, "", "Can't change indentation after a multi-line value");
 				}
-				if (m_indent.length() > indentlen && !m_indent_step[m_indent.length()])
+				if (m_indent.length() > indentlen && !m_indent_step.get_or(m_indent.length(), false))
 				{
 					return event(error, "", "Invalid indentation depth");
 				}
@@ -388,7 +388,7 @@ bmlparser::event bmlparser::next()
 		}
 	}
 	
-	m_indent_step[indentlen] = true;
+	m_indent_step.set_resize(indentlen, true);
 	return event(enter, node, value);
 }
 

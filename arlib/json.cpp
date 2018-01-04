@@ -27,7 +27,7 @@ bool jsonparser::skipcomma(size_t depth)
 	if (ch == ',' || ch == '\0')
 	{
 		if ((m_nesting.size() >= depth) == (ch == '\0')) return false;
-		if (m_nesting && m_nesting[m_nesting.size()-depth]==true)
+		if (m_nesting.get_or(m_nesting.size()-depth, false) == true)
 		{
 			m_want_key = true;
 		}
@@ -117,6 +117,7 @@ jsonparser::event jsonparser::next()
 				case 't': val += '\t'; break;
 				case 'u':
 				{
+					if (m_pos+4 > m_data.length()) return do_error();
 					string unichar;
 					unichar += m_data[m_pos++];
 					unichar += m_data[m_pos++];
@@ -127,7 +128,9 @@ jsonparser::event jsonparser::next()
 					val += string::codepoint(codepoint);
 					break;
 				}
-				default: return do_error();
+				default:
+					m_pos--;
+					return do_error();
 				}
 				continue;
 			}
@@ -515,6 +518,13 @@ test("JSON parser", "string", "json")
 	testcall(testjson_error("1e-"));
 	testcall(testjson_error("z"));
 	testcall(testjson_error("{ \"a\":1, \"b\":2, \"q\":*, \"a\":3, \"a\":4 }"));
+	testcall(testjson_error("\""));
+	testcall(testjson_error("\"\\"));
+	testcall(testjson_error("\"\\u"));
+	testcall(testjson_error("\"\\u1"));
+	testcall(testjson_error("\"\\u12"));
+	testcall(testjson_error("\"\\u123"));
+	testcall(testjson_error("\"\\u1234"));
 	
 	//try to make it read out of bounds
 	//input length 31

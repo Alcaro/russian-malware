@@ -177,6 +177,9 @@ test("WebSocket", "tcp,ssl,bytepipe", "websocket")
 	
 	function<string()> recvstr = bind_lambda([&]()->string { str = ""; loop->enter(); string ret = str; return ret; });
 	
+	function<bool()> timeout = bind_lambda([&]()->bool { assert_unreachable(); return false; });
+	loop->set_timer_rel(10000, timeout);
+	
 	//this one is annoyingly slow, but I haven't found any alternatives
 	//except wss://websocketstest.com/service, which just kicks me immediately
 	WebSocket ws(loop);

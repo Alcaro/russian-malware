@@ -9,20 +9,20 @@ class set : public linqbase<set<T>> {
 	//this is a hashtable, using open addressing and linear probing
 	
 	enum { i_empty, i_deleted };
-	uint8_t& tag(size_t id) { return *(uint8_t*)(m_data_+id); }
-	uint8_t tag(size_t id) const { return *(uint8_t*)(m_data_+id); }
+	uint8_t& tag(size_t id) { return *(uint8_t*)(m_data+id); }
+	uint8_t tag(size_t id) const { return *(uint8_t*)(m_data+id); }
 	
-	T* m_data_; // length is always same as m_valid, so no explicit length - waste of space
+	T* m_data; // length is always same as m_valid, so no explicit length - waste of space
 	array<bool> m_valid;
 	size_t m_count;
 	
 	void rehash(size_t newsize)
 	{
 //debug("rehash pre");
-		T* prev_data = m_data_;
+		T* prev_data = m_data;
 		array<bool> prev_valid = std::move(m_valid);
 		
-		m_data_ = calloc(newsize, sizeof(T));
+		m_data = calloc(newsize, sizeof(T));
 		m_valid.reset();
 		m_valid.resize(newsize);
 		
@@ -32,7 +32,7 @@ class set : public linqbase<set<T>> {
 			
 			size_t pos = find_pos_full<true, false>(prev_data[i]);
 			//this is known to not overwrite any existing object; if it does, someone screwed up
-			memcpy(&m_data_[pos], &prev_data[i], sizeof(T));
+			memcpy(&m_data[pos], &prev_data[i], sizeof(T));
 			m_valid[pos] = true;
 		}
 		free(prev_data);
@@ -47,6 +47,11 @@ class set : public linqbase<set<T>> {
 	
 	bool slot_empty(size_t pos) const
 	{
+		if (pos >= m_valid.size())
+		{
+			printf("%i,%i\n",(int)pos,(int)m_valid.size());
+			debug_or_print();
+		}
 		return !m_valid[pos];
 	}
 	
@@ -56,9 +61,9 @@ class set : public linqbase<set<T>> {
 	template<bool want_empty, bool want_used = true, typename T2>
 	size_t find_pos_full(const T2& item) const
 	{
-		if (!m_data_) return -1;
+		if (!m_data) return -1;
 		
-		size_t hashv = hash_shuffle(hash(item)) % m_valid.size();
+		size_t hashv = hash_shuffle(hash(item));
 		size_t i = 0;
 		
 		size_t emptyslot = -1;
@@ -67,8 +72,8 @@ class set : public linqbase<set<T>> {
 		{
 			//I could use hashv + i+(i+1)/2 <http://stackoverflow.com/a/15770445>
 			//but due to hash_shuffle, it hurts as much as it helps.
-			size_t pos = (hashv + i) % m_valid.size();
-			if (want_used && m_valid[pos] && m_data_[pos]==item) return pos;
+			size_t pos = (hashv + i) & (m_valid.size()-1);
+			if (want_used && m_valid[pos] && m_data[pos] == item) return pos;
 			if (!m_valid[pos])
 			{
 				if (emptyslot == (size_t)-1) emptyslot = pos;
@@ -114,7 +119,7 @@ class set : public linqbase<set<T>> {
 	T* get(const T2& item) const
 	{
 		size_t pos = find_pos_const(item);
-		if (m_valid[pos]) return &m_data_[pos];
+		if (pos != (size_t)-1) return &m_data[pos];
 		else return NULL;
 	}
 	//also used by map
@@ -123,29 +128,29 @@ class set : public linqbase<set<T>> {
 	{
 		size_t pos = find_pos_insert(item);
 		
-		if (!m_valid[pos])
+		if (pos == (size_t)-1 || !m_valid[pos])
 		{
 			grow();
 			pos = find_pos_insert(item); // recalculate this, grow() may have moved it
 			//do not move grow() earlier, it invalidates references and get_create(item_that_exists) is not allowed to do that
 			
-			new(&m_data_[pos]) T(item);
+			new(&m_data[pos]) T(item);
 			m_valid[pos] = true;
 			m_count++;
 		}
 		
-		return m_data_[pos];
+		return m_data[pos];
 	}
 	
 	void construct()
 	{
-		m_data_ = NULL;
+		m_data = NULL;
 		m_valid.resize(8);
 		m_count = 0;
 	}
 	void construct(const set& other)
 	{
-		m_data_ = calloc(other.m_valid.size(), sizeof(T));
+		m_data = calloc(other.m_valid.size(), sizeof(T));
 		m_valid = other.m_valid;
 		m_count = other.m_count;
 		
@@ -153,13 +158,13 @@ class set : public linqbase<set<T>> {
 		{
 			if (m_valid[i])
 			{
-				new(&m_data_[i]) T(other.m_data_[i]);
+				new(&m_data[i]) T(other.m_data[i]);
 			}
 		}
 	}
 	void construct(set&& other)
 	{
-		m_data_ = std::move(other.m_data_);
+		m_data = std::move(other.m_data);
 		m_valid = std::move(other.m_valid);
 		m_count = std::move(other.m_count);
 		
@@ -172,11 +177,11 @@ class set : public linqbase<set<T>> {
 		{
 			if (m_valid[i])
 			{
-				m_data_[i].~T();
+				m_data[i].~T();
 			}
 		}
 		m_count = 0;
-		free(m_data_);
+		free(m_data);
 		m_valid.reset();
 	}
 	
@@ -203,22 +208,20 @@ public:
 	bool contains(const T2& item) const
 	{
 		size_t pos = find_pos_const(item);
-		return !slot_empty(pos);
+		return pos != (size_t)-1;
 	}
 	
 	template<typename T2>
 	void remove(const T2& item)
 	{
 		size_t pos = find_pos_const(item);
+		if (pos == (size_t)-1) return;
 		
-		if (m_valid[pos])
-		{
-			m_data_[pos].~T();
-			tag(pos) = i_deleted;
-			m_valid[pos] = false;
-			m_count--;
-			if (m_count < m_valid.size()/4 && m_valid.size() > 8) rehash(m_valid.size()/2);
-		}
+		m_data[pos].~T();
+		tag(pos) = i_deleted;
+		m_valid[pos] = false;
+		m_count--;
+		if (m_count < m_valid.size()/4 && m_valid.size() > 8) rehash(m_valid.size()/2);
 	}
 	
 	size_t size() const { return m_count; }
@@ -233,16 +236,8 @@ public:
 		
 		void to_valid()
 		{
-			while (!parent->m_valid[pos])
-			{
-				pos++;
-				//use -1 to ensure iterating a map while shrinking it doesn't go OOB
-				if (pos >= parent->m_valid.size())
-				{
-					pos = -1;
-					break;
-				}
-			}
+			while (pos < parent->m_valid.size() && !parent->m_valid[pos]) pos++;
+			if (pos == parent->m_valid.size()) pos = -1;
 		}
 		
 		iterator(const set<T>* parent, size_t pos) : parent(parent), pos(pos)
@@ -254,7 +249,7 @@ public:
 		
 		const T& operator*()
 		{
-			return parent->m_data_[pos];
+			return parent->m_data[pos];
 		}
 		
 		iterator& operator++()
@@ -360,7 +355,11 @@ public:
 	{
 		return items.get_create(key).value;
 	}
-	Tvalue& operator[](const Tkey& key) { return get_create(key); } // C# does this better...
+	Tvalue& operator[](const Tkey& key) // C# does this better...
+	{
+		if (!contains(key)) debug_or_print();
+		return get_create(key);
+	}
 	
 	Tvalue& insert(const Tkey& key)
 	{

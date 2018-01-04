@@ -65,11 +65,15 @@ void bmlwriter::exit() { m_indent--; m_caninline = false; }
 
 bmlwriter::mode bmlwriter::type_core(cstring val)
 {
-	if (val.contains("\n") || val[0]==' ' || val[0]=='\t' || val[~0]==' ' || val[~0]=='\t') return multiline;
+	if (val == "") return anon;
+	
+	char first = val[0];
+	char last = val[val.length()-1];
+	
+	if (val.contains("\n") || first==' ' || first=='\t' || last==' ' || last=='\t') return multiline;
 	if (val.contains("\"")) return col;
 	if (val.contains(" ") || val.contains("\t")) return quote;
-	if (val!="") return eq;
-	return anon;
+	return eq;
 }
 
 bmlwriter::mode bmlwriter::type(cstring val, mode m) const

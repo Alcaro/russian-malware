@@ -328,6 +328,7 @@ void zip::write(cstring name, arrayview<byte> data, time_t date)
 	{
 		i = filenames.size();
 		filenames.append(name);
+		filedat.append();
 	}
 	file& f = filedat[i];
 	f.decomplen = data.size();

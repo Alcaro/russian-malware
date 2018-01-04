@@ -2,8 +2,9 @@
 #include "global.h"
 #include "string.h"
 #include "thread.h"
+#include "runloop.h"
+#include "bytepipe.h"
 
-#ifdef ARLIB_THREAD
 //On Linux, you must be careful about creating child processes through other functions. Make sure
 // they don't fight over any process-global resources.
 //Said resources are waitpid(-1) and SIGCHLD. This one requires the latter, and requires that
@@ -17,10 +18,22 @@ private:
 	input* ch_stdin = NULL;
 	output* ch_stdout = NULL;
 	output* ch_stderr = NULL;
+	
+	struct onexit_t;
+	onexit_t* onexit_cb = NULL;
 #ifdef __linux__
+	void on_sigchld();
+	
+public:
+	//used internally only, don't touch it
+	void _on_sigchld_offloop();
 protected:
+	//THREAD WARNING: these two may be written from wrong runloop
+	//seems impossible to fix, the correct runloop may be stuck in terminate()
 	pid_t pid = -1;
 	int exitcode = -1;
+	
+	runloop* loop;
 	
 	
 	//Closes all open file descriptors in the process, except those which are numerically strictly less than lowfd.
@@ -54,8 +67,10 @@ protected:
 #endif
 	
 public:
-	process() {}
-	process(cstring prog, arrayview<string> args) { launch(prog, args); }
+	process(runloop* loop) : loop(loop) {}
+	//process(cstring prog, arrayview<string> args, runloop* loop) : loop(loop) { launch(prog, args); }
+	
+	void onexit(function<void(int)> cb); // Can only be called before launch().
 	
 	//Argument quoting is fairly screwy on Windows. Command line arguments at all are fairly screwy on Windows.
 	//You may get weird results if you use too many backslashes, quotes and spaces.
@@ -77,26 +92,29 @@ public:
 	
 	
 	class input : nocopy {
+#ifdef __linux__
 		input() {}
-		input(uintptr_t fd) : fd_read(fd) {}
+		input(int fd) { pipe[0] = -1; pipe[1] = fd; }
 		
-		uintptr_t fd_read = -1; // HANDLE on windows, int on linux
-		uintptr_t fd_write = -1;
+		int pipe[2];
+		runloop* loop;
+#endif
 		friend class process;
 		
-		array<byte> buf;
+		bytepipe buf;
 		bool started = false;
 		bool do_close = false;
-		mutex mut;
+		bool monitoring = false;
 		
-		void update(int fd); // call without holding the mutex
+		void init(runloop* loop);
+		void update(uintptr_t = 0);
 		void terminate();
 		
 	public:
-		void write(arrayview<byte> data) { synchronized(mut) { buf += data; } update(0); }
+		void write(arrayview<byte> data) { buf.push(data); update(); }
 		void write(cstring data) { write(data.bytes()); }
 		//Sends EOF to the child, after all bytes have been written. Call only after the last write().
-		void close() { do_close = true; update(0); }
+		void close() { do_close = true; update(); }
 		
 		static input& create_pipe(arrayview<byte> data = NULL);
 		static input& create_pipe(cstring data) { return create_pipe(data.bytes()); }
@@ -104,7 +122,7 @@ public:
 		static input& create_buffer(arrayview<byte> data = NULL);
 		static input& create_buffer(cstring data) { return create_buffer(data.bytes()); }
 		
-		//Can't use write/close on these two. Just don't store them anywhere.
+		//Can't write/close these two. Just don't store them anywhere.
 		static input& create_file(cstring path);
 		//Uses caller's stdin. Make sure no two processes are trying to use stdin simultaneously, it acts badly.
 		static input& create_stdin();
@@ -112,62 +130,69 @@ public:
 		~input();
 	};
 	//The process object takes ownership of the given object.
-	//Can only be called before launch(), and only once.
-	//Default is NULL, equivalent to /dev/null.
-	//It is undefined behavior to create an input object and not immediately attach it to a process.
+	//Can only be called before launch(), and only once. If omitted, process is given /dev/null.
+	//It is undefined behavior to create an input/output object and not immediately attach it to a process.
 	input* set_stdin(input& inp) { ch_stdin = &inp; return &inp; }
 	
 	class output : nocopy {
+#ifdef __linux__
 		output() {}
-		output(uintptr_t fd) : fd_write(fd) {}
+		output(int fd) { pipe[0] = -1; pipe[1] = fd; }
 		
-		uintptr_t fd_write = -1;
-		uintptr_t fd_read = -1;
+		int pipe[2];
+#endif
 		friend class process;
 		
 		array<byte> buf;
-		mutex mut;
 		size_t maxbytes = SIZE_MAX;
 		
-		void update(int fd);
+		void init(runloop* loop);
+		void update(uintptr_t = 0);
 		void terminate();
+		
+		runloop* loop;
+		uintptr_t idle_id = 0;
+		bool idle_cb();
+		function<void()> on_readable;
 		
 	public:
 		//Stops the process from writing too much data and wasting RAM.
 		//If there, at any point, is more than 'max' bytes of unread data in the buffer, the pipe is closed.
-		//Slightly more may be readable in practice, due to kernel-level buffering.
+		//Slightly more may be readable in practice, due to various buffers.
 		void limit(size_t lim) { maxbytes = lim; }
+		
+		void callback(function<void()> cb);
 		
 		array<byte> readb()
 		{
-			update(0);
-			synchronized(mut) { return std::move(buf); }
-			return NULL; //unreachable, gcc is just being stupid
+			update();
+			return std::move(buf);
 		}
 		//Can return invalid UTF-8. Even if the program only processes UTF-8, it's possible
 		// to read half a character, if the process is still running or the outlimit was hit.
 		string read() { return string(readb()); }
 		
 		static output& create_buffer(size_t limit = SIZE_MAX);
+		//Can't read these three. Just don't store them anywhere.
 		static output& create_file(cstring path, bool append = false);
 		static output& create_stdout();
 		static output& create_stderr();
 		
-		~output();
+		~output() { terminate(); }
 	};
 	output* set_stdout(output& outp) { ch_stdout = &outp; return &outp; }
 	output* set_stderr(output& outp) { ch_stderr = &outp; return &outp; }
 	
 	
-	bool running();
-	//Waits until the process exits, then returns exit code. Can be called multiple times.
-	//Remember to close stdin first, if it's from create_pipe.
-	int wait();
-	void terminate(); // The process is automatically terminated when the object is destroyed.
+	bool running() { return (lock_read_loose(&pid) != -1); }
+	//Returns exit code, or -1 if it's still running. Can be called multiple times.
+	int status() { return lock_read_loose(&exitcode); }
+	//Doesn't return until the process is gone and onexit() is called.
+	//The process is automatically terminated when the object is destroyed.
+	void terminate();
 	
 #ifdef ARLIB_SANDBOX
 	virtual
 #endif
 	~process();
 };
-#endif
