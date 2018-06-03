@@ -21,7 +21,8 @@ public:
 		int action;
 		cstring name;
 		cstring value; // or error message
-		               // putting error first would be cleaner in the parser, but reader clarity is more important, and this name is better
+		               // putting error first would be cleaner in the parser,
+		               // but reader clarity is more important, and this name is better
 		
 		//these constructors are because MSVC2013 can't parse (event){ enter, "foo", "bar" }
 		event(int action) : action(action) {}
@@ -29,11 +30,9 @@ public:
 		event(int action, cstring name, cstring value) : action(action), name(name), value(value) {}
 	};
 	
-	//Remember the cstring rules: If this cstring doesn't hold a reference, don't touch its buffer until the object is disposed.
-	//If it's originally a string, don't worry about it.
 	//It is not allowed to try to stream data into this object.
 	bmlparser(cstring bml) : m_orig_data(bml), m_data(m_orig_data), m_exit(false) {}
-	event next();
+	event next(); // Returned cstrings are valid until next function (including destructor) called on this object.
 	
 private:
 	string m_orig_data; // keep a reference if we're passed in the only copy of a string object
@@ -44,7 +43,7 @@ private:
 	cstring m_inlines;
 	bool m_exit;
 	
-	string m_tmp_value;
+	string m_tmp_value; // returned 'value' points here if it's a multiline
 	
 	inline bool getline(bool allow_empty);
 };

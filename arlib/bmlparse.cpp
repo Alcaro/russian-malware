@@ -398,6 +398,7 @@ bmlparser::event bmlparser::next()
 #define e_exit bmlparser::exit
 #define e_error bmlparser::error
 #define e_finish bmlparser::finish
+#define e_extract -1
 
 static const char * test1 =
 "node\n"
@@ -642,9 +643,10 @@ static bmlparser::event test6e[]={
 static void testbml(const char * bml, bmlparser::event* expected)
 {
 	bmlparser parser(bml);
+	bmlparser::event actual { e_error };
 	while (true)
 	{
-		bmlparser::event actual = parser.next();
+		actual = parser.next();
 		
 //printf("e=%i [%s] [%s]\n", expected->action, (const char*)expected->name, (const char*)expected->value);
 //printf("a=%i [%s] [%s]\n\n", actual.action,  (const char*)actual.name,    (const char*)actual.value);

@@ -22,6 +22,11 @@
 
 #define UTIL_CALLBACK_HPP_INSIDE
 
+//with C++17, these macros can be replaced with template<auto fn> function<decltype(fn)> bind_free()
+//C++11 would be enough to replace bind_free(func) with GetFreeCallback<decltype(func), func>,
+// but that doesn't really improve anything over the current setup
+//and removing the macro doesn't really improve anything either
+
 #define bind_free(func) (GetFreeCallbackFactory(func).Bind<func>())
 #define bind_ptr(func, ptr) (GetCallbackFactory(func).Bind<func>(ptr))
 #define bind_this(func) bind_ptr(func, this) // reminder: bind_this(&classname::function), not bind_this(function)
@@ -44,7 +49,7 @@ template<typename FuncSignature> class function;
 #define ARG_TYPES_I(n) JOIN(P,n)
 #define ARG_TYPES LOOP(ARG_TYPES_I)
 #if __cplusplus >= 201103L
-#define ARG_NAMES_MOVE_I(n) std::move(JOIN(a,n))
+#define ARG_NAMES_MOVE_I(n) std::forward<JOIN(P,n)>(JOIN(a,n))
 #else
 #define ARG_NAMES_MOVE_I(n) JOIN(a,n)
 #endif
@@ -262,6 +267,7 @@ public:
     //- EmptyHandler doesn't use obj, it can be whatever
     //- it is not sensitive to false negatives - even if the address of EmptyHandler changes, obj==func does not
     //- it is not sensitive to false positives - EmptyHandler is private, and can't be aliased by anything unexpected
+    //    (okay, it is sensitive on a pure Harvard architecture, but they're extinct and Modified Harvard is safe.)
     //- it is sensitive to hostile callers, but if you call bind_ptr(func, (void*)func), you're asking for bugs.
     function()                    : func(EmptyHandler), obj((void*)EmptyHandler), ref(NULL) {}
     function(const function& rhs) : func(rhs.func), obj(rhs.obj), ref(rhs.ref)
@@ -355,6 +361,7 @@ public:
     // or a primitive type (integer, float or pointer - no structs or funny stuff) of the same size as the original.
     //I'd stick in some static_assert to enforce that, but with the variable size of the argument lists,
     // that'd be annoying. Not sure how to unpack T, either.
+    //Usage: function<void(void*)> x; function<void(int*)> y = x.reinterpret<void(int*)>();
     template<typename T>
     function<T> reinterpret()
     {

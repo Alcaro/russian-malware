@@ -147,12 +147,11 @@ public:
 		size_t maxbytes = SIZE_MAX;
 		
 		void init(runloop* loop);
-		void update(uintptr_t = 0);
+		void update();
+		void update_with_cb(uintptr_t = 0);
 		void terminate();
 		
 		runloop* loop;
-		uintptr_t idle_id = 0;
-		bool idle_cb();
 		function<void()> on_readable;
 		
 	public:

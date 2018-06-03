@@ -169,6 +169,12 @@ public:
 	bool operator==(const char * right) { return str()==right; }
 	bool operator==(cstring right) { return str()==right; }
 	
+	bool operator!=(int right) { return num()!=right; }
+	bool operator!=(size_t right) { return num()!=right; }
+	bool operator!=(double right) { return num()!=right; }
+	bool operator!=(const char * right) { return str()!=right; }
+	bool operator!=(cstring right) { return str()!=right; }
+	
 	JSON& operator=(nullptr_t) { ev.action = jsonparser::jnull; return *this; }
 	JSON& operator=(bool b) { ev.action = b ? jsonparser::jtrue : jsonparser::jfalse; return *this; }
 	JSON& operator=(size_t n) { return operator=((double)n); }

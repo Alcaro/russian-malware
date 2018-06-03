@@ -4,14 +4,12 @@
 #include "atomic.h"
 
 #ifdef ARLIB_THREAD
-//Any data associated with this thread is freed once the thread procedure returns.
 //It is safe to malloc() something in one thread and free() it in another.
-//It is not safe to call window_run_*() from a thread other than the one entering main().
 //A thread is rather heavy; for short-running jobs, use thread_create_short or thread_split.
 void thread_create(function<void()> start);
 
-////Returns the number of threads to create to utilize the system resources optimally.
-//unsigned int thread_num_cores();
+//Returns the number of threads to create to utilize the system resources optimally.
+unsigned int thread_num_cores();
 
 #include <string.h>
 #if defined(__unix__)
@@ -26,7 +24,7 @@ void thread_create(function<void()> start);
 //It is not allowed for a thread to call lock() or try_lock() while holding the lock already. It is not allowed
 // for a thread to release the lock unless it holds it. It is not allowed to delete the lock while it's held.
 //However, it it allowed to hold multiple locks simultaneously.
-//lock() is not guaranteed to yield the CPU if it can't grab the lock. It may be implemented as a
+//lock() is not guaranteed to release the CPU if it can't grab the lock. It may be implemented as a
 // busy loop, or a hybrid scheme that spins a few times and then sleeps.
 //Remember to create all relevant mutexes before creating a thread.
 class mutex : nocopy {
@@ -100,6 +98,7 @@ public:
 #define synchronized(mutex) using(mutexlocker LOCK(mutex))
 
 
+//A semaphore starts in the locked state.
 class semaphore : nomove {
 #ifdef __unix__
 	sem_t sem;
@@ -190,16 +189,23 @@ void futex_set_and_wake(int* uaddr, int val);
 
 #else
 
-//Some parts of Arlib want to work with threads disabled.
-class mutex : nocopy {
+//Some parts of Arlib want to work with threads disabled, but pretend threads exist.
+class mutex : nomove {
 public:
 	void lock() {}
 	bool try_lock() { return true; }
 	void unlock() { }
 };
+class semaphore : nomove {
+public:
+	void release() {}
+	void wait() {}
+};
 #define RUN_ONCE(fn) do { static bool first=true; if (first) fn(); first=false; } while(0)
 #define RUN_ONCE_FN(name) static void name##_core(); static void name() { RUN_ONCE(name##_core); } static void name##_core()
 #define synchronized(mutex)
 static inline size_t thread_get_id() { return 0; }
+static inline unsigned int thread_num_cores() { return 1; }
+static inline void thread_create(function<void()> start) { abort(); }
 
 #endif

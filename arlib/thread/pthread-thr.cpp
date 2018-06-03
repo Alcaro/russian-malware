@@ -38,11 +38,10 @@ mutex_rec::mutex_rec() : mutex(noinit())
 	pthread_mutexattr_destroy(&attr);
 }
 
-
-//unsigned int thread_num_cores()
-//{
-//	//for more OSes: https://qt.gitorious.org/qt/qt/source/HEAD:src/corelib/thread/qthread_unix.cpp#L411, idealThreadCount()
-//	//or http://stackoverflow.com/questions/150355/programmatically-find-the-number-of-cores-on-a-machine
-//	return sysconf(_SC_NPROCESSORS_ONLN);
-//}
+unsigned int thread_num_cores()
+{
+	//for more OSes: https://qt.gitorious.org/qt/qt/source/HEAD:src/corelib/thread/qthread_unix.cpp#L411, idealThreadCount()
+	//or http://stackoverflow.com/questions/150355/programmatically-find-the-number-of-cores-on-a-machine
+	return sysconf(_SC_NPROCESSORS_ONLN);
+}
 #endif

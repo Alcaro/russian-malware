@@ -33,18 +33,23 @@
 // It is even less well known (though easy to guess) that there are only a few
 //  conversion functions in the entire Windows.
 //
-// It is not very well known that you can mark memory executable using
+// It is pretty well known that you can mark memory executable using
 //  VirtualProtect, and use that to create your own functions.
-// It is even less well known that you can mark existing functions writable.
+// It is less well known that you can use this to rewrite existing functions.
+//  (It affects the local process only, it doesn't need admin.)
 //
 // Combining those lead to an evil idea: What if we replace the A->W conversion
 //  function with an UTF8->UTF16 converter?
-// And this is exactly what I did.
+// And that's exactly what I did.
 //
 //Limitations:
 //- IMMEDIATELY VOIDS YOUR WARRANTY
 //- Possibly makes antivirus software panic.
+//   Though not necessarily more than they already do. <https://arstechnica.com/information-technology/2017/01/antivirus-is-bad/>
+//   And they already flag anything they don't recognize, which is everything except well known stuff.
 //- Will crash if this code is in a DLL that's unloaded, possibly including program shutdown.
+//- Very likely to crash if another thread is in an A API during WuTF_enable(). Very likely to screw
+//    up if anything has called any A API before WuTF_enable().
 //- Affects the entire process; don't do it unless you know the process wants it this way.
 //   I believe most processes actually wants it this way; everything I've seen either expects ASCII
 //    only, uses the W APIs, or is console output (which is another codepage). I am not aware of
@@ -96,10 +101,11 @@ extern "C" {
 
 #ifdef _WIN32
 //Main function; this one does the actual magic. Call this as early as possible.
-//If you're using WuTF as part of Arlib, there's no need to call this manually; window_init() does.
+//If you're using WuTF as part of Arlib, there's no need to call this manually; arlib_init() does it already.
 void WuTF_enable();
 
 //Converts argc/argv to UTF-8. Uses only documented functions, so it has zero chance of blowing up.
+//Doesn't depend on WuTF itself. It works whether you call WuTF_enable() earlier, later, or not at all.
 //However, it does leak memory, so don't call it more than once. (The leaks are cleaned up on process exit anyways.)
 void WuTF_args(int* argc, char** * argv);
 

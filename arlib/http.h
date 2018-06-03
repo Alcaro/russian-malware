@@ -151,7 +151,7 @@ private:
 	
 	bool* deleted_p = NULL;
 	
-	enum {
+	enum httpstate {
 		st_boundary, // between requests; if socket closes, make a new one
 		st_boundary_retried, // between requests; if socket closes, abort request
 		
@@ -162,7 +162,8 @@ private:
 		st_body_chunk, // waiting for chunk
 		st_body_chunk_term, // waiting for final \r\n in chunk
 		st_body_chunk_term_final, // waiting for final \r\n in terminating 0\r\n\r\n chunk
-	} state = st_boundary;
+	};
+	httpstate state = st_boundary;
 	string fragment;
 	size_t bytesleft;
 };

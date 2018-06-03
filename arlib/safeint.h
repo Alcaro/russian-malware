@@ -1,5 +1,6 @@
 #pragma once
 #include "global.h"
+#include <limits>
 
 #define ALLOPER(x) \
 	x(+, +=) x(-, -=) x(*, *=) x(/, /=) x(%, %=) \
@@ -44,8 +45,8 @@ template<typename T> class safeint {
 	} \
 	static inline bool mulov_i(stype a, stype b, stype* c) \
 	{ \
-		stype min = ((stype)-1)<<(sizeof(stype)*8-1); \
-		stype max = -(min+1); \
+		stype min = std::numeric_limits<stype>::min(); \
+		stype max = std::numeric_limits<stype>::max(); \
 		/* not sure if this can be simplified */ \
 		if (a<0 && b<0 && max/a > b) return true; \
 		if (a<0 && b>0 && min/a < b) return true; \
@@ -56,7 +57,8 @@ template<typename T> class safeint {
 	} \
 	static inline bool lslov_i(stype a, stype b, stype* c) \
 	{ \
-		if (b<0 || b >= sizeof(stype)*8) return true; \
+		if (b<0 || a<0) return true; \
+		if (b >= (stype)sizeof(stype)*8) return true; \
 		*c = (a << b); \
 		return (*c>>b != a); \
 	}
@@ -64,11 +66,16 @@ template<typename T> class safeint {
 	HANDLE_BASE(signed long,      unsigned long)
 	HANDLE_BASE(signed long long, unsigned long long)
 	
-#ifndef safeint_SELFTEST
 #define HANDLE_EXT(name, op, type, ext) \
 	static inline bool name(type a, type b, type* c) \
 	{ \
 		if (sizeof(type) == sizeof(ext)) return name((ext)a, (ext)b, (ext*)c); \
+		if (1 op 8 == 256) /* op is operator<< */ \
+		{ \
+			/* can go bigger than twice the base type's size */ \
+			if (a < 0 || b < 0) return true; \
+			if (b >= (type)sizeof(type)*8) return true; \
+		} \
 		if ((ext)a op (ext)b != (type)(a op b)) return true; \
 		*c = (ext)a op (ext)b; \
 		return false; \
@@ -90,22 +97,37 @@ HANDLE_EXT(lslov_i,<<, signed char,  signed int)
 HANDLE_EXT(lslov_i,<<, unsigned short, unsigned int)
 HANDLE_EXT(lslov_i,<<, unsigned char,  unsigned int)
 #undef HANDLE_EXT
-#else
-//allow forcing the non-casting algorithm, so an exhaustive search can be done over the full range of some types
-	HANDLE_BASE(signed short, unsigned short)
-	HANDLE_BASE(signed char,  unsigned char)
+	
+public:
+#ifndef __has_builtin
+#define __has_builtin(x) false
 #endif
-	
-#undef HANDLE_BASE
-	
-#if __GNUC__>=5
+#if __has_builtin(__builtin_add_overflow) || __GNUC__ >= 5
 #define addov_i __builtin_add_overflow
 #define subov_i __builtin_sub_overflow
 #define mulov_i __builtin_mul_overflow
 #endif
+	//Returns true if the result overflowed, otherwise false.
+	//lslov<uint32_t>(0, 32) returns overflow, since 0<<32 is undefined behavior.
+	//lslov<int32_t>(-1, 1) returns overflow for the same reason.
+	//If overflow, *c is undefined.
+	static bool addov(T a, T b, T* c) { return addov_i(a, b, c); }
+	static bool subov(T a, T b, T* c) { return subov_i(a, b, c); }
+	static bool mulov(T a, T b, T* c) { return mulov_i(a, b, c); }
+	static bool lslov(T a, T b, T* c) { return lslov_i(a, b, c); }
+#undef addov_i
+#undef subov_i
+#undef mulov_i
 	
-public:
-	static const T invalid = T(-1)<0 ? T(-1)<<(sizeof(T)*8-1) : T(-1);
+	//Should give results identical to the above.
+	static bool addov_nobuiltin(T a, T b, T* c) { return addov_i(a, b, c); }
+	static bool subov_nobuiltin(T a, T b, T* c) { return subov_i(a, b, c); }
+	static bool mulov_nobuiltin(T a, T b, T* c) { return mulov_i(a, b, c); }
+	static bool lslov_nobuiltin(T a, T b, T* c) { return lslov_i(a, b, c); }
+	
+#define addov_i you screwed up
+	
+	static const T invalid = T(-1)<0 ? std::numeric_limits<T>::min() : std::numeric_limits<T>::max();
 	//static const T min = T(-1)<0 ? invalid+1 : 0;
 	//static const T max = T(-1)<0 ? -min : T(-2);
 	
@@ -131,21 +153,21 @@ ALLOPER(OP)
 	{
 		if (!valid() || !b.valid()) return invalid;
 		T ret;
-		if (addov_i(val(), b.val(), &ret)) return invalid;
+		if (addov(val(), b.val(), &ret)) return invalid;
 		else return ret;
 	}
 	safeint<T> operator-(safeint<T> b)
 	{
 		if (!valid() || !b.valid()) return invalid;
 		T ret;
-		if (subov_i(val(), b.val(), &ret)) return invalid;
+		if (subov(val(), b.val(), &ret)) return invalid;
 		else return ret;
 	}
 	safeint<T> operator*(safeint<T> b)
 	{
 		if (!valid() || !b.valid()) return invalid;
 		T ret;
-		if (mulov_i(val(), b.val(), &ret)) return invalid;
+		if (mulov(val(), b.val(), &ret)) return invalid;
 		else return ret;
 	}
 	safeint<T> operator/(safeint<T> b)
@@ -182,7 +204,7 @@ ALLOPER(OP)
 	{
 		if (!valid() || !b.valid()) return invalid;
 		T ret;
-		if (lslov_i(val(), b.val(), &ret)) return invalid;
+		if (lslov(val(), b.val(), &ret)) return invalid;
 		else return ret;
 	}
 	safeint<T> operator>>(safeint<T> b)
@@ -222,14 +244,6 @@ ALLOPER(OP)
 		if (!valid() || !b.valid()) return false;
 		return val()>=b.val();
 	}
-	
-	static bool addov(T a, T b, T* c) { return addov_i(a, b, c); }
-	static bool subov(T a, T b, T* c) { return subov_i(a, b, c); }
-	static bool mulov(T a, T b, T* c) { return mulov_i(a, b, c); }
-	static bool lslov(T a, T b, T* c) { return lslov_i(a, b, c); }
-#undef addov_i
-#undef subov_i
-#undef mulov_i
 };
 
 #define OP(op, ope) \

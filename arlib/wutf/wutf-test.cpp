@@ -368,7 +368,7 @@ static void testOFN();
 //(4) The text on the button must be correct.
 //(4) The text on the button window's title must be correct.
 //(5) The message box title must be correct.
-//(6) The message box title must be correct.
+//(6) The message box body must be correct.
 //Explanation:
 //(1) CreateFileA(); a simple thing
 //(2) GetWindowTextA(); it returns strings, rather than taking them

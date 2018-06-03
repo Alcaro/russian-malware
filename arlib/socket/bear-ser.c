@@ -87,8 +87,8 @@ static void br_ssl_engine_freeze(br_ssl_engine_context* cc, const uint8_t * t0_i
 	if (cc->rng.digest_class == cc->mhash.impl[4]) cc->rng.digest_class = (void*)5;
 	if (cc->rng.digest_class == cc->mhash.impl[5]) cc->rng.digest_class = (void*)6;
 	
-	cc->cpu.dp -= ((uintptr_t)cc->dp_stack)/4; // /4 because these are u32 pointers
-	cc->cpu.rp -= ((uintptr_t)cc->rp_stack)/4;
+	cc->cpu.dp -= ((uintptr_t)cc->dp_stack)/sizeof(uint32_t);
+	cc->cpu.rp -= ((uintptr_t)cc->rp_stack)/sizeof(uint32_t);
 	// I can't find the buffer start, only a fixed point in it, so I can't be sure it won't subtract to null
 	// but it probably won't hit size 100000
 	if (cc->cpu.ip) cc->cpu.ip -= (uintptr_t)t0_init - 100000;
@@ -208,8 +208,8 @@ static void br_x509_minimal_freeze(br_x509_minimal_context* xc, const br_ssl_eng
 		if (xc->pkey.key.ec.q) xc->pkey.key.ec.q -= (uintptr_t)xc;
 	}
 	
-	xc->cpu.dp -= ((uintptr_t)xc->dp_stack)/4;
-	xc->cpu.rp -= ((uintptr_t)xc->rp_stack)/4;
+	xc->cpu.dp -= ((uintptr_t)xc->dp_stack)/sizeof(uint32_t);
+	xc->cpu.rp -= ((uintptr_t)xc->rp_stack)/sizeof(uint32_t);
 	if (xc->cpu.ip) xc->cpu.ip -= (uintptr_t)br_x509_minimal_get_default_t0() - 100000;
 	
 	if (xc->hbuf) xc->hbuf -= (uintptr_t)engine; // points to ssl_engine->pad if set

@@ -115,7 +115,7 @@ extern const unsigned sandbox_preload_len;
 
 int sandproc::preloader_fd()
 {
-	static int s_fd=0;
+	static int s_fd = 0;
 	if (s_fd) return s_fd;
 	if (lock_read_loose(&s_fd)) return s_fd;
 	
@@ -162,6 +162,7 @@ static int execveat(int dirfd, const char * pathname, char * const argv[], char 
 }
 
 
+#include"../os.h"
 pid_t sandproc::launch_impl(array<const char*> argv, array<int> stdio_fd)
 {
 	argv.prepend("[Arlib-sandbox]"); // ld-linux thinks it's argv[0] and discards the real one
@@ -199,7 +200,7 @@ printf("e%lu,%i\n",time_us_ne(),(int)pid);
 	//  calling thread and its entire address space, possibly including the states of mutexes and
 	//  other resources. Consequently, to avoid errors, the child process may only execute
 	//  async-signal-safe operations until such time as one of the exec functions is called.
-	//This applies to clone() too, per the above. In particular, malloc must be avoided.
+	//This applies to clone() too. In particular, malloc must be avoided.
 	
 	//we're the child
 	
@@ -220,7 +221,7 @@ printf("e%lu,%i\n",time_us_ne(),(int)pid);
 	struct rlimit rlim_as = { 1*1024*1024*1024, 1*1024*1024*1024 }; // this is the only one that affects mmap
 	require(setrlimit(RLIMIT_AS, &rlim_as));
 	
-	//why so many? because the rest of the pid is also included, which is often a few hundred
+	//why so many? because the rest of the root-namespace user is also included, which is often a few hundred
 	//http://elixir.free-electrons.com/linux/latest/source/kernel/fork.c#L1564
 	struct rlimit rlim_nproc = { 500, 500 };
 	require(setrlimit(RLIMIT_NPROC, &rlim_nproc));
@@ -229,7 +230,8 @@ printf("e%lu,%i\n",time_us_ne(),(int)pid);
 	require(prctl(PR_SET_PDEATHSIG, SIGKILL));
 	
 	//ensure parent is still alive
-	//have to check for a response, it's possible that parent died during the prctl but its socket still lives
+	//have to check for a response, it's possible that parent died before the prctl but its socket isn't deleted yet
+	//(I don't know in which order Linux executes process teardown action, nor whether it's guaranteed to remain secure)
 	struct broker_req req = { br_ping };
 	require(send(3, &req, sizeof(req), MSG_EOR));
 	struct broker_rsp rsp;

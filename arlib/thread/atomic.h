@@ -11,6 +11,7 @@
 //lock_xchg(T*, T)
 //lock_cmpxchg(T*, T, T)
 //All of them use acquire-release ordering. If you know what you're doing, you can append _acq, _rel or _loose.
+//(I have not been able to find any usecase for sequentially consistent ordering, or even any situation where it matters.)
 
 //All of these functions (except store) return the value before the operation.
 //(cmp)xchg obviously does, so to ease memorization, the others do too.

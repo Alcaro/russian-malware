@@ -14,6 +14,7 @@
 //    them; it will also fail-open if a new resource kind is introduced
 //- Many lockdown functions temporarily disable privileges, rather than completely delete them
 //- There's little or no documentation on which privileges are required for the operations I need
+//    (okay, Linux doesn't document that very clearly either, but strace exists and the kernel ABI is stable, so it can be reverse engineered)
 //- The lockdown functions are often annoying to call, involving variable-width arrays in
 //    structures, and LCIDs that likely vary between reboots
 //I cannot trust such a system. I only trust whitelists, like Linux seccomp.
@@ -47,7 +48,6 @@ class sandproc : public process {
 		map<string, mount> mounts;
 		map<string, int> tmpfiles;
 		map<string, int> mountfds;
-		mutex mut;
 		
 	public:
 		void grant_native_redir(string cpath, string ppath, int max_write = 0);
@@ -74,8 +74,6 @@ class sandproc : public process {
 	
 	sandcomm* conn = NULL;
 	
-	mutex mut;
-	
 	static int preloader_fd();
 	pid_t launch_impl(array<const char*> argv, array<int> stdio_fd) override;
 	
@@ -85,6 +83,9 @@ public:
 	//If the child process uses Arlib, this allows convenient communication with it.
 	//Must be called before starting the child, and exactly once (or never).
 	//Like process, the object is not thread safe.
+	//Note that if the child is the same as the current program,
+	// linked libraries (for example GTK+) must be available, even if they're not used.
+	//To avoid that, use a separate binary for the child. If you don't want an on-disk file, use fs_grant_callback and a memfd.
 	sandcomm* connect();
 	
 	//Only available before starting the child.
@@ -96,6 +97,9 @@ public:
 	
 	//Allows access to a file, or a directory and all of its contents. Usable both before and after launch().
 	//Can not be undone, the process may already have opened the file; to be sure, destroy the process.
+	//If 'path' ends with a /, it's assumed to be a directory; it, and every child, are made available.
+	//If 'path' does not end with a /, any child returns ENOTDIR.
+	//[TODO: verify the above]
 	void fs_grant(cstring path, int max_write = 0) { fs_grant_at(path, path, max_write); }
 	
 	//To allow moving the filesystem around. For example, /home/user/ can be mounted at /@CWD/.
@@ -126,6 +130,16 @@ public:
 		fs.report_access_violation = cb;
 	}
 	
+	//TODO: sandboxing of OpenGL programs
+	//to do that:
+	//- set DISPLAY to not Unix socket, to remove some hard-to-reason-about operations
+	//    some random reserved IP would work, for example 203.0.113.1 (from TEST-NET-3)
+	//    yes, it's slower, I don't think it's possible to be both safe and fast
+	//- whenever it tries to connect, sysemu intercepts it and sends to broker, who returns a socketpair
+	//- broker listens to socketpair, and connects to X (over Unix socket)
+	//    broker tolerates and passes on (after censoring irrelevant data) the minimum operations required to implement GtkPlug/GtkSocket,
+	//    plus everything on the GLX opcode; anything else causes child termination
+	
 	~sandproc();
 };
 
@@ -141,12 +155,12 @@ public:
 	//Calling release() on an already-released semaphore is undefined behavior.
 	//Multiple threads may be in these functions simultaneously (or in these plus something else),
 	// but only one thread per process per semaphore.
-	//They start start in the locked state.
+	//They start in the locked state.
 	void wait(int sem);
 	bool try_wait(int sem);
 	void release(int sem);
 	
-	//To allow synchronized(box.sem(1)) {}
+	//To allow synchronized(box->sem(1)) {}
 	struct semlock_t
 	{
 		sandcomm* parent; int id;

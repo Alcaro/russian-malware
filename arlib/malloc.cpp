@@ -48,7 +48,7 @@ anyptr calloc_check(size_t size, size_t count)
 {
 	void* ret=calloc(size, count);
 	debug(ret);
-	if (size && count && !ret) malloc_fail(size);
+	if (size && count && !ret) malloc_fail(size*count);
 	return ret;
 }
 
@@ -62,8 +62,13 @@ void malloc_assert(bool cond)
 	if (!cond) malloc_fail(0);
 }
 
+//these are the only libstdc++ functions I use. if I reimplement them, I don't need that library at all,
+// saving several hundred kilobytes and a DLL
+//(doesn't matter on linux where libstdc++ already exists)
+#ifdef _WIN32
 void* operator new(size_t n) { return malloc_check(n); }
 void* operator new[](size_t n) { return malloc_check(n); }
 void operator delete(void * p) { free(p); }
 extern "C" void __cxa_pure_virtual();
 extern "C" void __cxa_pure_virtual() { puts("__cxa_pure_virtual"); abort(); }
+#endif

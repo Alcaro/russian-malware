@@ -12,7 +12,7 @@ it's pointless to take risks
 
 expected output:
 some technical crap, along with 'HTTP/1.1 500 Domain Not Found', associated headers and body; then
-another 'HTTP/1.1 500 Domain Not Found', but this one's headers/body won't terminate
+another 'HTTP/1.1 500 Domain Not Found', but this one's headers/body are truncated
 */
 
 #define _POSIX_C_SOURCE 200112L

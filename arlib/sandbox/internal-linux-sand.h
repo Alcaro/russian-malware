@@ -18,7 +18,6 @@ enum broker_req_t {
 //static_assert(O_WRONLY==1);
 //static_assert(O_RDWR==2);
 //static_assert(O_ACCMODE==3);
-//#define O_UNLINK 3 // O_RDONLY=0, O_WRONLY=1, O_RDWR=2, 3=free for grabs
 
 #define SAND_PATHLEN 260 // same as Windows MAX_PATH, anything longer than this probably isn't useful
 

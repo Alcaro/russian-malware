@@ -187,8 +187,8 @@ namespace {
 		//stupid allocation granularity, its reason to exist (Alpha AXP) is long gone
 		//and it never had a reason to exist outside Alpha anyways, porting to a new processor is always more than just recompiling
 		//removing one of 9999 issues, especially one so rarely encountered as this, is not worth the trouble it causes
-		//judging by https://blogs.msdn.microsoft.com/oldnewthing/20031008-00/?p=42223 ,
-		// the allocation granularity is relevant for compiler/linker/etc authors only, who need to be aware of platform differences already
+		//judging by https://blogs.msdn.microsoft.com/oldnewthing/20031008-00/?p=42223 , the allocation granularity
+		// is relevant for compiler/linker/etc authors only, who need to be aware of platform differences already
 		//and even then, it's only relevant for file-backed executable pages, and as such, should only be enforced there
 		//it does not belong in the kernel
 		
@@ -211,7 +211,8 @@ namespace {
 			size_t round = (start&mmap_gran_mask);
 			start &= ~mmap_gran_mask;
 			
-			byte* ptr = (byte*)MapViewOfFile(mem, write ? (FILE_MAP_READ|FILE_MAP_WRITE) : FILE_MAP_READ, start>>16>>16, start&0xFFFFFFFF, len+round);
+			byte* ptr = (byte*)MapViewOfFile(mem, write ? (FILE_MAP_READ|FILE_MAP_WRITE) : FILE_MAP_READ,
+			                                 start>>16>>16, start&0xFFFFFFFF, len+round);
 			CloseHandle(mem);
 			
 			if (ptr) return arrayvieww<byte>(ptr+round, len);

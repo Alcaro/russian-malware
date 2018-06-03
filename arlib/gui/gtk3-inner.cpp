@@ -470,7 +470,7 @@ class widget_canvas;
 
 
 
-#if defined(ARGUIPROT_X11) && defined(AROPENGL)
+#if defined(ARGUIPROT_X11) && defined(ARLIB_OPENGL)
 struct widget_viewport::impl {
 	Window child;
 	

@@ -11,6 +11,7 @@ class HTML {
 	
 public:
 	//TODO: proper parser
+	//use these tests https://github.com/html5lib/html5lib-tests
 	static string entity_decode(cstring in, bool isattr = false)
 	{
 		string out;
@@ -28,5 +29,6 @@ public:
 	
 	//Enables all HTML entities, not just &amp; &apos; &gt; &lt; &quot;
 	//Affects every future HTML parser. Increases program size by approximately 25KB.
+	//May only be called once. Not thread safe; may not be called if any other thread is currently parsing HTML.
 	static void all_entities();
 };

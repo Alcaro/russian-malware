@@ -32,6 +32,37 @@ bool file::impl::default_unmapw(arrayvieww<byte> data)
 	return ok;
 }
 
+string file::resolve(cstring path)
+{
+	array<cstring> parts = path.csplit("/");
+	for (size_t i=0;i<parts.size();i++)
+	{
+		if (parts[i] == "" && i>0 && parts[i-1] != "")
+		{
+			parts.remove(i);
+			i--;
+			continue;
+		}
+		
+		if (parts[i] == ".")
+		{
+			parts.remove(i);
+			i--;
+			continue;
+		}
+		
+		if (parts[i] == ".." && i>0 && parts[i-1] != "..")
+		{
+			parts.remove(i);
+			if (i>0) parts.remove(i-1);
+			i-=2;
+			continue;
+		}
+	}
+	if (!parts) return ".";
+	return parts.join("/");
+}
+
 #ifdef ARLIB_TEST
 
 //criteria for READONLY_FILE:
@@ -41,6 +72,7 @@ bool file::impl::default_unmapw(arrayvieww<byte> data)
 //- the file must contain somewhat unpredictable data, no huge streams of the same thing like /dev/zero
 //- must be readable by everyone (assuming absense of sandboxes)
 //- must NOT be writable or deletable by this program
+//- no funny symbols in the name
 //recommended choice: some random executable
 
 //criteria for WRITABLE_FILE:
@@ -93,7 +125,17 @@ test("file reading", "array", "file")
 	
 	f.unmap(map);
 	
-	assert(!f.open(file::dirname(READONLY_FILE)+"")); // opening a directory should fail
+	assert(!f.open(file::dirname(READONLY_FILE))); // opening a directory should fail
+	assert(file::dirname(READONLY_FILE).endswith("/"));
+	
+#ifdef _WIN32
+	assert(SetCurrentDirectory("C:/Windows/"));
+	assert(f.open("notepad.exe"));
+	assert(f.open("C:/Windows/notepad.exe"));
+	//make sure these two are rejected, they're corrupt and have always been
+	assert(!f.open("C:notepad.exe"));
+	assert(!f.open("/Windows/notepad.exe"));
+#endif
 }
 
 test("file writing", "array", "file")
@@ -193,5 +235,17 @@ test("in-memory files", "array", "file")
 	assert(f.replace(bytes2));
 	for (int i=0;i<4;i++) assert_eq(bytes[i], i+1);
 	assert_eq(f.size(), 4);
+}
+
+test("file::resolve", "array,string", "")
+{
+	assert_eq(file::resolve("foo/bar/../baz"), "foo/baz");
+	assert_eq(file::resolve("./foo.txt"), "foo.txt");
+	assert_eq(file::resolve("."), ".");
+	assert_eq(file::resolve("../foo.txt"), "../foo.txt");
+	assert_eq(file::resolve(".."), "..");
+	assert_eq(file::resolve("foo//bar.txt"), "foo/bar.txt");
+	assert_eq(file::resolve("/foo.txt"), "/foo.txt");
+	assert_eq(file::resolve("//foo.txt"), "//foo.txt");
 }
 #endif
