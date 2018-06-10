@@ -88,8 +88,12 @@ public:
 	{
 		start = time_us_ne();
 	}
-	uint64_t time()
+	uint64_t us()
 	{
 		return time_us_ne() - start;
+	}
+	uint64_t ms()
+	{
+		return us() / 1000;
 	}
 };

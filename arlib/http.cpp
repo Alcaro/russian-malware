@@ -447,7 +447,7 @@ test("HTTP", "tcp,ssl", "http")
 #define CONTENTS2 "hello world 2"
 #define CONTENTS3 "hello world 3"
 #define CONTENTS4 "hello world 4"
-#define T puts(tostring(__LINE__));
+//#define T puts(tostring(__LINE__));
 #ifndef T
 #define T /* */
 #endif

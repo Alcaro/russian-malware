@@ -126,7 +126,7 @@ public:
 		memcpy(&val, bytes.ptr(), sizeof(val));
 	}
 	
-	operator T()
+	operator T() const
 	{
 		if (little == (ENDIAN==END_LITTLE)) return val;
 		else return end_swap(val);
@@ -139,6 +139,7 @@ public:
 	}
 	
 	arrayvieww<byte> bytes() { return arrayvieww<byte>((byte*)&val, sizeof(val)); }
+	arrayview<byte> bytes() const { return arrayview<byte>((byte*)&val, sizeof(val)); }
 }
 #ifdef __GNUC__
 __attribute__((__packed__))
@@ -156,7 +157,7 @@ template<typename T, bool little> class endian_core
 	uint8_t m_bytes[sizeof(T)];
 	
 public:
-	operator T()
+	operator T() const
 	{
 		if (little)
 		{

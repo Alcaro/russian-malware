@@ -38,6 +38,31 @@
 // row height, nor could I figure out what the nonsense I get from the tell-me-your-height functions
 // is, but I am sure that whatever tricks I will need to pull fits here.
 
+//Known unfixable bugs: 1
+//In the following simple program (or anything that detects scroll events)
+/*
+int main(int argc, char** argv)
+{
+	gtk_init(&argc, &argv);
+	
+	GtkTextView* view = GTK_TEXT_VIEW(gtk_text_view_new());
+	GtkScrolledWindow* scrollview = GTK_SCROLLED_WINDOW(gtk_scrolled_window_new(NULL, NULL));
+	gtk_container_add(GTK_CONTAINER(scrollview), GTK_WIDGET(view));
+	
+	GtkWindow* wnd = GTK_WINDOW(gtk_window_new(GTK_WINDOW_TOPLEVEL));
+	gtk_container_add(GTK_CONTAINER(wnd), GTK_WIDGET(scrollview));
+	
+	gtk_widget_show_all(GTK_WIDGET(wnd));
+	gtk_main();
+	return 0;
+}
+*/
+//the first scroll event on the scrollwindow is ignored. This is a bug in Gdk's XInput2 handler.
+//It can be worked around by calling gdk_disable_multidevice(), but that has the obvious drawbacks.
+//It seems to be related to scroll->last_value_valid as seen by _gdk_x11_device_xi2_get_scroll_delta.
+//Unfortunately, I don't think the bug is fixable; the XInput2 header doesn't seem to include any way to query the XIValuatorState.
+//The only option I can see is to assume it always starts at 0, but it would surprise me if that's true 100% of the time.
+
 //static GdkFilterReturn scanfilter(GdkXEvent* xevent, GdkEvent* event, gpointer data)
 //{
 //	XEvent* ev=(XEvent*)xevent;
