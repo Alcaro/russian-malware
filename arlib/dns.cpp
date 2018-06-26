@@ -246,10 +246,28 @@ void DNS::sock_cb()
 	if (stream.u16b() != 0x0001) goto fail; // type A
 	if (stream.u16b() != 0x0001) goto fail; // class IN
 	
-	//answer
 	if (read_name(stream) != q.domain) goto fail;
-	if (stream.remaining() < 4+4+2) return;
-	if (stream.u16b() != 0x0001) goto fail; // type A
+	if (stream.remaining() < 2+2+4+2) return;
+	
+	uint16_t type;
+	type = stream.u16b();
+	if (type == 0x0005) // type CNAME
+	{
+		if (stream.u16b() != 0x0001) goto fail; // class IN
+		stream.u32b(); // TTL, ignore
+		
+		size_t namelen;
+		namelen = stream.u16b();
+		if (stream.remaining() < namelen) goto fail;
+		string cname = read_name(stream); // canonical name
+		
+		ancount--;
+		string nextrecord = read_name(stream); // new relevant name
+		if (nextrecord != cname) goto fail;
+		
+		type = stream.u16b();
+	}
+	if (type != 0x0001) goto fail; // type A
 	if (stream.u16b() != 0x0001) goto fail; // class IN
 	
 	stream.u32b(); // TTL, ignore
@@ -280,7 +298,7 @@ test("DNS", "udp,string", "dns")
 	assert(isdigit(DNS::default_resolver()[0])); // TODO: fails on IPv6 ::1
 	
 	DNS dns(loop);
-	int await = 5;
+	int await = 6;
 	dns.resolve("google-public-dns-b.google.com", bind_lambda([&](string domain, string ip)
 		{
 			await--; if (await == 0) loop->exit(); // put this above assert, otherwise it deadlocks
@@ -311,6 +329,13 @@ test("DNS", "udp,string", "dns")
 			assert_eq(domain, "localhost");
 			// silly way to say 'can be either of those, but must be one of them', but it's the best I can find
 			if (ip != "::1") assert_eq(ip, "127.0.0.1");
+		}));
+	dns.resolve("stacked.muncher.se", bind_lambda([&](string domain, string ip) // random domain that's on a CNAME
+		{
+			await--; if (await == 0) loop->exit();
+			assert_eq(domain, "stacked.muncher.se");
+			// that IP is dynamic, just accept anything
+			assert_neq(ip, "");
 		}));
 	
 	if (await != 0) loop->enter();

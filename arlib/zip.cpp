@@ -3,50 +3,12 @@
 #include "test.h"
 #include "crc32.h"
 #include "endian.h"
+#include "os.h"
 #define MINIZ_HEADER_FILE_ONLY
 #include "deps/miniz.c"
-#include <time.h>
-#undef timegm
 
 //files in directories are normal files with / in the name
 //directories themselves are represented as size-0 files with names ending with /, no special flags except minimum version
-
-//similar to mktime, but UTC timezone
-//from http://stackoverflow.com/a/11324281
-static time_t timegm(register struct tm * t)
-/* struct tm to seconds since Unix epoch */
-{
-    register long year;
-    register time_t result;
-#define MONTHSPERYEAR   12      /* months per calendar year */
-    static const int cumdays[MONTHSPERYEAR] =
-        { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334 };
-
-    /*@ +matchanyintegral @*/
-    year = 1900 + t->tm_year + t->tm_mon / MONTHSPERYEAR;
-    result = (year - 1970) * 365 + cumdays[t->tm_mon % MONTHSPERYEAR];
-    result += (year - 1968) / 4;
-    result -= (year - 1900) / 100;
-    result += (year - 1600) / 400;
-    if ((year % 4) == 0 && ((year % 100) != 0 || (year % 400) == 0) &&
-        (t->tm_mon % MONTHSPERYEAR) < 2)
-        result--;
-    result += t->tm_mday - 1;
-    result *= 24;
-    result += t->tm_hour;
-    result *= 60;
-    result += t->tm_min;
-    result *= 60;
-    result += t->tm_sec;
-    if (t->tm_isdst == 1)
-        result -= 3600;
-    /*@ -matchanyintegral @*/
-    return (result);
-}
-
-#ifdef _WIN32 // surprisingly, this is safe - gmtime() returns a thread local
-#define gmtime_r(a,b) (*(b)=*gmtime(a))
-#endif
 
 static time_t fromdosdate(uint32_t date)
 {
@@ -361,7 +323,7 @@ bool zip::strascii(cstring s)
 {
 	for (size_t i=0;i<s.length();i++)
 	{
-		if (s[i]>=128 || s[i]<0) return false;
+		if (s[i]>=128 || s[i]<32) return false;
 	}
 	return true;
 }

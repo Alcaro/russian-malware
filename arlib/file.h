@@ -123,6 +123,25 @@ public:
 		pos += ret;
 		return ret;
 	}
+	array<byte> read(size_t len)
+	{
+		array<byte> ret;
+		ret.resize(len);
+		size_t newlen = core->pread(ret, pos);
+		pos += newlen;
+		ret.resize(newlen);
+		return ret;
+	}
+	string readt(size_t len)
+	{
+		string ret;
+		arrayvieww<byte> bytes = ret.construct(len);
+		size_t newlen = core->pread(bytes, pos);
+		pos += newlen;
+		
+		if (newlen == bytes.size()) return ret;
+		else return ret.substr(0, newlen);
+	}
 	bool write(arrayview<byte> data)
 	{
 		bool ok = core->pwrite(data, pos);
@@ -207,11 +226,10 @@ private:
 	};
 public:
 	
-	//Returns all items in the given directory path, as absolute paths.
-	static array<string> listdir(cstring path);
+	static array<string> listdir(cstring path); //Returns all items in the given directory, as absolute paths.
+	static bool mkdir(cstring path); // Returns whether that's now a directory. If it existed already, returns true; if a file, false.
 	static bool unlink(cstring filename); // Returns whether the file is now gone. If the file didn't exist, returns true.
-	//If the input path is a directory, the basename is blank.
-	static string dirname(cstring path);
+	static string dirname(cstring path); //If the input path is a directory, the basename is blank.
 	static string basename(cstring path);
 	
 	//Returns whether the path is absolute.
@@ -226,7 +244,7 @@ public:
 		return path[0]=='/';
 #elif defined(_WIN32)
 		if (path[0]=='/' && path[1]=='/') return true;
-		if (path[1]==':' && path[2]=='/') return true;
+		if (path[0]!='\0' && path[1]==':' && path[2]=='/') return true;
 		return false;
 #else
 #error unimplemented
@@ -245,6 +263,7 @@ public:
 	//Returns the current working directory.
 	static cstring cwd();
 private:
+	static bool mkdir_fs(cstring filename);
 	static bool unlink_fs(cstring filename);
 };
 

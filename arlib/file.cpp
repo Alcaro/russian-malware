@@ -75,7 +75,7 @@ string file::resolve(cstring path)
 //- no funny symbols in the name
 //recommended choice: some random executable
 
-//criteria for WRITABLE_FILE:
+//criteria for WRITABLE_FILE and CREATABLE_DIR:
 //- must not exist under normal operation
 //- directory must exist
 //- directory must be writable by unprivileged users
@@ -84,10 +84,12 @@ string file::resolve(cstring path)
 #define READONLY_FILE "C:/Windows/notepad.exe" // screw anything where the windows directory isn't on C:
 #define READONLY_FILE_HEAD "MZ"
 #define WRITABLE_FILE "C:/Temp/arlib-selftest.txt"
+#define CREATABLE_DIR "C:/Temp/arlib-selftest/"
 #else
 #define READONLY_FILE "/bin/sh"
 #define READONLY_FILE_HEAD "\x7F""ELF"
 #define WRITABLE_FILE "/tmp/arlib-selftest.txt"
+#define CREATABLE_DIR "/tmp/arlib-selftest/"
 #endif
 
 test("file reading", "array", "file")
@@ -247,5 +249,16 @@ test("file::resolve", "array,string", "")
 	assert_eq(file::resolve("foo//bar.txt"), "foo/bar.txt");
 	assert_eq(file::resolve("/foo.txt"), "/foo.txt");
 	assert_eq(file::resolve("//foo.txt"), "//foo.txt");
+}
+
+test("file::mkdir", "array,string", "")
+{
+	rmdir(CREATABLE_DIR); // TODO: this is unix only
+	
+	assert_eq(file::mkdir(CREATABLE_DIR), true);
+	assert_eq(file::mkdir(CREATABLE_DIR), true);
+	assert_eq(file::mkdir(READONLY_FILE), false);
+	
+	rmdir(CREATABLE_DIR);
 }
 #endif

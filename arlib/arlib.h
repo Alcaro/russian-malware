@@ -5,6 +5,7 @@
 
 //WARNING: Arlib comes with zero stability guarantees. It can and will change in arbitrary ways, for any reason and at any time.
 //if anyone whines about antivirus, https://arstechnica.com/information-technology/2017/01/antivirus-is-bad/
+//or https://blogs.msdn.microsoft.com/oldnewthing/20180615-00/?p=99025
 
 #pragma once
 #include "global.h"

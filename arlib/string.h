@@ -36,7 +36,7 @@ class cstring {
 			uint8_t m_inline_len;
 		};
 		struct {
-			uint8_t* m_data; // if owning, there's also a int refcount before this pointer; if not owning, no such thing
+			uint8_t* m_data;
 			uint32_t m_len;
 			bool m_nul; // whether the string is properly terminated (always true if owning)
 			uint8_t reserved; // matches the last byte of the inline data; never ever access this
@@ -345,7 +345,6 @@ class string : public cstring {
 		ptr()[index] = val;
 	}
 	
-	//TODO: arrayview
 	void append(arrayview<uint8_t> newdat)
 	{
 		if (newdat.ptr() >= (uint8_t*)ptr() && newdat.ptr() < (uint8_t*)ptr()+length())

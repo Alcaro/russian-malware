@@ -73,6 +73,7 @@
 //- Windows filenames are limited to ~260 characters; but I believe functions that return filenames
 //    will count the UTF-8 bytes. (The ones taking filename inputs should work up to 260 UTF-16
 //    codepoints.)
+//- Buffer sizes may be underestimated. <https://blogs.msdn.microsoft.com/oldnewthing/20180608-00/?p=98945>
 //- According to Larry Osterman <https://blogs.msdn.microsoft.com/larryosterman/2007/03/20/other-fun-things-to-do-with-the-endpointvolume-interfaces/>,
 //    "all new APIs are unicode only" (aka UTF-16).
 //- The UTF8/16 converter is not identical to MultiByteToWideChar(CP_UTF8):

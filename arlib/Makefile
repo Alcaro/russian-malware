@@ -83,7 +83,6 @@ CXX = g++
 CXXFLAGS = $(CFLAGS)
 LD = g++
 LFLAGS =
-OBJNAME =
 CCXXFLAGS = -fvisibility=hidden -Wall -Wmissing-declarations -pipe
 #doesn't seem to do anything, and CFLAGS is used for c++ too which throws warnings all over
 #CFLAGS += -Wmissing-prototypes

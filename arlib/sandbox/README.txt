@@ -355,10 +355,12 @@ The easy case: Create a request packet (a constant-size struct), send() it to th
 
 Except it's not that easy; open() can take a relative path. To handle this, the emulator keeps track
  of the current working directory (by intercepting chdir, and getting the initial value from an
- environment variable) and turns relative paths into absolute ones.
+ environment variable) and turns relative paths into absolute ones. For simplicity, the sandbox also
+ removes all . and .. components.
 
-This means the sandbox may behave funnily if its current working directory is moved, but I can't
- think of any usecase where this would matter.
+This means the sandbox may behave funnily if its current working directory is moved, or if you
+ follow a symlink then ask for the parent directory, but I can't think of any usecases where this
+ would matter.
 
 There are, of course, other file-handling functions, such as stat(). The obvious implementation
  would be teaching the broker about them too, but I want to minimize the attack surface, so it's

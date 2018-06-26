@@ -163,7 +163,7 @@ namespace {
 file::impl* file::open_impl_fs(cstring filename, mode m)
 {
 	static const int flags[] = { O_RDONLY, O_RDWR|O_CREAT, O_RDWR, O_RDWR|O_CREAT|O_TRUNC, O_RDWR|O_CREAT|O_EXCL };
-	int fd = ::open(filename.c_str(), flags[m]|O_CLOEXEC, 0666);
+	int fd = ::open(filename.c_str(), flags[m]|O_CLOEXEC, 0644);
 	if (fd<0) return NULL;
 	
 	struct stat st;
@@ -175,6 +175,19 @@ file::impl* file::open_impl_fs(cstring filename, mode m)
 	}
 	
 	return new file_unix(fd);
+}
+
+bool file::mkdir_fs(cstring filename)
+{
+	int ret = ::mkdir(filename.c_str(), 0755);
+	if (ret==0) return true;
+	if (ret==-1 && errno==EEXIST)
+	{
+		struct stat st;
+		if (lstat(filename.c_str(), &st) < 0) return false;
+		return (S_ISDIR(st.st_mode));
+	}
+	return false;
 }
 
 bool file::unlink_fs(cstring filename)

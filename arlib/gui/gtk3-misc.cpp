@@ -451,6 +451,17 @@ bool file::unlink(cstring filename)
 	return ok;
 }
 
+bool file::mkdir(cstring filename)
+{
+	if (g_path_is_absolute(filename.c_str())) return mkdir_fs(filename);
+	
+	GFile* file = g_file_new_for_commandline_arg(filename.c_str());
+	g_file_make_directory(file, NULL, NULL);
+	bool ret = (g_file_query_file_type(file, G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL) == G_FILE_TYPE_DIRECTORY);
+	g_object_unref(file);
+	return ret;
+}
+
 
 
 //for windows support, https://developer.gnome.org/glib/stable/glib-IO-Channels.html#g-io-channel-win32-new-socket

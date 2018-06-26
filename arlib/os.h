@@ -1,5 +1,6 @@
 #pragma once
 #include "global.h"
+#include <time.h>
 
 #ifdef __unix__
 #define DYLIB_EXT ".so"
@@ -97,3 +98,11 @@ public:
 		return us() / 1000;
 	}
 };
+
+#ifdef _WIN32 // surprisingly, this is safe - gmtime() returns a thread local
+#define gmtime_r(a,b) (*(b)=*gmtime(a))
+#endif
+
+#undef timegm
+//similar to mktime, but UTC timezone
+extern "C" time_t timegm(struct tm * t);
