@@ -146,7 +146,7 @@ static inline void update_auxv(Elf64_auxv_t* auxv, uint8_t* base, Elf64_Ehdr* eh
 {
 	for (int i=0;auxv[i].a_type != AT_NULL;i++)
 	{
-		//don't think ld-linux uses PHDR or PHNUM, but why not
+		//I don't think ld-linux uses PHDR or PHNUM, but why not
 		if (auxv[i].a_type == AT_PHDR)
 		{
 			auxv[i].a_un.a_val = (uintptr_t)base + ehdr->e_phoff;

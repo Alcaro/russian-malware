@@ -388,7 +388,7 @@ void Discord::del_user(cstring guild_id, cstring user_id)
 
 void Discord::User::fetch(function<void(User)> callback)
 {
-puts("PARTIAL:NAME="+impl().username);
+//puts("PARTIAL:NAME="+impl().username);
 puts("PARTIAL:PARTIAL="+tostring(partial()));
 	if (!partial())
 	{
@@ -398,21 +398,19 @@ puts("PARTIAL:SHORTCIRCUIT");
 	}
 puts("PARTIAL:FULLFETCH");
 	
-	class x {
-		Discord* m_parent;
-		function<void(User)> callback;
-	public:
-		x(Discord* m_parent, function<void(User)> callback) : m_parent(m_parent), callback(callback) {}
-		void cb_fn(HTTP::rsp r)
+	Discord* m_parent = this->m_parent; // copy these, 'this' is a use-after-free in the lambda
+	string m_id = this->m_id;
+	m_parent->http("GET", "/users/"+m_id, bind_lambda([m_parent,m_id,callback](HTTP::rsp r)
 		{
 			JSON json(r.text());
+			if (!json["id"])
+			{
+				callback(User(NULL, m_id, ""));
+				return;
+			}
 			m_parent->set_user_inner(json);
 			callback(m_parent->user_from_id(json["id"]));
-			delete this;
-		}
-	};
-	
-	m_parent->http("GET", "/users/"+m_id, bind_ptr(&x::cb_fn, new x(m_parent, callback)));
+		}));
 }
 
 string Discord::getdate()

@@ -150,7 +150,7 @@ public:
 		
 		void send(cstring text);
 		
-		bool partial() { return impl().username==""; }
+		bool partial() { return !m_parent->users.contains(m_id) || impl().username==""; }
 		//Fetches account data about this user.
 		void fetch(function<void(User)> callback);
 		

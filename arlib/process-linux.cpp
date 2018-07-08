@@ -13,19 +13,72 @@
 #include "set.h"
 #include "file.h"
 
+//having the SIGCHLD handler gracefully deal with arbitrary false positives is quite annoying, there are so many different cases
+//
+//if thread t1 calls process::launch(), the returned object needs to know when the process dies; a map of PID to process* is needed
+//
+//if t1 calls process::launch(), but the child exits before its PID is added to the above map,
+//  the process object needs to be told about this; a tombstone node has to be added to the map, and checked when adding the child
+//
+//if t1 calls system(), the SIGCHLD handler will be called, and a tombstone will be added - but there will be no associated process object
+//  to plug that memory leak, the SIGCHLD handler needs to know whether any thread is in process::launch(), and if not, discard the tombstone
+//
+//if t1 enters process::launch(), and thread t2 calls system(), the SIGCHLD handler will see that a fork is in process and create a tombstone
+//  but t1 is looking for another PID, so the tombstone will live forever
+//  therefore, the SIGCHLD handler needs to check for and delete all tombstones once there are no remaining process::launch() calls
+//  (it can't be more aggressive, it won't know which PID t1 will want)
+//
+//if t1 enters process::launch(), thread t2 calls system(), and they use the same PID, t1 will see the tombstone,
+//  falsely be told that its child is dead, and will waitpid(); to fix THAT one, the waitpid() call has to use WNOHANG,
+//  and if the child is still alive, tell the SIGCHLD handler to keep monitoring that PID
+//
+//with that many increasingly-complex and hard-to-test cases, it is possible I missed a few
+//
+//
+//if it gets too unmaintainable, I can switch to a completely different configuration that wouldn't need tombstones:
+//keep an array or linked list of pid_t, and use clone(CLONE_PARENT_SETTID) instead of fork().
+//if we get a SIGCHLD for anything not in that list, ignore it. since CLONE_PARENT_SETTID is processed before clone() returns,
+//  and SIGCHLD can't be called before that, this is safe
+//however, I can't find any holes in the current setup, and it's easier to port to other Unix-likes than clone()
+//
+//
+//alternatively, I could force the child process to stay alive until the parent is ready
+//  to do this, create a pipe, share it with the child, child reads a byte and closes it
+//  parent writes a byte and closes only once the PID is added to the list
+//
+//
+//conclusion: signal handlers suck
+//
+//see also
+//https://www.macieira.org/blog/2012/07/forkfd-part-1-launching-processes-on-unix/
+//https://www.macieira.org/blog/2012/07/forkfd-part-2-finding-out-that-a-child-process-exited-on-unix/
+//https://www.macieira.org/blog/2012/07/forkfd-part-3-qprocesss-requirements-and-current-solution/
+//https://www.macieira.org/blog/2012/07/forkfd-part-4-proposed-solutions/
+
+
 namespace sigchld {
-	static int pipe[2] = {-1, -1};
+	static int pipe[2] = { -1, -1 };
 	
 	static mutex mut;
-	//contains NULL if the pid died before being added here
-	static map<pid_t, process*> owners;
+	static map<pid_t, process*> owners; // contains NULL if the pid died before being added here
+	static size_t n_exp_tombst; // number of processes currently being spawned, which have not been added to 'owners'
+	static size_t n_act_tombst; // number of NULLs in 'owners'
 	
+	process::sigaction_t next_handler;
+	
+	//can be called on arbitrary runloops
 	static void handler_nat(int signo, siginfo_t* info, void* context)
 	{
+		static_assert(sizeof(pid_t) <= PIPE_BUF);
+		
 		int bytes = write(pipe[1], &info->si_pid, sizeof(pid_t));
-		if (bytes != sizeof(pid_t)) abort();
+		if (bytes != sizeof(pid_t)) abort(); // will always succeed, since pid_t is smaller than PIPE_BUF
+		// unless the buffer is full, but that requires having hundreds of simultaneous pids in that pipe
+		
+		next_handler(signo, info, context);
 	}
 	
+	//can be called on arbitrary runloops
 	static void on_readable(uintptr_t pipe_0)
 	{
 		//keep this outside the mutex, no need to race on it if we'd just get EAGAIN
@@ -33,25 +86,28 @@ namespace sigchld {
 		pid_t pid;
 		int bytes = read(pipe_0, &pid, sizeof(pid));
 		if (bytes == -1 && errno == EAGAIN) return;
-		if (bytes != sizeof(pid)) abort();
+		if (bytes != sizeof(pid)) abort(); // will always succeed, all writes are exactly pid_t bytes which is atomic
 		
 		synchronized(mut)
 		{
 			process* proc = owners.get_or(pid, NULL);
-			if (proc)
+			if (proc && proc->_on_sigchld_offloop())
 			{
-				proc->_on_sigchld_offloop();
 				owners.remove(pid);
 			}
-			else
+			else if (n_exp_tombst)
 			{
+				//if anything is currently being forked, remember that this one is dead already
 				owners.insert(pid, NULL);
+				n_act_tombst++;
 			}
+			//else something else is forking, don't worry about memorizing that
 		}
 	}
 	
 //public:
 	//this must be called before the pid exists
+	//all runloops are told to watch the sigchld fd; this is unusual, but safe
 	static void init(runloop* loop)
 	{
 		synchronized(mut)
@@ -62,12 +118,18 @@ namespace sigchld {
 				
 				//do this before writing sigchld_pipe
 				struct sigaction act;
+				struct sigaction act_prev;
 				act.sa_sigaction = handler_nat;
 				sigemptyset(&act.sa_mask);
 				//unbounded recursion (SA_NODEFER) is bad, but the alternative is trying to waitpid every single child as soon as one dies
-				//and it's not unbounded anyways, it's bounded by number of child processes, which won't go over ~1000 and stack can handle that.
+				//and it's not unbounded anyways, it's bounded by number of child processes, which won't go very high. stack can handle that
 				act.sa_flags = SA_SIGINFO|SA_NODEFER|SA_NOCLDSTOP;
-				sigaction(SIGCHLD, &act, NULL);
+				sigaction(SIGCHLD, &act, &act_prev);
+				
+				if ((funcptr)act_prev.sa_sigaction == (funcptr)SIG_DFL || (funcptr)act_prev.sa_sigaction == (funcptr)SIG_IGN)
+					next_handler = [](int,siginfo_t*,void*){};
+				else
+					next_handler = act_prev.sa_sigaction;
 			}
 #ifdef ARLIB_THREAD
 			loop->prepare_submit();
@@ -76,25 +138,55 @@ namespace sigchld {
 		}
 	}
 	
+	//Must be called for every listen(), before forking.
+	static void listen_begin()
+	{
+		synchronized(mut)
+		{
+			n_exp_tombst++;
+		}
+	}
+	
+	//Must be called for every listen_begin(). If the fork fails, call sigchld::listen(-1, NULL).
 	static void listen(pid_t pid, process* proc)
 	{
 		synchronized(mut)
 		{
-			if (owners.contains(pid))
+			if (pid != (pid_t)-1)
 			{
-				proc->_on_sigchld_offloop();
-				owners.remove(pid);
+				if (owners.contains(pid) && proc->_on_sigchld_offloop())
+				{
+					owners.remove(pid);
+					n_act_tombst--;
+				}
+				else
+				{
+					owners.insert(pid, proc);
+				}
 			}
-			else
+			n_exp_tombst--;
+			if (!n_exp_tombst)
 			{
-				owners.insert(pid, proc);
+				// if that's the last process::launch(), discard tombstones
+				
+				while (n_act_tombst)
+				{
+					for (auto& pair : owners)
+					{
+						if (!pair.value)
+						{
+							owners.remove(pair.key);
+							n_act_tombst--;
+						}
+					}
+				}
 			}
 		}
 	}
 	
 	static void process()
 	{
-		//reading pipe[0] without holding the mutex is safe, it's only written by init() which has been called long ago
+		//grabbing pipe[0] without holding the mutex is safe, it's only written by init() which has been called long ago
 		struct pollfd pfd = { pipe[0], POLLIN, 0 };
 		poll(&pfd, 1, 1); // timeout to ensure no glitches if some other runloop got here first
 		on_readable(pipe[0]);
@@ -279,6 +371,7 @@ bool process::launch(cstring prog, arrayview<string> args)
 	fds.append(ch_stderr ? ch_stderr->pipe[1] : open("/dev/null", O_WRONLY));
 	
 	
+	sigchld::listen_begin();
 	//can poke this->pid/exitcode freely before calling sigchld::listen
 	this->pid = launch_impl(std::move(argv), fds);
 	
@@ -295,6 +388,7 @@ bool process::launch(cstring prog, arrayview<string> args)
 	if (this->pid < 0)
 	{
 		this->exitcode = 127; // the usual linux 'couldn't exec' error
+		sigchld::listen(-1, NULL);
 		return false;
 	}
 	
@@ -330,11 +424,12 @@ void process::terminate()
 //- terminate returns
 //- onexit call is done - on a now dead object
 //therefore, onexit callback must be a separate allocation that outlives the process
-void process::_on_sigchld_offloop()
+//returns whether the child has actually exited
+bool process::_on_sigchld_offloop()
 {
 	//this must be off-loop, the correct runloop could be stuck in process::terminate()
 	int status;
-	waitpid(this->pid, &status, 0);
+	if (waitpid(this->pid, &status, WNOHANG) < 0) return false;
 	
 	if (onexit_cb)
 	{
@@ -347,12 +442,14 @@ void process::_on_sigchld_offloop()
 		lock_write(&this->exitcode, status);
 		lock_write(&this->pid, -1);
 		onexit_cb->invoke_unref(); // if Arlib is configured single threaded, we're always on the right thread, so this is safe
-		return; // no point writing twice
+		return true; // no point writing twice
 #endif
 	}
 	
 	lock_write(&this->exitcode, status);
 	lock_write(&this->pid, -1);
+	
+	return true;
 }
 
 void process::onexit(function<void(int)> cb)

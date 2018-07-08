@@ -7,13 +7,15 @@
 
 //these aren't needed with modern compilers, according to
 //https://stackoverflow.com/questions/8132399/how-to-printf-uint64-t-fails-with-spurious-trailing-in-format
+//from what I can gather, they're only used for some random ancient MinGW versions
 //#define __STDC_LIMIT_MACROS //how many of these stupid things exist
-//#define __STDC_FORMAT_MACROS//if I include a header, it's because I want to use its contents
+//#define __STDC_FORMAT_MACROS // if I include a header, it's because I want to use its contents
 //#define __STDC_CONSTANT_MACROS
 #define _USE_MATH_DEFINES // needed for M_PI on Windows
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <limits.h>
 #include <inttypes.h>
@@ -26,7 +28,7 @@
 #    define NTDDI_VERSION NTDDI_VISTA
 #  elif _WIN32_WINNT < 0x0600
 #    undef _WIN32_WINNT
-#    define _WIN32_WINNT 0x0502//0x0501 excludes SetDllDirectory, so I need to put it at 0x0502
+#    define _WIN32_WINNT 0x0502 // 0x0501 excludes SetDllDirectory, so I need to put it at 0x0502
 #    define NTDDI_VERSION NTDDI_WS03 // actually NTDDI_WINXPSP2, but MinGW sddkddkver.h gets angry about that
 #  endif
 #  define _WIN32_IE 0x0600
@@ -82,7 +84,6 @@ typedef uint8_t byte; // TODO: remove
 
 //have to include these too, they include <stddef.h> and define NULL to __null, which doesn't resolve overloads properly
 #include <string.h>
-#include <stdlib.h>
 #ifdef __unix__ // fuck this shit, behave sanely gcc
 #include <unistd.h>
 #include <pthread.h>
@@ -193,33 +194,32 @@ template<> struct static_assert_t<false> {};
 
 #ifdef __cplusplus
 class anyptr {
-void* data;
+	void* data;
 public:
-template<typename T> anyptr(T* data_) { data=(void*)data_; }
-template<typename T> operator T*() { return (T*)data; }
-template<typename T> operator const T*() const { return (const T*)data; }
+	template<typename T> anyptr(T* data_) { data = (void*)data_; }
+	template<typename T> operator T*() { return (T*)data; }
+	template<typename T> operator const T*() const { return (const T*)data; }
 };
 #else
 typedef void* anyptr;
 #endif
 
 
-#include <stdlib.h> // needed because otherwise I get errors from malloc_check being redeclared
-#ifdef __GNUC__
-#define ATTR_MALLOC // __attribute__((__malloc__))
-#else               // keeps throwing 'warning: '__malloc__' attribute ignored [-Wattributes]' for some unclear reason
-#define ATTR_MALLOC
-#endif
-anyptr malloc_check(size_t size) ATTR_MALLOC;
-anyptr try_malloc(size_t size) ATTR_MALLOC;
+void malloc_fail(size_t size);
+
+inline anyptr malloc_check(size_t size) { void* ret = malloc(size); if (size && !ret) malloc_fail(size); return ret; }
+inline anyptr try_malloc(size_t size) { return malloc(size); }
 #define malloc malloc_check
-anyptr realloc_check(anyptr ptr, size_t size);
-anyptr try_realloc(anyptr ptr, size_t size);
+
+inline anyptr realloc_check(anyptr ptr, size_t size) { void* ret = realloc(ptr, size); if (size && !ret) malloc_fail(size); return ret; }
+inline anyptr try_realloc(anyptr ptr, size_t size) { return realloc(ptr, size); }
 #define realloc realloc_check
-anyptr calloc_check(size_t size, size_t count) ATTR_MALLOC;
-anyptr try_calloc(size_t size, size_t count) ATTR_MALLOC;
+
+inline anyptr calloc_check(size_t size, size_t count) { void* ret = calloc(size, count); if (size && count && !ret) malloc_fail(size*count); return ret; }
+inline anyptr try_calloc(size_t size, size_t count) { return calloc(size, count); }
 #define calloc calloc_check
-void malloc_assert(bool cond); // if the condition is false, the malloc failure handler is called
+
+inline void malloc_assert(bool cond) { if (!cond) malloc_fail(0); }
 
 
 //if I cast it to void, that means I do not care, so shut the hell up about warn_unused_result
@@ -308,9 +308,9 @@ class autoptr : nocopy {
 public:
 	autoptr() : ptr(NULL) {}
 	autoptr(T* ptr) : ptr(ptr) {}
-	autoptr(autoptr<T>&& other) { ptr=other.ptr; other.ptr=NULL; }
-	autoptr<T>& operator=(T* ptr) { delete this->ptr; this->ptr=ptr; return *this; }
-	autoptr<T>& operator=(autoptr<T>&& other) { delete this->ptr; ptr=other.ptr; other.ptr=NULL; return *this; }
+	autoptr(autoptr<T>&& other) { ptr = other.ptr; other.ptr = NULL; }
+	autoptr<T>& operator=(T* ptr) { delete this->ptr; this->ptr = ptr; return *this; }
+	autoptr<T>& operator=(autoptr<T>&& other) { delete this->ptr; ptr = other.ptr; other.ptr = NULL; return *this; }
 	T* release() { T* ret = ptr; ptr = NULL; return ret; }
 	T* operator->() { return ptr; }
 	T& operator*() { return *ptr; }
@@ -328,9 +328,9 @@ class autofree : nocopy {
 public:
 	autofree() : ptr(NULL) {}
 	autofree(T* ptr) : ptr(ptr) {}
-	autofree(autofree<T>&& other) { ptr=other.ptr; other.ptr=NULL; }
-	autofree<T>& operator=(T* ptr) { free(this->ptr); this->ptr=ptr; return *this; }
-	autofree<T>& operator=(autofree<T>&& other) { free(this->ptr); ptr=other.ptr; other.ptr=NULL; return *this; }
+	autofree(autofree<T>&& other) { ptr = other.ptr; other.ptr = NULL; }
+	autofree<T>& operator=(T* ptr) { free(this->ptr); this->ptr = ptr; return *this; }
+	autofree<T>& operator=(autofree<T>&& other) { free(this->ptr); ptr = other.ptr; other.ptr = NULL; return *this; }
 	T* release() { T* ret = ptr; ptr = NULL; return ret; }
 	T* operator->() { return ptr; }
 	T& operator*() { return *ptr; }

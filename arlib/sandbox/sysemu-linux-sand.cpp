@@ -570,7 +570,8 @@ static long syscall_emul(greg_t* regs, int errno)
 	//this one returns all the way out of a signal handler,
 	// and execve() allocates memory and does about a dozen syscalls
 	//it would be possible to implement vfork by rewriting the register list, but that wouldn't solve execve
-	//instead, it's a lot easier to just implement vfork as normal fork
+	//instead, it's a lot easier to just implement vfork as normal fork; it's slower than a real vfork, but
+	// I can't think of any plausible program where vfork can't be replaced with fork
 	//(would've been easier if posix_spawn was a syscall)
 	case __NR_vfork: return clone(SIGCHLD, 0, NULL, NULL, 0);
 	WRAP3(execve, char*, char**, char**);

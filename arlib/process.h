@@ -7,9 +7,12 @@
 
 //On Linux, you must be careful about creating child processes through other functions. Make sure
 // they don't fight over any process-global resources.
-//Said resources are waitpid(-1) and SIGCHLD. This one requires the latter, and requires that
-// nothing uses the former.
-//g_spawn_*(), popen() and system() are safe. However, g_child_watch_*() is not.
+//More specifically, all SIGCHLD handlers must chain to the previous one, using the three-argument sigaction function;
+//  they may not attempt concurrent installation with Arlib; and they may not attempt to uninstall them.
+//Additionally, nothing may use waitpid(-1).
+//From what I can gather, g_spawn_*(), popen() and system() are safe.
+//  However, g_child_watch_*() and GSubprocess are not; they install a SIGCHLD handler and discard the old one.
+//I have not analyzed Qt.
 class process : nocopy {
 public:
 	class input;
@@ -26,7 +29,7 @@ private:
 	
 public:
 	//used internally only, don't touch it
-	void _on_sigchld_offloop();
+	bool _on_sigchld_offloop();
 protected:
 	//THREAD WARNING: these two may be written from wrong runloop
 	//seems impossible to fix, the correct runloop may be stuck in terminate()
@@ -43,6 +46,7 @@ protected:
 	//If an entry is -1, the corresponding fd is closed. Duplicates in the input are allowed.
 	//Returns false on failure, but keeps doing its best anyways.
 	//Will mangle the input array. While suboptimal, it's the only way to avoid a post-fork malloc.
+	//The CLOEXEC flag is set to 'cloexec' on all fds.
 	static bool set_fds(arrayvieww<int> fds, bool cloexec = false);
 	
 	//Like execlp, this searches PATH for the given program.
@@ -54,6 +58,20 @@ protected:
 	virtual
 #endif
 	pid_t launch_impl(array<const char*> argv, array<int> stdio_fd);
+	
+public:
+	
+	//unfortunately, nothing else supports doing multiple handlers like this
+	typedef void (*sigaction_t)(int signo, siginfo_t* info, void* context);
+	//Call this to make Arlib not install its SIGCHLD handler. Instead, the caller must install a SIGCHLD handler,
+	//  and must call the returned function pointer from said handler.
+	//Calling that function for non-Arlib processes is fine.
+	//Must be done before the first call to process::launch(). May only be done once.
+	static sigaction_t claim_sigchld();
+	//Makes Arlib's SIGCHLD handler call the given function. Works even if the above is done.
+	//Must be done before the first call to process::launch(), or to the SIGCHLD handler. May only be done once.
+	static void next_sigchld(sigaction_t handler);
+private:
 #endif
 	
 #ifdef _WIN32
@@ -189,6 +207,11 @@ public:
 	//Doesn't return until the process is gone and onexit() is called.
 	//The process is automatically terminated when the object is destroyed.
 	void terminate();
+	
+	//Detaches the child process, allowing it to outlive this object, or the entire process.
+	//Input/output objects may not be used after this.
+	//TODO: implement
+	void detach();
 	
 #ifdef ARLIB_SANDBOX
 	virtual
