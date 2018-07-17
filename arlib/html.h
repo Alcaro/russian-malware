@@ -10,7 +10,7 @@ class HTML {
 	static void set_entities(const char * const * newents, size_t n);
 	
 public:
-	//TODO: proper parser
+	//TODO: parse the entire html5 syntax
 	//use these tests https://github.com/html5lib/html5lib-tests
 	static string entity_decode(cstring in, bool isattr = false)
 	{
@@ -28,7 +28,7 @@ public:
 	}
 	
 	//Enables all HTML entities, not just &amp; &apos; &gt; &lt; &quot;
-	//Affects every future HTML parser. Increases program size by approximately 25KB.
+	//Affects every future HTML parser. Increases program size by approximately 25KB if used.
 	//May only be called once. Not thread safe; may not be called if any other thread is currently parsing HTML.
 	static void all_entities();
 };

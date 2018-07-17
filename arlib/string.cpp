@@ -74,6 +74,7 @@ string string::create_usurp(char * str)
 	return ret;
 }
 
+
 void string::replace_set(int32_t pos, int32_t len, cstring newdat)
 {
 	//if newdat is a cstring backed by this, modifying this invalidates that string, so it's illegal
@@ -142,6 +143,7 @@ string cstring::replace(cstring in, cstring out)
 	
 	return ret;
 }
+
 
 array<cstring> cstring::csplit(cstring sep, size_t limit) const
 {
@@ -227,6 +229,7 @@ done:
 	return ret;
 }
 
+
 string string::codepoint(uint32_t cp)
 {
 	string ret;
@@ -257,8 +260,9 @@ string string::codepoint(uint32_t cp)
 	return ret;
 }
 
+
 #define X 0xFFFD
-const uint16_t string::windows1252tab[32]={
+const uint16_t string_windows1252tab[32]={
 	//00 to 7F map to themselves
 	0x20AC, X,      0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021,
 	0x02C6, 0x2030, 0x0160, 0x2039, 0x0152, X,      0x017D, X,     
@@ -271,7 +275,7 @@ const uint16_t string::windows1252tab[32]={
 static string fromlatin1(cstring in, bool windows1252)
 {
 	string out;
-	for (int i=0;in[i];i++)
+	for (size_t i=0;i<in.length();i++)
 	{
 		uint8_t ch = in[i];
 		if (ch < 0x80) out += ch;
@@ -284,6 +288,7 @@ static string fromlatin1(cstring in, bool windows1252)
 
 string cstring::fromlatin1()      const { return ::fromlatin1(*this, false); }
 string cstring::fromwindows1252() const { return ::fromlatin1(*this, true); }
+
 
 bool strtoken(const char * haystack, const char * needle, char separator)
 {
@@ -308,6 +313,51 @@ bool strtoken(const char * haystack, const char * needle, char separator)
 	}
 	return false;
 }
+
+
+bool cstring::isutf8() const
+{
+	const uint8_t * bytes = ptr();
+	const uint8_t * end = bytes + length();
+	
+	while (bytes < end)
+	{
+		uint8_t head = *bytes++;
+		if (LIKELY(head < 0x80))
+			continue;
+		if (bytes == end)
+			return false; // continuation needed if above 0x80
+		
+		if (head < 0xC2) // continuation or overlong twobyte
+			return false;
+		if (head < 0xE0) // twobyte
+			goto cont1;
+		if (head == 0xE0 && *bytes <= 0x9F) // threebyte overlong
+			return false;
+		if (head == 0xED && *bytes >  0x9F) // utf16 surrogate range
+			return false;
+		if (head < 0xF0) // threebyte
+			goto cont2;
+		if (head == 0xF0 && *bytes <= 0x8F) // fourbyte overlong
+			return false;
+		if (head == 0xF4 && *bytes >  0x8F) // fourbyte, above U+110000
+			return false;
+		if (head < 0xF5) // fourbyte
+			goto cont3;
+		return false; // U+140000 or above, fivebyte, or otherwise invalid
+		
+		cont3:
+			if (bytes == end || ((*bytes++) & 0xC0) != 0x80) return false;
+		cont2:
+			if (bytes == end || ((*bytes++) & 0xC0) != 0x80) return false;
+		cont1:
+			if (bytes == end || ((*bytes++) & 0xC0) != 0x80) return false;
+	}
+	
+	return true;
+}
+
+
 
 test("strtoken", "", "string")
 {
@@ -546,5 +596,50 @@ test("string", "", "string")
 		assert(a.icontains("Unc"));
 		assert(a.icontains("Ers"));
 		assert(!a.icontains("x"));
+	}
+	
+	{
+		cstring a(arrayview<byte>((byte*)"\0", 1));
+		assert_eq(a.length(), 1);
+		assert_eq(a[0], '\0');
+		
+		cstring b(arrayview<byte>((byte*)"\0\0\0", 3));
+		assert_eq(b.length(), 3);
+		assert_eq(b.replace(a, "ee"), "eeeeee");
+	}
+	
+	{
+		assert(cstring().isutf8());
+		assert(cstring("abc").isutf8());
+		assert(cstring(arrayview<byte>((byte*)"\0", 1)).isutf8());
+		assert(cstring("\xC2\xA9").isutf8());
+		assert(cstring("\xE2\x82\xAC").isutf8());
+		assert(cstring("\xF0\x9F\x80\xB0").isutf8());
+		assert(cstring("\x78\xC3\xB8\xE2\x98\x83\xF0\x9F\x92\xA9").isutf8()); // xø☃💩
+		assert(cstring("\xF4\x8F\xBF\xBF").isutf8()); // U+10FFFF
+		
+		assert(!cstring("\xC2").isutf8()); // too few continuations
+		assert(!cstring("\xE2\x82").isutf8()); // too few continuations
+		assert(!cstring("\xF0\x9F\x80").isutf8()); // too few continuations
+		assert(!cstring("\xBF").isutf8()); // misplaced continuation
+		assert(cstring("\xED\x9F\xBF").isutf8()); // U+D7FF
+		assert(!cstring("\xED\xA0\x80").isutf8()); // U+D800
+		assert(!cstring("\xED\xBF\xBF").isutf8()); // U+DFFF
+		assert(cstring("\xEE\x80\x80").isutf8()); // U+E000
+		assert(!cstring("\xF4\x90\xC0\xC0").isutf8()); // U+110000
+		
+		assert(!cstring("\xC0\xA1").isutf8()); // overlong '!'
+		assert(!cstring("\xC1\xBF").isutf8()); // overlong U+007F
+		assert(!cstring("\xE0\x9F\xBF").isutf8()); // overlong U+07FF
+		assert(!cstring("\xF0\x8F\xBF\xBF").isutf8()); // overlong U+FFFF
+		
+		//random mangled symbols
+		assert(!cstring("\xE2\x82\x78").isutf8());
+		assert(!cstring("\xE2\x78\xAC").isutf8());
+		assert(!cstring("\x78\xE2\x82").isutf8());
+		assert(!cstring("\x78\x82\xAC").isutf8());
+		assert(!cstring("\xF0\x9F\x80\x78").isutf8());
+		assert(!cstring("\x82\x2C\x63").isutf8());
+		assert(!cstring("\x2C\x92\x63").isutf8());
 	}
 }

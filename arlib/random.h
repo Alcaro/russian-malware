@@ -10,7 +10,7 @@ class random_pcg : nocopy {
 	
 	//optimizes to a single 'ror' instruction on x86, and similar on other archs - even the &31 disappears
 	//(in fact, it needs the &31 - without it, gcc emits one opcode per operator instead)
-	uint32_t ror32(uint32_t x, unsigned bits)
+	static uint32_t ror32(uint32_t x, unsigned bits)
 	{
 		return (x>>bits) | (x<<(-bits&31));
 	}

@@ -135,16 +135,6 @@ public:
 		fs.report_access_violation = cb;
 	}
 	
-	//TODO: sandboxing of OpenGL programs
-	//to do that:
-	//- set DISPLAY to not Unix socket, to remove some hard-to-reason-about operations
-	//    some random reserved IP would work, for example 203.0.113.1 (from TEST-NET-3)
-	//    yes, it's slower, I don't think it's possible to be both safe and fast
-	//- whenever it tries to connect, sysemu intercepts it and sends to broker, who returns a socketpair
-	//- broker listens to socketpair, and connects to X (over Unix socket)
-	//    broker tolerates and passes on (after censoring irrelevant data) the minimum operations required to implement GtkPlug/GtkSocket,
-	//    plus everything on the GLX opcode; anything else causes child termination
-	
 	~sandproc();
 };
 
