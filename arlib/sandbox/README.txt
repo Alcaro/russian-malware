@@ -98,8 +98,9 @@ but does not include:
 though again, such permissions will not be granted frivolously.
 
 The above applies even if the attacker is able to cause arbitrary syscalls to fail during sandbox
- setup, and/or launch arbitrarily many arbitrary executables (including ones built using information
- gathered by previous ones).
+ setup, and/or launch arbitrarily many arbitrary executables, including ones built using information
+ gathered by previous ones. Each sandbox run is assumed able to create a few files in an
+ initially-empty directory.
 
 I choose to discount the possibility of kernel/glibc/compiler/hardware bugs; I know there are some,
  but smarter people than me have already looked for them. (And by restricting many syscalls,
@@ -276,12 +277,12 @@ The locker's job is long, but fairly straightforward. After broker's fork() retu
     it's half of socketpair(AF_UNIX, SOCK_SEQPACKET, 0), used for passing additional file descriptors around
       why not DGRAM? because it allows sendmsg to contact others' sockets <https://bugzilla.mozilla.org/show_bug.cgi?id=1066750>
       and I'm not sure if STREAM passes the ancillary data (file descriptors) when I want it
-      DGRAM is probably safe, there are two locks each of which should be safe, but this is even safer
+      DGRAM is probably safe, there are two locks each of which should be safe, but three is better
         chroot/CLONE_NEWNET ensures no sockaddr_un is valid
         and seccomp rejects sendto/sendmsg so no sockaddr_un can be used, we only need recvmsg
           still, I'd be happier if sendmsg took a flag saying 'ignore address'
 - chroot("/proc/sys/debug/"), chdir("/")
-    execveat() accesses the filesystem, which must be neutralized. See the Emulator section for details.
+    execveat() accesses the filesystem, which must be neutralized. See the execve section for details.
     While a freshly created and empty directory would work, I'd rather not write to the filesystem at all.
     /proc/sys/debug/ is chosen as root directory since that part of the kernel config is unlikely to be changed,
       and the defaults are public. Still, it is suboptimal.
@@ -294,6 +295,7 @@ The locker's job is long, but fairly straightforward. After broker's fork() retu
     http://man7.org/linux/man-pages/man7/cgroups.7.html
     unfortunately, unsharing UIDs doesn't grant the ability to set up cgroups
     instead, RLIMIT_AS (address space) is set to one gigabyte
+      this does nothing against forkbombs, but helps against non-malicious but misbehaving software
 - Don't set cgroup cpu.cfs_period_us = 100*1000, cpu.cfs_quota_us = 50*1000
     again, to avoid resource waste
       RLIMIT_CPU doesn't help, I believe it's reset by fork()
@@ -310,7 +312,7 @@ The locker's job is long, but fairly straightforward. After broker's fork() retu
 - (Ideally) set cgroup pids.max to 10
     while the memory limit blocks some things, even a low memory limit can fit a lot of zombie processes; PIDs are a finite resource
     https://www.kernel.org/doc/Documentation/cgroup-v1/pids.txt
-    but since cgroups are unavailable, RLIMIT_NPROC is set
+    but since cgroups are unavailable, only RLIMIT_NPROC is set
       unfortunately, that one includes root-namespace user's processes too, so the limit is set to 500
 - Close fd 5 and everything above
     there should be none, and they should be CLOEXEC even if they exist, but no point taking silly risks
@@ -331,8 +333,6 @@ The locker's job is long, but fairly straightforward. After broker's fork() retu
       but relying on that makes the security boundaries harder to define, so explicit is better than implicit
 - prctl(PR_SET_NO_NEW_PRIVS)
     seccomp requires it (maybe CLONE_NEWUSER is sufficient authorization, but why not, it does no harm)
-- chroot, chdir
-    I believe all filesystem access is disabled (including execveat), but defense in depth
 - prctl(PR_SET_SECCOMP)
     disable a lot of syscalls, for example unshare, chroot and prctl
 - Create a new, clean environment block
@@ -475,7 +475,12 @@ execve
 Leaving execve (initializing the new process) is covered above. However, entering it isn't obvious
  either.
 
-To start with, execve() takes a filename, which will fail due to chroot. Solution: fexecve().
+To start with, execve() takes a filename, which must fail, or it'd leak which files exist. Even if
+ we can ensure a known-good filename is passed, ELF files can contain a .interp section (usually
+ pointing to /lib64/ld-linux-x86-64.so.2), which causes the kernel to access that filename, leaking
+ whether it exists. Solution: chroot() to an empty directory.
+
+But if we're in an empty chroot, we don't have access to the emulator either. Solution: fexecve().
 
 Except that's not a syscall, glibc implements it as execve(/proc/self/fd/123), which won't work
  either. I could change the chroot to /proc/self/fd, but that'd probably screw up on fork(). And I'm
@@ -484,7 +489,7 @@ Except that's not a syscall, glibc implements it as execve(/proc/self/fd/123), w
 
 Instead, execveat() can be employed. Like other *at() functions, it takes a fd and a path, using the
  fd instead of the current directory if the path is relative. It also supports a flag to execute the
- fd directly, if the path is empty.
+ fd directly, if the path is empty. (I have no idea why nonempty paths are allowed with that flag.)
 
 To ensure the path is empty, the path address must be the last mappable byte in the address space,
  0x00007FFF'FFFFEFFF; either it's "", or it's not a NUL-terminated string and the kernel returns
@@ -607,7 +612,12 @@ Everything contains bugs. The following is a list of possible vulnerabilities th
     exploitability: trivial
     maximum impact: per the inode section above, most likely none
     severity: low, due to the trivial maximum impact
-    notes: not fixed, security model was changed; however, it did break its stated security model, so still a vulnerability
+    notes: not fixed, security model was changed; however, it did break the stated security model, so still a vulnerability
+- seccomp filter: ioctl(TCGETS) and ioctl(TIOCGWINSZ) were allowed
+    exploitability: trivial
+    maximum impact: reveals some properties of stdout, including whether it's a terminal or redirected
+    severity: low, due to the trivial maximum impact
+    notes: trivial leaks of non-authorized data is still a sandbox flaw; no clue why I ever allowed them
 - Spectre type 2 (indirect jumps)
     exploitability: if I understand it correctly, fully possible for a sufficiently determined attacker
     maximum impact: revealing the full contents of the broker's address space, including the full
@@ -637,9 +647,15 @@ Each of these would either enable additional functionality, or simplify somethin
     setrlimit(RLIMIT_NPROC) would be the obvious choice, but it's affected by processes outside the namespace
       http://elixir.free-electrons.com/linux/latest/source/kernel/fork.c#L1564
     setting /proc/sys/kernel/pid_max to 10 would also work, but that too is a global parameter, not per-pid-namespace
-- A way to disable the filesystem completely, rather than just chroot to an empty (except . and ..) directory
+- A way to disable the filesystem completely, rather than just chroot to an empty (except . and ..) directory, it feels wrong
+    and I can't find a guaranteed-empty directory (preferably one in a non-weird filesystem, /proc creeps me out sometimes)
+- Allow execveat(pathname=NULL) and consider it equivalent to pathname="", that final-byte trick is kinda creepy
+    the original execveat proposal https://lkml.org/lkml/2012/9/11/528 used NULL rather than "", it's unclear why it changed
+    alternatively, consider execveat(pathname!={NULL,""}, flags=AT_EMPTY_PATH|...) a nonsensical combination and make it fail
+      though that is a strange request when I rely on the nonsensical
+        combination clone(flags=CLONE_PARENT_SETTID|..., ptid=NULL) working and being a nop
 - Slightly less bizarre naming policy in the kernel, these foobar/__foobar pairs confuse me (there's even ___sys_sendmsg)
-- MSG_NOADDR in sendmsg(), to block non-NULL msg_name
+- MSG_NOADDR in sendmsg(), to block non-NULL msg_name (for use with seccomp-bpf)
 - A control mechanism for global disk bandwidth usage
 - fcntl(F_GETPATH) (like OSX), or similar
 - A way to list existing fds in the process without /proc/self/fd
@@ -749,32 +765,39 @@ Releasing vfork is impossible without execve or _exit. But that syscall is alrea
 cloexec is, in theory, easy; just iterate over the file descriptors, fcntl(F_GETFD), close
  everything with cloexec. In practice, which file descriptors are that? The only way to list open
  file descriptors on Linux is /proc/self/fd/, which isn't available. We can't ask the broker for a
- list either, we're probably a fork and the broker doesn't know our PID. We can reduce RLIMIT_NOFILE
- and iterate over them, but that's ugly, I'd rather not.
+ list either; while we can tell it our PID with SOCK_PASSCRED, using it would be a TOCTTOU. Another
+ option would be reducing RLIMIT_NOFILE and iterating over them, but that's ugly, I'd rather not.
 
 However, there is one possibility: Place a process in the sandbox PID namespace, but otherwise
- unrestricted, and ask it for /proc/getpid()/fd/. Since it's in the sandbox namespace, it can't see
- processes it shouldn't; it can return data about other processes in the sandbox, but that's fine.
- (Making this the namespace init, PID 1, would be the easiest solution; as mentioned above, this
- would also allow it to reap zombies.)
+ unrestricted (no seccomp, no chroot), and ask it for /proc/getpid()/fd/. Since it's in the sandbox
+ namespace, inappropriate PIDs would only leak information about other sandboxed processes. (Making
+ this the namespace init, PID 1, would be the easiest solution; as mentioned above, this would also
+ allow it to reap zombies.)
 
 Killing the other threads is also tricky. (Threads aren't implemented yet, but they still need to be
- considered.) There's no syscall to list them, nor is there any obvious way to terminate them -
- sending SIGKILL terminates the entire process.
+ considered.) There's no syscall to list them, nor is there any obvious way to terminate them - even
+ with tgkill(), sending SIGKILL terminates the entire process.
 
-But, again, it's possible: The list can be found in /proc/getpid()/task/ and fetched by the
- namespace init, and installing a signal handler could cause any recipient thread to terminate
- itself. SIGSYS, for example, we already have a SIGSYS handler. Signals can be blocked, but only
- if it can get past seccomp, which it can't. And exec in multithreaded programs at all is rare -
- even if a multithreaded program wants to exec something, it usually does fork() first, which only
- clones the calling thread.
+But, again, it's possible: A list of threads can be found in /proc/getpid()/task/ and fetched by the
+ namespace init, and we could send a custom signal that causes any recipient thread to terminate
+ itself. SIGSYS, for example, we already have a SIGSYS handler. Signals can be blocked, but only if
+ sigprocmask() can get past seccomp, which it can't. And exec in multithreaded programs at all is
+ rare - even if a multithreaded program wants to exec something, it usually does fork() first, which
+ only clones the calling thread.
 
-However, it's a lot of effort, and since the sandbox can't specify paths (and it's in a chroot, so
- no paths exist), it doesn't really accomplish anything.
+(A complication would be avoiding races between cloexec and open() in another thread; easy to fix,
+ just kill the threads first. Another issue is races between clone() and thread killing; to fix that
+ one, repeatedly kill all threads, until they stay dead. A third one would be ensuring code isn't
+ unmapped until all threads are gone, which means fiddling with either set_tid_address() or
+ waitpid(); only the former can avoid strange special cases where the thread sends some signal other
+ than SIGCHLD, and race conditions with other waitpid calls.)
 
-Removing the need to chroot would be a slight improvement, but won't accomplish much either;
- I would be happy if I could remove CLONE_NEWUSER, but it's also needed for CLONE_NEWPID, which I
- haven't found a usable replacement for.
+However, it's a lot of effort, and it wouldn't accomplish much. It makes the chroot unnecessary (ELF
+ .interp can leak file existence, disabling that would be an improvement), 
+
+
+anything. no paths exist in the chroot, so it wouldn't really accomplish
+ anything. Even if it wasn't needed, I'd include it anyways, defense in depth.
 
 
 Future - Cooperating with ld-linux

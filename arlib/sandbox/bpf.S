@@ -15,6 +15,7 @@ let arg6h = (offsetof(struct seccomp_data, args[5])+4)
 
 #some things are passed to the compiler, like offsetof
 #but some things are handled internally, so gcc gets fewer include files to parse, and to allow this jump ladder to become a tree
+#(okay, the above isn't implemented yet, and I'm not sure if it ever will)
 defines /usr/include/x86_64-linux-gnu/asm/unistd_64.h
 
 ld [arch]
@@ -102,26 +103,21 @@ jeq #__NR_time, accept
 jmp ENOSYS
 
 
-ioctl:
-#int ioctl(int fd, int cmd, ...)
-defines /usr/include/asm-generic/ioctls.h
-ld [arg2h]
-jne #0, ENOTTY_S
-ld [arg2l]
-#TODO: move these to broker policy
-jeq #TCGETS, accept
-jeq #TIOCGWINSZ, accept
-
-jmp ENOTTY_S
-
-
 fcntl:
 #int fcntl(int fd, int cmd, ... /* arg */)
+
+#"A less surprising example is that if the x86-64 ABI is used to perform a system call that takes an
+# argument of type int, the more-significant half of the argument register is ignored by the system
+# call, but visible in the seccomp data."
+#http://man7.org/linux/man-pages/man2/seccomp.2.html
+#
+#but on the other hand, I've never seen anything pass nonzero there
+#better always check than worry about whether it's needed
 ld [arg2h]
 jne #0, EINVAL
-ld [arg2l]
 
-#sets only O_CLOEXEC
+ld [arg2l]
+#F_SETFD sets only O_CLOEXEC; could probably grow in the future, but unlikely to be harmful
 jeq #F_GETFD, accept
 jeq #F_SETFD, accept
 
@@ -134,6 +130,20 @@ jeq #F_DUPFD, accept
 jeq #F_DUPFD_CLOEXEC, accept
 
 jmp EINVAL
+
+
+ioctl:
+#int ioctl(int fd, int cmd, ...)
+defines /usr/include/asm-generic/ioctls.h
+
+ld [arg2h]
+jne #0, EINVAL
+ld [arg2l]
+#TODO: let sysemu return something random for these two
+#jeq #TCGETS, accept
+#jeq #TIOCGWINSZ, accept
+
+jmp ENOTTY_S
 
 
 execveat:
@@ -152,7 +162,7 @@ prlimit64:
 #most of this syscall is safe, everything I want to enforce is a hard limit and prlimit64 can't touch that
 #but block it anyways because why not
 ld [arg2h]
-jne #0, ENOSYS
+jne #0, EINVAL
 ld [arg2l]
 jeq #RLIMIT_STACK, accept
 jmp ENOSYS
@@ -194,7 +204,7 @@ arch_prctl:
 #ensure code is one of the four documented values, nothing funny
 defines /usr/include/x86_64-linux-gnu/asm/prctl.h
 ld [arg1h]
-jne #0, ENOSYS
+jne #0, EINVAL
 ld [arg1l]
 jeq #ARCH_SET_FS, accept
 jeq #ARCH_GET_FS, accept

@@ -330,6 +330,13 @@ test("DNS", "udp,string", "dns")
 			// silly way to say 'can be either of those, but must be one of them', but it's the best I can find
 			if (ip != "::1") assert_eq(ip, "127.0.0.1");
 		}));
+	dns.resolve("127.0.0.1", bind_lambda([&](string domain, string ip)
+		{
+			await--; if (await == 0) loop->exit();
+			assert_eq(domain, "127.0.0.1");
+			//if it's already an IP, it must remain an IP
+			assert_eq(ip, "127.0.0.1");
+		}));
 	dns.resolve("stacked.muncher.se", bind_lambda([&](string domain, string ip) // random domain that's on a CNAME
 		{
 			await--; if (await == 0) loop->exit();

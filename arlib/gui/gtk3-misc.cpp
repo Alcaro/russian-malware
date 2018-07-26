@@ -16,6 +16,10 @@
 #error Only X11 supported.
 #endif
 
+//TODO: check if libinput provides all information I can get from the raw kernel interface, and if it needs root
+//https://gitlab.freedesktop.org/libinput/libinput/blob/master/tools/libinput-debug-gui.c
+//while that one uses gtk, they don't seem to know about each other
+
 //Number of ugly hacks: 8
 //The status bar is a GtkGrid with GtkLabel, not a GtkStatusbar, because I couldn't get GtkStatusbar
 // to cooperate. While the status bar is a GtkBox, I couldn't find how to get rid of its child.

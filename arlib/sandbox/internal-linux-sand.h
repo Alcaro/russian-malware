@@ -70,7 +70,7 @@ static inline ssize_t send_fd(int sockfd, const void * buf, size_t len, int flag
 		ctrl_msg->cmsg_level = SOL_SOCKET;
 		ctrl_msg->cmsg_type = SCM_RIGHTS;
 		ctrl_msg->cmsg_len = CMSG_LEN(sizeof(int));
-		*(int*)CMSG_DATA(ctrl_msg) = fd;
+		memcpy(CMSG_DATA(ctrl_msg), &fd, sizeof(int));
 	}
 	
 	return sendmsg(sockfd, &message, flags);
@@ -94,7 +94,7 @@ static inline ssize_t recv_fd(int sockfd, void * buf, size_t len, int flags, int
 	{
 		if (ctrl_msg->cmsg_level == SOL_SOCKET && ctrl_msg->cmsg_type == SCM_RIGHTS)
 		{
-			*fd = *(int*)CMSG_DATA(ctrl_msg);
+			memcpy(fd, CMSG_DATA(ctrl_msg), sizeof(int));
 		}
 	}
 	

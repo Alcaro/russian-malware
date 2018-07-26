@@ -465,8 +465,8 @@ static inline int sysinfo_(struct sysinfo * info)
 	info->loads[0] = 0;
 	info->loads[1] = 0;
 	info->loads[2] = 0;
-	info->totalram = 4ULL*1024*1024*1024;
-	info->freeram = 4ULL*1024*1024*1024;
+	info->totalram = 1ULL*1024*1024*1024; // keep these synced with RLIMIT_AS in launcher
+	info->freeram = 1ULL*1024*1024*1024;
 	info->sharedram = 0;
 	info->bufferram = 0;
 	info->totalswap = 0;

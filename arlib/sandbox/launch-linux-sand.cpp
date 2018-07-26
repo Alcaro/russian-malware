@@ -217,7 +217,7 @@ pid_t sandproc::launch_impl(array<const char*> argv, array<int> stdio_fd)
 	//for now, just stick up some rlimit rules, to disable the most naive forkbombs or memory wastes
 	
 	struct rlimit rlim_as = { 1*1024*1024*1024, 1*1024*1024*1024 }; // this is the only one that affects mmap
-	require(setrlimit(RLIMIT_AS, &rlim_as));
+	require(setrlimit(RLIMIT_AS, &rlim_as)); // keep the value synced with sysinfo() in sysemu
 	
 	//why so many? because the rest of the root-namespace user is also included, which is often a few hundred
 	//http://elixir.free-electrons.com/linux/latest/source/kernel/fork.c#L1564
