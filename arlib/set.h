@@ -395,9 +395,39 @@ private:
 	public:
 		c_iterator(typename set<node>::iterator it) : it(it) {}
 		
-		const node& operator*() { return const_cast<node&>(*it); }
+		const node& operator*() { return *it; }
 		c_iterator& operator++() { ++it; return *this; }
 		bool operator!=(const c_iterator& other) { return it != other.it; }
+	};
+	
+	class k_iterator {
+		typename set<node>::iterator it;
+	public:
+		k_iterator(typename set<node>::iterator it) : it(it) {}
+		
+		const Tkey& operator*() { return (*it).key; }
+		k_iterator& operator++() { ++it; return *this; }
+		bool operator!=(const k_iterator& other) { return it != other.it; }
+	};
+	
+	class v_iterator {
+		typename set<node>::iterator it;
+	public:
+		v_iterator(typename set<node>::iterator it) : it(it) {}
+		
+		Tvalue& operator*() { return const_cast<Tvalue&>((*it).value); }
+		v_iterator& operator++() { ++it; return *this; }
+		bool operator!=(const v_iterator& other) { return it != other.it; }
+	};
+	
+	class cv_iterator {
+		typename set<node>::iterator it;
+	public:
+		cv_iterator(typename set<node>::iterator it) : it(it) {}
+		
+		const Tvalue& operator*() { return (*it).value; }
+		cv_iterator& operator++() { ++it; return *this; }
+		bool operator!=(const cv_iterator& other) { return it != other.it; }
 	};
 	
 public:
@@ -409,6 +439,10 @@ public:
 	iterator end() { return items.end(); }
 	c_iterator begin() const { return items.begin(); }
 	c_iterator end() const { return items.end(); }
+	
+	iterwrap<k_iterator> keys() const { return iterwrap<k_iterator>(items.begin(), items.end()); }
+	iterwrap<v_iterator> values() { return iterwrap<v_iterator>(items.begin(), items.end()); }
+	iterwrap<cv_iterator> values() const { return iterwrap<cv_iterator>(items.begin(), items.end()); }
 	
 	template<typename Ts>
 	void serialize(Ts& s)
