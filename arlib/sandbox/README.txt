@@ -753,9 +753,10 @@ We already emulate parts of the syscall in userspace (preload.cpp). It would be 
  the rest too and disable the syscall.
 
 Checking the manpage reveals a long list of things execve does. Most are easy to emulate (remove
- signal handlers and sigaltstack) or irrelevant (detach SysV shared memory - blocked by seccomp,
- replace /proc/self/cmdline - not relevant outside debugging). Unfortunately, a few are tricky but
- required: Killing all other threads in the process, close-on-exec, and resuming the vfork parent.
+ signal handlers and sigaltstack), irrelevant (detach SysV shared memory - blocked by seccomp), or
+ both (replace /proc/self/cmdline - PR_SET_MM_ARG_START/etc, and not relevant outside debugging).
+ Unfortunately, a few are tricky but required: Killing all other threads in the process,
+ close-on-exec, and resuming the vfork parent.
 
 Releasing vfork is impossible without execve or _exit. But that syscall is already unsafe; we have
  to return all the way through a signal handler, which won't work the second time vfork returns.

@@ -66,6 +66,25 @@ void string::init_from(arrayview<byte> data)
 	}
 }
 
+void string::reinit_from(arrayview<byte> data)
+{
+	const uint8_t * str = data.ptr();
+	uint32_t len = data.size();
+	
+	if (str == ptr() && len == length()) return;
+	
+	if (str >= this->ptr() && str <= this->ptr()+this->length())
+	{
+		memmove(this->ptr(), str, len);
+		resize(len);
+	}
+	else
+	{
+		release();
+		init_from(data);
+	}
+}
+
 string string::create_usurp(char * str)
 {
 	cstring tmp(str);
@@ -482,6 +501,16 @@ test("string", "", "string")
 		string a = "aaaaaaaaaaaaaaaa";
 		a[0] = 'b';
 		assert_eq(a, "baaaaaaaaaaaaaaa");
+	}
+	
+	{
+		string a = "abcdefghijklmnopqrstuvwxyz";
+		cstring b = a;
+		a = b;
+		assert_eq(a, "abcdefghijklmnopqrstuvwxyz");
+		b = a;
+		a = b.substr(1, ~1);
+		assert_eq(a, "bcdefghijklmnopqrstuvwxy");
 	}
 	
 	{
