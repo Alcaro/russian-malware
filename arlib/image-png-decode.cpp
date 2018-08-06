@@ -518,7 +518,7 @@ static inline void unpack_pixels(uint32_t width, uint32_t height, uint32_t* pixe
 //- invalid sizes: 32*0px, 2^31*32px, etc (spec says 2^31-1 is max)
 //- 2^31-1*2^31-1px image that's technically legal but takes several exabytes of RAM to render
 //- 2^31-1*1 image, may provoke a few integer overflows (or out-of-memory)
-//- actually, every 2^[20..30]*1 should be tested. and 1*2^[20..30]
+//- actually, every 2^[20..30]*1 should be tested. and 1*2^[20..30]. and those minus 1
 //- funky but legit sizes like 1*1024 and 1024*1
 //- non-square interlaced images, at least 1*n and n*1 for every n<=9, but preferably n*m for all n,m<=9
 //- checksum error in an ancillary chunk
@@ -530,7 +530,7 @@ static inline void unpack_pixels(uint32_t width, uint32_t height, uint32_t* pixe
 //- paletted image where some pixels use colors not in the PLTE
 //- overlong PLTE - <=16-color PLTE but 8 bits per pixel
 //- paletted image with too long tRNS
-//- for bit width 16, a tRNS chunk saying RGB 0x0001*3 is transparent, and image contains 1,1,2 that should not be transparent
+//- for bit width 16, a tRNS chunk saying RGB 0x0001*3 is transparent, and image contains (u16[]){1,1,2} that should not be transparent
 //- for bit width 16, some filtering shenanigans that yield markedly different results if 16->8bpp conversion is done before filtering
 //- tRNS on grayscale
 //- tRNS on gray+alpha / RGBA
@@ -551,6 +551,7 @@ static inline void unpack_pixels(uint32_t width, uint32_t height, uint32_t* pixe
 //- IDATs decompressing to too much or too little data
 //- random crap after IEND
 //- unexpected EOFs
+//(for some of those, it's unclear even to me what the correct answer is)
 //finally, the reference images are bad; they're not bulk downloadable, and they're GIF, rather than PNGs without fancy features
 //instead, I ran all of them through 'pngout -c6 -f0 -d8 -s4 -y -force'
 //I also ran the invalid x*.png, and pngout-unsupported *16.png, through 'truncate -s0' instead
@@ -561,6 +562,8 @@ static inline void unpack_pixels(uint32_t width, uint32_t height, uint32_t* pixe
 
 test("png", "array,imagebase,file", "png")
 {
+	test_skip("kinda slow");
+	
 	array<string> tests = file::listdir(file::cwd()+"arlib/test/png/");
 	assert_gt(tests.size(), 100); // make sure the tests exist, no vacuous truths allowed
 	

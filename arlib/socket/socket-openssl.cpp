@@ -36,7 +36,7 @@ public:
 	function<void()> cb_write;
 	
 	uintptr_t timer_id = 0;
-	bool* deleted_p = NULL;
+	MAKE_DESTRUCTIBLE_FROM_CALLBACK();
 	
 #if OPENSSL_VERSION_NUMBER < 0x10002000 // < 1.0.2
 	bool permissive;
@@ -77,9 +77,9 @@ public:
 #endif
 		
 #if OPENSSL_VERSION_NUMBER >= 0x10100000 // >= 1.1.0
-#error test, especially [gs]et0 vs [gs]et1
-#error also check whether set_tlsext_host_name is needed
-		SSL_set1_host(ssl, "example.com");
+//#error test, especially [gs]et0 vs [gs]et1
+//#error also check whether set_tlsext_host_name is needed
+		SSL_set1_host(ssl, domain.c_str());
 #endif
 		
 		update();
@@ -129,22 +129,16 @@ public:
 			}
 		}
 		
-		bool deleted = false;
-		deleted_p = &deleted;
-		
 	again: ;
 		bool again = false;
 		if (!sock) is_readable = true;
 		
-		if (cb_read && is_readable) { again = true; cb_read(); }
-		if (deleted) return;
-		if (cb_write) { again = true; cb_write(); }
-		if (deleted) return;
+		if (cb_read && is_readable) { again = true; RETURN_IF_CALLBACK_DESTRUCTS(cb_read( )); }
+		if (cb_write              ) { again = true; RETURN_IF_CALLBACK_DESTRUCTS(cb_write()); }
 		
-		if (again) goto again;
+		if (sock && again) goto again;
 		
 		set_child_cb();
-		deleted_p = NULL;
 	}
 	
 	/*private*/ bool update_from_timer()
@@ -226,7 +220,6 @@ public:
 		}
 		set_child_cb();
 		
-		if (!deleted_p) timer_id = loop->set_timer_rel(timer_id, 0, bind_this(&socketssl_impl::update_from_timer));
 		return ret;
 	}
 	
@@ -257,8 +250,6 @@ public:
 	
 	~socketssl_impl()
 	{
-		if (deleted_p) *deleted_p = true;
-		
 		loop->remove(timer_id);
 		
 		if (sock)

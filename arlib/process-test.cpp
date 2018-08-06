@@ -1,7 +1,7 @@
 #include "process.h"
 #include "test.h"
 
-#ifdef ARLIB_THREAD
+#ifdef ARLIB_TEST
 #ifndef _WIN32
 #include <unistd.h> // usleep
 #define TRUE "/bin/true"
@@ -204,7 +204,7 @@ test("process", "array,string,runloop", "process")
 
 test("sandbox", "process", "sandbox")
 {
-	//test_skip("kinda slow");
+	test_skip("kinda slow");
 	
 	if (RUNNING_ON_VALGRIND) test_skip_force("valgrind doesn't understand the sandbox");
 	

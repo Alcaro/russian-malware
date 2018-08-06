@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <float.h>
+#include <errno.h>
 #include "test.h"
 
 #define FROMFUNC(t,frt,f) \
@@ -12,9 +13,11 @@
 		string tmp_s = s; /* copy in case 's' isn't terminated */ \
 		const char * tmp_cp = tmp_s; \
 		char * tmp_cpo; \
+		if (sizeof(t) == sizeof(frt)) errno = 0; \
 		frt ret = f(tmp_cp, &tmp_cpo, 10); \
 		if (tmp_cpo != tmp_cp + s.length()) return false; \
 		if ((t)ret != (frt)ret) return false; \
+		if (sizeof(t) == sizeof(frt) && errno == ERANGE) return false; \
 		out = ret; \
 		return true; \
 	}
@@ -37,9 +40,11 @@ static const char * drop0x(const char * in)
 		const char * tmp_cp = tmp_s; \
 		if (!*tmp_cp || isspace(*tmp_cp)) return false; \
 		char * tmp_cpo; \
+		if (sizeof(t) == sizeof(frt)) errno = 0; \
 		frt ret = f(drop0x(tmp_cp), &tmp_cpo, 16); \
 		if (tmp_cpo != tmp_cp + s.length()) return false; \
 		if ((t)ret != (frt)ret) return false; \
+		if (sizeof(t) == sizeof(frt) && errno == ERANGE) return false; \
 		out = ret; \
 		return true; \
 	}
@@ -190,10 +195,13 @@ test("string conversion", "", "string")
 	assert(!fromstringhex("1234567", bar)); // odd length
 	assert(!fromstringhex("0x123456", bar)); // no 0x allowed
 	
-	uint32_t u;
+	uint8_t u8;
+	int32_t i32;
+	uint32_t u32;
+	uint64_t u64;
 	float f;
-	assert(!fromstring("", u)); // this isn't an integer
-	assert(!fromstringhex("", u));
+	assert(!fromstring("", u32)); // this isn't an integer
+	assert(!fromstringhex("", u32));
 	assert(!fromstring("", f));
 	
 	assert(!fromstring("2,5", f)); // this is not the decimal separator, has never been and will never be
@@ -201,14 +209,14 @@ test("string conversion", "", "string")
 	string s;
 	s += '7';
 	s += '\0';
-	assert(!fromstring(s, u)); // no nul allowed
+	assert(!fromstring(s, u32)); // no nul allowed
 	assert(!fromstring(s, f));
-	assert(!fromstringhex(s, u));
+	assert(!fromstringhex(s, u32));
 	
-	assert(!fromstring(" 42", u));
-	assert(!fromstring("0x42", u));
-	assert(!fromstringhex(" 42", u));
-	assert(!fromstringhex("0x42", u));
+	assert(!fromstring(" 42", u32));
+	assert(!fromstring("0x42", u32));
+	assert(!fromstringhex(" 42", u32));
+	assert(!fromstringhex("0x42", u32));
 	assert(!fromstring(" 42", f));
 	assert(!fromstring("0x42", f));
 	
@@ -217,4 +225,18 @@ test("string conversion", "", "string")
 	assert(!fromstring("1e-", f));
 	assert(!fromstring("1.", f));
 	assert(!fromstring(".1", f));
+	
+	// ensure overflow fails
+	assert(!fromstring("256", u8));
+	assert(!fromstring("4294967296", u32));
+	assert( fromstring( "2147483647", i32));
+	assert( fromstring("-2147483647", i32));
+	assert(!fromstring( "2147483648", i32));
+	assert( fromstring("-2147483648", i32));
+	assert(!fromstring( "2147483649", i32));
+	assert(!fromstring("-2147483649", i32));
+	assert(!fromstring("18446744073709551616", u64));
+	assert(!fromstringhex("100000000", u32));
+	assert(!fromstringhex("10000000000000000", u64));
+	assert(!fromstring("999999999999999999999999999999999999999", f));
 }

@@ -38,9 +38,11 @@ static void clienttest(cstring target, int port, bool ssl, bool xfail = false, b
 	uint8_t buf[8];
 	size_t n_buf = 0;
 	
-	bool inside = false; // reject recursion, and calls after loop->exit()
+	bool inside = false; // reject recursion
+	bool exited = false; // and calls after loop->exit()
 	sock->callback(bind_lambda([&]()
 		{
+			assert(!exited);
 			assert(!inside);
 			
 			if (n_buf < 8)
@@ -54,7 +56,7 @@ static void clienttest(cstring target, int port, bool ssl, bool xfail = false, b
 				{
 					assert_lt(bytes, 0);
 					loop->exit();
-					inside = true;
+					exited = true;
 				}
 				else
 				{
@@ -70,7 +72,7 @@ static void clienttest(cstring target, int port, bool ssl, bool xfail = false, b
 				if (sock->recv(discard) < 0)
 				{
 					loop->exit();
-					inside = true;
+					exited = true;
 					return;
 				}
 				inside = false;

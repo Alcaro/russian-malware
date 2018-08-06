@@ -60,15 +60,15 @@ void HTTP::send(req q, function<void(rsp)> callback)
 	
 	if (!lasthost.proto)
 	{
-		if (!parseUrl(r.q.url, false, this->lasthost)) return resolve_err_v(NULL, requests.size()-1, rsp::e_bad_url);
+		if (!parseUrl(r.q.url, false, this->lasthost)) return resolve_err_v(requests.size()-1, rsp::e_bad_url);
 	}
 	else
 	{
 		location loc;
-		if (!parseUrl(r.q.url, false, loc)) return resolve_err_v(NULL, requests.size()-1, rsp::e_bad_url);
+		if (!parseUrl(r.q.url, false, loc)) return resolve_err_v(requests.size()-1, rsp::e_bad_url);
 		if (loc.proto != lasthost.proto || loc.domain != lasthost.domain || loc.port != lasthost.port)
 		{
-			return resolve_err_v(NULL, requests.size()-1, rsp::e_different_url);
+			return resolve_err_v(requests.size()-1, rsp::e_different_url);
 		}
 		lasthost.path = loc.path;
 	}
@@ -156,24 +156,8 @@ again:
 	next_send++;
 }
 
-void HTTP::resolve(bool* deleted, size_t id, bool success)
+void HTTP::resolve(size_t id, bool success)
 {
-	class delete_protector {
-		bool* canary;
-		bool** canary_p;
-	public:
-		delete_protector(bool* canary, bool** canary_p) : canary(canary), canary_p(canary_p)
-		{
-			*canary_p = canary;
-		}
-		~delete_protector()
-		{
-			if (canary && *canary) return;
-			else *canary_p = NULL;
-		}
-	};
-	delete_protector prot(deleted, &deleted_p); // as an object to avoid issues in HTTP::~HTTP() if i.callback() throws
-	
 	rsp_i i = std::move(requests[id]);
 	i.r.success = success;
 	
@@ -211,10 +195,7 @@ void HTTP::reset_limits()
 
 void HTTP::activity()
 {
-	bool deleted = false;
 newsock:
-	if (deleted) return;
-	
 	if (requests.size() == 0)
 	{
 		if (!sock) return;
@@ -231,9 +212,9 @@ newsock:
 			//lasthost.proto/domain/port never changes between requests
 			if (lasthost.proto == "https")  sock = socket::create_ssl(lasthost.domain, lasthost.port ? lasthost.port : 443, loop);
 			else if (lasthost.proto == "http") sock = socket::create( lasthost.domain, lasthost.port ? lasthost.port : 80,  loop);
-			else { resolve_err_v(&deleted, 0, rsp::e_bad_url); goto newsock; }
+			else { RETURN_IF_CALLBACK_DESTRUCTS(resolve_err_v(0, rsp::e_bad_url)); goto newsock; }
 		}
-		if (!sock) { resolve_err_v(&deleted, 0, rsp::e_connect); goto newsock; }
+		if (!sock) { RETURN_IF_CALLBACK_DESTRUCTS(resolve_err_v(0, rsp::e_connect)); goto newsock; }
 		sock->callback(bind_this(&HTTP::activity), NULL);
 		
 		state = st_boundary_retried;
@@ -292,7 +273,7 @@ again:
 				else
 				{
 					sock = NULL;
-					return resolve_err_v(NULL, 0, rsp::e_not_http);
+					return resolve_err_v(0, rsp::e_not_http);
 				}
 			}
 			else if (state == st_header)
@@ -317,7 +298,7 @@ again:
 							sock = NULL;
 							//e_not_http isn't completely accurate, but good enough
 							//a proper http server doesn't use this header like this
-							return resolve_err_v(NULL, 0, rsp::e_not_http);
+							return resolve_err_v(0, rsp::e_not_http);
 						}
 					}
 					else
@@ -378,8 +359,7 @@ again:
 	
 req_finish:
 	state = st_boundary;
-	resolve(&deleted, 0, true);
-	if (deleted) return;
+	RETURN_IF_CALLBACK_DESTRUCTS(resolve(0, true));
 	try_compile_req();
 	reset_limits();
 	
@@ -394,7 +374,6 @@ req_finish:
 
 HTTP::~HTTP()
 {
-	if (deleted_p) *deleted_p = true;
 	loop->remove(this->timeout_id);
 }
 
@@ -448,6 +427,7 @@ test("HTTP", "tcp,ssl", "http")
 #define CONTENTS3 "hello world 3"
 #define CONTENTS4 "hello world 4"
 //#define T puts(tostring(__LINE__));
+#define T if (__LINE__ > 590)
 #ifndef T
 #define T /* */
 #endif
@@ -615,23 +595,26 @@ test("HTTP", "tcp,ssl", "http")
 	T {
 		//throw in https for no reason
 		HTTP h(loop);
-		h.send(HTTP::req("https://www.smwcentral.net/ajax.php?a=getdiscordusers"), break_runloop);
+		h.send(HTTP::req("https://www.smwcentral.net/?p=404"), break_runloop);
 		
 		loop->enter();
 		assert(r.success);
-		assert_eq(r.status, 200);
-		assert(r.body.size() > 20000);
-		assert_eq(r.body[0], '[');
-		assert_eq(r.body[r.body.size()-1], ']');
+		assert_eq(r.status, 404);
+		assert_gt(r.body.size(), 8000);
+		assert_eq(r.body[0], '<');
+		assert_eq(r.body[r.body.size()-1], '>');
 	}
 	
 	T {
 		HTTP h(loop);
-		HTTP::req rq("http://www.smwcentral.net/ajax.php?a=getdiscordusers");
-		rq.limit_bytes = 2000;
+		HTTP::req rq("http://www.smwcentral.net/?p=404");
+		rq.limit_bytes = 8000;
 		h.send(rq, break_runloop);
 		
 		loop->enter();
+		//2000 is way below 8000, but the 8000 includes the http headers, and
+		// a up-to-4K buffer whose size is checked before parsing its contents
+		assert_gte(r.body.size(), 2000);
 		assert_eq(r.status, HTTP::rsp::e_too_big);
 	}
 	
@@ -646,6 +629,7 @@ test("HTTP", "tcp,ssl", "http")
 	}
 	
 	T {
+		//do the above with https
 		HTTP h(loop);
 		HTTP::req rq("https://floating.muncher.se:99/");
 		rq.limit_ms = 200;

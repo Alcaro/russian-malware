@@ -118,13 +118,13 @@ public:
 	~HTTP();
 	
 private:
-	void resolve(bool* deleted, size_t id, bool success);
-	void resolve_err_v(bool* deleted, size_t id, int err)
+	void resolve(size_t id, bool success);
+	void resolve_err_v(size_t id, int err)
 	{
 		requests[id].r.status = err;
-		resolve(deleted, id, false);
+		resolve(id, false);
 	}
-	bool resolve_err_f(bool* deleted, size_t id, int err) { resolve_err_v(deleted, id, err); return false; }
+	bool resolve_err_f(size_t id, int err) { resolve_err_v(id, err); return false; }
 	
 	void sock_cancel() { sock = NULL; }
 	
@@ -149,7 +149,7 @@ private:
 	size_t bytes_in_req;
 	void reset_limits();
 	
-	bool* deleted_p = NULL;
+	MAKE_DESTRUCTIBLE_FROM_CALLBACK();
 	
 	enum httpstate {
 		st_boundary, // between requests; if socket closes, make a new one
