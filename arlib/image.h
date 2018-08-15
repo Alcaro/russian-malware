@@ -32,8 +32,9 @@ struct image : nocopy {
 	
 	imagefmt fmt;
 	size_t stride; // Distance, in bytes, between the start positions of each row in 'pixels'. The first row starts at *pixels.
-	//If stride isn't equal to width * byteperpix(fmt), the padding contains undefined data. Never access it.
-	//Not necessarily writable. It's the caller's job to keep track of that.
+	//Must be a multiple of byteperpix(fmt).
+	//If stride isn't equal to width * byteperpix(fmt), the padding contains undefined data, likely part of other images. Don't access it.
+	//The image is not necessarily writable. It's the caller's job to keep track of that.
 	
 	union {
 		void* pixelsv;
@@ -55,7 +56,7 @@ struct image : nocopy {
 	void insert(int32_t x, int32_t y, const image& other);
 	//Inserts the given image, with every pixel turned into a scalex*scaley rectangle, nearest neighbor.
 	//Can also mirror the image, by using negative scalex/scaley. Zero is not allowed.
-	//WARNING: Does not blend alpha properly. It just copies the source pixels. Do not use with 0rgb target and non-0rgb source.
+	//WARNING: Does not blend alpha properly, it just copies the source pixels. Do not use with 0rgb target and non-0rgb source.
 	//WARNING: Does not check for overflow. If the scaled source doesn't fit in the target,
 	//         or the target coordinate is negative, undefined behavior.
 	void insert_scale_unsafe(int32_t x, int32_t y, const image& other, int32_t scalex, int32_t scaley);
@@ -91,6 +92,10 @@ struct image : nocopy {
 	//Automatically inserts linebreaks to ensure everything stays within the given width.
 	//Wrapped lines are justified, non-wrapped are left-aligned.
 	void insert_text_wrap(int32_t x, int32_t y, uint32_t width, const font& fnt, cstring text);
+	
+	
+	//Uses argb8888 for all formats. Like the other functions, overflow is ignored.
+	void insert_rectangle(int32_t x, int32_t y, uint32_t width, uint32_t height, uint32_t argb);
 	
 	
 	//Result is undefined for ifmt_none and unknown formats.
@@ -169,18 +174,18 @@ struct font {
 	uint8_t width[128];
 	uint8_t height;
 	
-	uint32_t color = 0x000000; // High byte is ignored.
+	uint32_t color = 0x000000; // Top byte is ignored.
 	uint8_t scale = 1;
 	
 	//Called if told to render characters 00-1F, except 0A (LF). Can draw whatever it wants, or change the font color.
-	//If it draws, and the drawn item should have a width, width[ch] should be nonzero after this callback returns.
+	//If it draws, and the drawn item should have a width, width[ch] should be nonzero. This callback may not set it, that'd confuse measure().
 	function<void(image& out, const font& fnt, int32_t x, int32_t y, uint8_t ch)> fallback;
 	
 	//Expects spacesize in pixels, and returns the same. text may not contain linebreaks.
 	uint32_t measure(cstring text, float spacesize = 0);
 	
-	//The image must be pure black and white, containing 16x8 tiles of equal size.
+	//The image must be pure black and white, containing 16x6 tiles of equal size.
 	//Each tile must contain one left-aligned symbol, corresponding to its index in the ASCII table.
-	//Each tile must be 8x8 or smaller. Maximum allowed image size is 128x64.
+	//Each tile must be 8x8 or smaller. Maximum allowed image size is 128x48.
 	void init_from_image(const image& img);
 };

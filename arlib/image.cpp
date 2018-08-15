@@ -47,7 +47,7 @@ void image::insert(int32_t x, int32_t y, const image& other)
 //  the functions are allowed to copy alpha from target instead
 template<bool checksrcalpha, uint32_t newalpha>
 static inline void image_insert_noov_8888_to_8888(image& target, int32_t x, int32_t y, const image& source);
-template<uint32_t newalpha>
+template<uint32_t newalpha> // 0x??000000 to overwrite the alpha channel, -1 to ignore
 static inline void image_insert_noov_8888_to_8888_blend(image& target, int32_t x, int32_t y, const image& source);
 
 static inline void image_insert_noov(image& target, int32_t x, int32_t y, const image& source)
@@ -83,6 +83,56 @@ static inline void image_insert_noov(image& target, int32_t x, int32_t y, const 
 		return image_insert_noov_8888_to_8888<false, -1>(target, x, y, source);
 }
 
+//lower - usually target
+//upper - usually source; its alpha decides how much of the lower color is visible
+//always does the full blending operation, does not optimize based on A=FF being true 90% of the time and A=00 90% of the remainder
+static inline uint32_t blend_8888_on_8888(uint32_t argb_lower, uint32_t argb_upper)
+{
+#ifdef HAVE_SIMD128
+	//hardcoded to 128bit SIMD, it's complex enough without having to consider multiple pixels at once
+	
+	uint32_t spx = argb_upper;
+	uint32_t tpx = argb_lower;
+	
+	//contains u16: spx.a, spx.b, spx.g, spx.r, tpx.{a,b,g,r}
+	simd128 vals = simd128::create32(0, 0, spx, tpx).extend8uto16();
+	
+	//contains u16: {sa}*4, {255-sa}*4
+	simd128 alphas = simd128::repeat16(spx>>24).xor16(simd128::create16(0,0,0,0, 255,255,255,255));
+	//contains u16: pixel contributions times 255
+	simd128 newcols255 = vals.mul16(alphas);
+	
+	//ugly magic constants: (u16)*8081>>16>>7 = (u16)/255
+	simd128 newcols = newcols255.mulhiu16(simd128::repeat16(0x8081)).rshiftu16(7);
+	
+	//contains u8: {don't care}*8, sac (source alpha contribution), sbc, sgc, src, tac, tbc, tgc, trc
+	simd128 newpack = newcols.compress16to8u(newcols);
+	//contains u8: {don't care}*12, sac+tac = result alpha, sbc+tbc, sgc+tgc, src+trc
+	//the components are known to not overflow
+	simd128 newpacksum = newpack.add32(newpack.shuffle32<1>());
+	
+	return newpacksum.low32();
+#else
+	uint8_t sr = argb_upper>>0;
+	uint8_t sg = argb_upper>>8;
+	uint8_t sb = argb_upper>>16;
+	uint8_t sa = argb_upper>>24;
+	
+	uint8_t tr = argb_lower>>0;
+	uint8_t tg = argb_lower>>8;
+	uint8_t tb = argb_lower>>16;
+	uint8_t ta = argb_lower>>24;
+	
+	tr = (sr*sa/255) + (tr*(255-sa)/255);
+	tg = (sg*sa/255) + (tg*(255-sa)/255);
+	tb = (sb*sa/255) + (tb*(255-sa)/255);
+	ta = (sa*sa/255) + (ta*(255-sa)/255);
+	
+	return ta<<24 | tb<<16 | tg<<8 | tr<<0;
+#endif
+}
+
+// valid newalpha values: 0x00000000 (set alpha to 0, used for 0rgb), 0xFF000000 (opaque, for bargb), -1 (calculate alpha properly)
 template<uint32_t newalpha>
 static inline void image_insert_noov_8888_to_8888_blend(image& target, int32_t x, int32_t y, const image& source)
 {
@@ -99,54 +149,10 @@ static inline void image_insert_noov_8888_to_8888_blend(image& target, int32_t x
 			{
 				if (alpha != 0)
 				{
-#ifdef HAVE_SIMD128
-					//hardcoded to 128bit SIMD, it's complex enough without having to consider multiple pixels at once
-					
-					uint32_t spx = sourcepx[xx];
-					uint32_t tpx = targetpx[xx];
-					
-					// contains u16: spx.a, spx.b, spx.g, spx.r, tpx.{a,b,g,r}
-					simd128 vals = simd128::create32(0, 0, spx, tpx).extend8uto16();
-					
-					//contains u16: {sa}*4, {255-sa}*4
-					simd128 alphas = simd128::repeat16(spx>>24).xor16(simd128::create16(0,0,0,0, 255,255,255,255));
-					//contains u16: pixel contributions times 255
-					simd128 newcols255 = vals.mul16(alphas);
-					
-					//ugly magic constants: (u16)*8081>>16>>7 = (u16)/255
-					simd128 newcols = newcols255.mulhiu16(simd128::repeat16(0x8081)).rshiftu16(7);
-					
-					//contains u8: {don't care}*8, sac (source alpha contribution), sbc, sgc, src, tac, tbc, tgc, trc
-					simd128 newpack = newcols.compress16to8u(newcols);
-					//contains u8: {don't care}*12, sac+tac = result alpha, sbc+tbc, sgc+tgc, src+trc
-					//the components are known to not overflow
-					simd128 newpacksum = newpack.add32(newpack.shuffle32<1>());
-					
-					uint32_t newpx = newpacksum.low32();
+					uint32_t newpx = blend_8888_on_8888(targetpx[xx], sourcepx[xx]);
 					if (newalpha == 0x00000000) newpx &= 0x00FFFFFF;
 					if (newalpha == 0xFF000000) newpx |= 0xFF000000;
 					targetpx[xx] = newpx;
-#else
-					uint8_t sr = sourcepx[xx]>>0;
-					uint8_t sg = sourcepx[xx]>>8;
-					uint8_t sb = sourcepx[xx]>>16;
-					uint8_t sa = sourcepx[xx]>>24;
-					
-					uint8_t tr = targetpx[xx]>>0;
-					uint8_t tg = targetpx[xx]>>8;
-					uint8_t tb = targetpx[xx]>>16;
-					uint8_t ta = targetpx[xx]>>24;
-					
-					tr = (sr*sa/255) + (tr*(255-sa)/255);
-					tg = (sg*sa/255) + (tg*(255-sa)/255);
-					tb = (sb*sa/255) + (tb*(255-sa)/255);
-					if (newalpha == (uint32_t)-1)
-						ta = (sa*sa/255) + (ta*(255-sa)/255);
-					else
-						ta = newalpha>>24;
-					
-					targetpx[xx] = ta<<24 | tb<<16 | tg<<8 | tr<<0;
-#endif
 				}
 				//else a=0 -> do nothing
 			}
@@ -406,6 +412,46 @@ void image::insert_scale_unsafe(int32_t x, int32_t y, const image& other, int32_
 		}
 	}
 }
+
+
+
+void image::insert_rectangle(int32_t x, int32_t y, uint32_t width, uint32_t height, uint32_t argb)
+{
+	if (x<0) { if (width  < (uint32_t)-x) return; width  -= -x; x=0; }
+	if (y<0) { if (height < (uint32_t)-y) return; height -= -y; y=0; }
+	if (x+width  >= this->width)  { if ((uint32_t)x >= this->width)  return; width  = this->width  - x; }
+	if (y+height >= this->height) { if ((uint32_t)y >= this->height) return; height = this->height - y; }
+	
+	if (argb >= 0xFF000000)
+	{
+		if (!height) return;
+		
+		if (fmt == ifmt_0rgb8888) argb &= 0x00FFFFFF;
+		uint32_t* targetpx = this->pixels32 + y*this->stride/sizeof(uint32_t) + x;
+		for (uint32_t xx=0;xx<width;xx++)
+		{
+			targetpx[xx] = argb;
+		}
+		for (uint32_t yy=1;yy<height;yy++)
+		{
+			memcpy(targetpx + yy*this->stride/sizeof(uint32_t), targetpx, width*sizeof(uint32_t));
+		}
+	}
+	else
+	{
+		for (uint32_t yy=0;yy<height;yy++)
+		{
+			uint32_t* targetpx = this->pixels32 + (y+yy)*this->stride/sizeof(uint32_t) + x;
+			for (uint32_t xx=0;xx<width;xx++)
+			{
+				targetpx[xx] = blend_8888_on_8888(targetpx[xx], argb);
+				if (fmt == ifmt_0rgb8888) targetpx[xx] &= 0x00FFFFFF;
+			}
+		}
+	}
+}
+
+
 
 void image::init_clone(const image& other, int32_t scalex, int32_t scaley)
 {

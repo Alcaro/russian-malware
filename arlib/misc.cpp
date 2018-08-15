@@ -24,3 +24,23 @@ void operator delete[](void * p, size_t n) { free(p); }
 extern "C" void __cxa_pure_virtual();
 extern "C" void __cxa_pure_virtual() { puts("__cxa_pure_virtual"); abort(); }
 #endif
+
+#include "test.h"
+
+test("bitround", "", "")
+{
+	assert_eq(bitround((unsigned)1), 1);
+	assert_eq(bitround((unsigned)2), 2);
+	assert_eq(bitround((unsigned)3), 4);
+	assert_eq(bitround((unsigned)4), 4);
+	assert_eq(bitround((unsigned)640), 1024);
+	assert_eq(bitround((unsigned)0x7FFFFFFF), 0x80000000);
+	assert_eq(bitround((unsigned)0x80000000), 0x80000000);
+	assert_eq(bitround((signed)1), 1);
+	assert_eq(bitround((signed)2), 2);
+	assert_eq(bitround((signed)3), 4);
+	assert_eq(bitround((signed)4), 4);
+	assert_eq(bitround((signed)640), 1024);
+	assert_eq(bitround((signed)0x3FFFFFFF), 0x40000000);
+	assert_eq(bitround((signed)0x40000000), 0x40000000);
+}

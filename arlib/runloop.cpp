@@ -156,6 +156,15 @@ public:
 	
 	void step(bool wait)
 	{
+		if (wait && fdinfo.size() == 0 && timerinfo.size() == 0)
+		{
+#ifdef ARLIB_TEST
+			assert_unreachable();
+#else
+			abort();
+#endif
+		}
+		
 		struct timespec now;
 		timespec_now(&now);
 //printf("runloop: time is %lu.%09lu\n", now.tv_sec, now.tv_nsec);
