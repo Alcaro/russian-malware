@@ -12,13 +12,13 @@
 	{ \
 		int au = (t)a; \
 		int bu = (t)b; \
-		int cu; \
+		int cu KNOWN_INIT(0); \
 		bool cu_overflow = false; \
 		if (1 op 8 == 256 /* if it's operator<< */ && (au < 0 || bu < 0 || bu >= 8)) cu_overflow = true; \
 		else cu = au op bu; \
 		if (!cu_overflow && (t)cu != cu) cu_overflow = true; \
 		\
-		t out = -1; /* gcc throws uninitialized warnings without this */ \
+		t out KNOWN_INIT(0); \
 		assert_msg(safeint<t>::opname##ov_nobuiltin(au, bu, &out) == cu_overflow, assertstr(t, op, cu_overflow, !cu_overflow)); \
 		if (!cu_overflow) assert_msg(out == cu, assertstr(t, op, out, cu)); \
 		\

@@ -33,6 +33,32 @@ test("array", "", "array")
 			x.append();
 		}
 	}
+	
+	{
+		array<int> x = { 3,1,4,5,9,2,6,8,7,0 };
+		array<int> y = { 3,1,4,5,9,2,6,8,7,0 };
+		array<int> z = { 0,1,2,3,4,5,6,7,8,9 };
+		x.sort();
+		y.sort([](int a, int b) { return b < a; });
+		assert_eq(x, z);
+		assert_eq(y, z);
+	}
+	
+	{
+		array<string> x = { "fl","oa","ti","ng","mu","nc","he","rf","lo","at","in","gm","un","ch","er" };
+		array<string> y = { "at","ch","er","fl","gm","he","in","lo","mu","nc","ng","oa","rf","ti","un" };
+		x.sort([](cstring a, cstring b) { return string::compare(b,a) < 0; });
+		assert_eq(x, y);
+	}
+	
+	{
+		array<int> x = { 1,2,3,4,5,6,7,8,9,0 };
+		x = x.slice(3, 6);
+		assert_eq(x.size(), 6);
+		assert_eq(x[0], 4);
+		assert_eq(x[1], 5);
+		assert_eq(x[2], 6);
+	}
 }
 
 

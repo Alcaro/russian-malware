@@ -126,8 +126,50 @@ array<byte> base64_dec(cstring text)
 	return ret;
 }
 
-//TODO
-string base64_enc(arrayview<byte> bytes);
+void base64_enc_raw(arrayvieww<byte> out, arrayview<byte> bytes)
+{
+	uint8_t* outp = out.ptr();
+	const uint8_t* inp = bytes.ptr();
+	const uint8_t* inpe = inp + bytes.size();
+	
+	while (inp+3 <= inpe)
+	{
+		uint32_t three = inp[0]<<16 | inp[1]<<8 | inp[2];
+		
+		*(outp++) = encode[(three>>18)&63];
+		*(outp++) = encode[(three>>12)&63];
+		*(outp++) = encode[(three>>6 )&63];
+		*(outp++) = encode[(three>>0 )&63];
+		inp += 3;
+	}
+	
+	if (inp+0 == inpe) {}
+	if (inp+1 == inpe)
+	{
+		uint32_t three = inp[0]<<16;
+		
+		*(outp++) = encode[(three>>18)&63];
+		*(outp++) = encode[(three>>12)&63];
+		*(outp++) = '=';
+		*(outp++) = '=';
+	}
+	if (inp+2 == inpe)
+	{
+		uint32_t three = inp[0]<<16 | inp[1]<<8;
+		
+		*(outp++) = encode[(three>>18)&63];
+		*(outp++) = encode[(three>>12)&63];
+		*(outp++) = encode[(three>>6 )&63];
+		*(outp++) = '=';
+	}
+}
+
+string base64_enc(arrayview<byte> bytes)
+{
+	string ret;
+	base64_enc_raw(ret.construct(base64_enc_len(bytes.size())), bytes);
+	return ret;
+}
 
 #include "test.h"
 static void do_test(cstring enc, cstring dec)
@@ -137,7 +179,7 @@ static void do_test(cstring enc, cstring dec)
 	if (enc[enc.length()-2] == '=') declen_exp++;
 	assert_eq(base64_dec_len(enc.length()), declen_exp);
 	assert_eq(base64_enc_len(dec.length()), enc.length());
-	//assert_eq(base64_enc(dec.bytes()), enc);
+	assert_eq(base64_enc(dec.bytes()), enc);
 	assert_eq(cstring(base64_dec(enc)), dec);
 }
 

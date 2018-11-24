@@ -11,7 +11,7 @@ int AAAAAAAAAAAAAAAAAAAAAAA()
 	int r = 0;
 	for (int n : arrayview<int>(w)
 		// { 1, 2, 3, 4, 5 }
-		.where([](int n) -> bool { return n & 1; })
+		.where([](int n) -> bool { return n&1; })
 		// { 1, 3, 5 }
 		.select([&](int n) -> short { return n*2; })
 		// { 2, 6, 10 }
@@ -57,9 +57,9 @@ test("LINQ", "array,set", "linq")
 	}
 	
 	{
-		array<int> x = { 1, 2, 3, 4, 5 };
+		array<int> x = { 0, 1, 2, 3, 4, 5 };
 		array<short> y = x
-			// { 1, 2, 3, 4, 5 }
+			// { 0, 1, 2, 3, 4, 5 }
 			.where([](int n) -> bool { return n & 1; })
 			// { 1, 3, 5 }
 			.select([](int n) -> short { return n*2; })
@@ -75,6 +75,20 @@ test("LINQ", "array,set", "linq")
 		//passes if it does not read outside x
 		arrayview<int> y = arrayview<int>(x.ptr(), 100);
 		assert_eq(y.first([](int x) -> bool { return x>5; }), 9);
+		
+		assert_eq(x.select([](size_t i, int x) -> int { return i+x; }).join(), 0+1 + 1+4 + 2+9 + 3+16 + 4+25);
+	}
+	
+	{
+		struct nocopy2 : nocopy {};
+		nocopy2 x[10];
+		assert_eq(arrayview<nocopy2>(x)
+		            .where([&](const nocopy2& y)->bool { return (&y - x)&1; })
+		            .select([&](const nocopy2& y)->const nocopy2& { return (&y)[-1]; })
+		            .select([&](const nocopy2& y)->int { return &y - x; })
+		            .as_array()
+		            .join(),
+		          1-1 + 3-1 + 5-1 + 7-1 + 9-1);
 	}
 }
 #endif

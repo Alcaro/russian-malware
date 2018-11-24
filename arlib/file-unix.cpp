@@ -79,20 +79,6 @@
 //		cwd_init=cwd_init_fixed;
 //		free(cwd_init_tmp);
 //	}
-//	
-//	//try a couple of useless directories and hope one of them works
-//	//this seems to be the best one:
-//	//- even root can't create files here
-//	//- it contains no files with a plausible name on a standard Ubuntu box (I have an ath9k-phy0, nothing will ever want that filename)
-//	//- a wild write will not do anything dangerous except turn on some lamps
-//	!chdir("/sys/class/leds/") ||
-//		//the rest are in case it's not accessible (weird chroot? not linux?), so try some random things
-//		!chdir("/sys/") ||
-//		!chdir("/dev/") ||
-//		!chdir("/home/") ||
-//		!chdir("/tmp/") ||
-//		!chdir("/");
-//	cwd_bogus = getcwd(NULL, 0);//POSIX does not specify getcwd(NULL), it's Linux-specific
 //}
 
 

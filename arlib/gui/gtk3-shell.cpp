@@ -104,9 +104,9 @@ void set_is_dialog()
 	gtk_window_set_type_hint(this->wndw, GDK_WINDOW_TYPE_HINT_DIALOG);
 }
 
-void set_parent(struct window * parent_)
+void set_parent(window * parent_)
 {
-	struct window_gtk3 * parent=(struct window_gtk3*)parent_;
+	window_gtk3 * parent=(window_gtk3*)parent_;
 	gtk_window_set_transient_for(this->wndw, parent->wndw);
 }
 
@@ -136,7 +136,7 @@ void set_pos(int x, int y)
 
 /*private*/ static gboolean onmove_activate(GtkWidget* widget, GdkEvent* event, gpointer user_data)
 {
-	struct window_gtk3 * p=(struct window_gtk3*)user_data;
+	window_gtk3 * p=(window_gtk3*)user_data;
 	if (!in_callback) p->onmove(event->configure.x, event->configure.y);
 	return FALSE;
 }
@@ -328,7 +328,7 @@ bool menu_active()
 
 ~window_gtk3()
 {
-	//struct window_gtk3 * this=(struct window_gtk3*)this_;
+	//window_gtk3 * this=(window_gtk3*)this_;
 	//if (this->delayfree)
 	//{
 	//	this->delayfree=2;
@@ -350,7 +350,7 @@ uintptr_t _get_handle()
 
 static gboolean onclose_gtk(GtkWidget* widget, GdkEvent* event, gpointer user_data)
 {
-	struct window_gtk3 * This=(struct window_gtk3*)user_data;
+	window_gtk3 * This=(window_gtk3*)user_data;
 	if (This->onclose)
 	{
 		//This->delayfree=1;
@@ -362,7 +362,7 @@ static gboolean onclose_gtk(GtkWidget* widget, GdkEvent* event, gpointer user_da
 		//if (This->delayfree==2)
 		//{
 		//	This->delayfree=0;
-		//	free_((struct window*)This);
+		//	free_((window*)This);
 		//	return TRUE;
 		//}
 		//This->delayfree=0;
@@ -568,7 +568,7 @@ struct windowmenu_menu::impl
 {
 public:
 	GtkMenuShell* container;
-	struct windowmenu* * children;
+	windowmenu* * children;
 	uint8_t numchildren;
 	//char padding[7];
 };

@@ -298,7 +298,7 @@ string process::find_prog(cstring prog)
 	for (string& path : paths)
 	{
 		string pathprog = path+"/"+prog;
-		if (access(pathprog, X_OK)==0) return pathprog;
+		if (access(pathprog, X_OK) == 0) return pathprog;
 	}
 	return "";
 }
@@ -326,7 +326,7 @@ struct process::onexit_t {
 	}
 };
 
-pid_t process::launch_impl(array<const char*> argv, array<int> stdio_fd)
+pid_t process::launch_impl(const char * program, array<const char*> argv, array<int> stdio_fd)
 {
 	pid_t ret = fork();
 	if (ret == 0)
@@ -340,21 +340,23 @@ pid_t process::launch_impl(array<const char*> argv, array<int> stdio_fd)
 		//In particular, malloc must be avoided.
 		
 		set_fds(stdio_fd);
-		execvp(argv[0], (char**)argv.ptr());
-		while (true) _exit(EXIT_FAILURE);
+		execvp(program, (char**)argv.ptr());
+		while (true)
+			_exit(EXIT_FAILURE);
 	}
 	
 	return ret;
 }
 
-bool process::launch(cstring prog, arrayview<string> args)
+bool process::launch(cstring prog, arrayview<string> args, bool override_argv0)
 {
 	sigchld::init(loop);
 	
 	array<const char*> argv;
 	string progpath = find_prog(prog); // don't inline, the variable must be kept alive until calling launch_impl
 	if (!progpath) return false;
-	argv.append((const char*)progpath);
+	if (!override_argv0)
+		argv.append((const char*)progpath);
 	for (size_t i=0;i<args.size();i++)
 	{
 		argv.append((const char*)args[i]);
@@ -373,7 +375,7 @@ bool process::launch(cstring prog, arrayview<string> args)
 	
 	sigchld::listen_begin();
 	//can poke this->pid/exitcode freely before calling sigchld::listen
-	this->pid = launch_impl(std::move(argv), fds);
+	this->pid = launch_impl(progpath, std::move(argv), fds);
 	
 	if (ch_stdin)
 	{

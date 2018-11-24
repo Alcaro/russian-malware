@@ -6,11 +6,11 @@
 //(1) it's a GtkWidget rather than X11 Window, which would make the widget_viewport implementation somewhat different
 //  maybe make it a GtkGrid with one or zero children?
 //(2) not only does it have an equivalent of gl.outputFramebuffer(), but it doesn't even export the actual framebuffer name -
-//  only gtk_gl_area_attach_buffers(), which attaches it.
-// but on the other hand, could always go behind Gtk - glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &GLint)
-// gtk_gl_area_attach_buffers() also configures the framebuffer, but that's pointless, fbo config remains if unbound.
+//    only gtk_gl_area_attach_buffers(), which attaches it.
+//  but on the other hand, could always go behind Gtk - glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &GLint)
+//  gtk_gl_area_attach_buffers() also configures the framebuffer, but that's pointless, fbo config remains if unbound.
 //(3) it very strongly recommends drawing only from some dumb "render" signal callback, rather than where I want
-// it's unclear if it's possible to ignore that, it's unclear if it'll work in the future, and it's unclear how that interacts with vblank
+//  it's unclear if it's possible to ignore that, it's unclear if it'll work in the future, and it's unclear how that interacts with vblank
 //conclusion: it's intended for animations and other simple stuff, gaming is uncomfortable. it's too different. it's not worth the effort.
 
 #include <GL/gl.h>

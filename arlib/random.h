@@ -21,6 +21,10 @@ public:
 		state = state*multiplier + increment;
 		return ror32((prev^(prev>>18))>>27, prev>>59);
 	}
+	uint64_t rand64()
+	{
+		return ((uint64_t)rand32() << 32) | rand32();
+	}
 	
 	void seed(uint64_t seed)
 	{
@@ -44,9 +48,14 @@ class random_t : public random_pcg {
 		}
 		uint32_t operator%(int other)
 		{
-			return src.rand_mod(other); // blows up if given negative input. just ... don't do that
+			return src.rand_mod((uint32_t)other); // blows up if given negative input. just ... don't do that
+		}
+		uint64_t operator%(uint64_t other)
+		{
+			return src.rand_mod(other);
 		}
 		operator uint32_t() { return src.rand32(); }
+		operator uint64_t() { return src.rand64(); }
 	};
 public:
 	
@@ -68,6 +77,18 @@ public:
 		while (true)
 		{
 			uint32_t candidate = rand32();
+			if (candidate < minvalid) continue;
+			return candidate%limit;
+		}
+	}
+	uint64_t rand_mod(uint64_t limit)
+	{
+		if (LIKELY(limit <= 0xFFFFFFFF)) return rand_mod((uint32_t)limit);
+		uint64_t minvalid = ((uint64_t)-limit) % limit;
+		
+		while (true)
+		{
+			uint64_t candidate = rand64();
 			if (candidate < minvalid) continue;
 			return candidate%limit;
 		}

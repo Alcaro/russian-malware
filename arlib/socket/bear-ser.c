@@ -1,8 +1,12 @@
+//This program allows serializing a BearSSL context to a byte stream, allowing passing it between programs, across an exec(), or similar.
+//A serialized context can only be used with the exact BearSSL version it was serialized with, due to T0-relative pointers.
+//Additionally, the serializer itself may break between BearSSL versions; while 0.3->0.4->0.5 didn't need any changes, 0.5->0.6 did.
+
+#include "../deps/bearssl-0.6/inc/bearssl.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "../deps/bearssl-0.5/inc/bearssl.h"
 
 //This file exports the following two functions and struct:
 
@@ -14,7 +18,8 @@ typedef struct br_frozen_ssl_client_context_ {
 
 //A frozen context can safely be transferred between processes.
 //Don't use the context after freezing it, obviously. Deallocate it.
-// The context will be scrambled. This is a bug, but since it's unusable post-freeze anyways, it's considered acceptable.
+// The context will be scrambled, so you can't serialize it then change your mind.
+//This is a bug, but I can't think of any situation where it'd be an issue. Worst case, deserialize back into the original process.
 void br_ssl_client_freeze(br_frozen_ssl_client_context* fr, br_ssl_client_context* cc, br_x509_minimal_context* xc);
 
 //cc/xc must be initialized in the same way as the original objects prior to calling this.
@@ -24,11 +29,13 @@ void br_ssl_client_freeze(br_frozen_ssl_client_context* fr, br_ssl_client_contex
 //- br_ssl_engine_set_buffer
 //- br_ssl_client_reset (other than the domain name, which may differ, or even be NULL)
 //- The list of trust anchors in the x509, including order
-//Can not be used to upgrade BearSSL versions (not even tiny patches), due to T0-relative pointers.
-// Likely to break on BearSSL versions other than 0.5, it depends on lots of implementation details. May work, but don't test your luck.
-//The frozen context will be scrambled and may not be used afterwards.
-// This is a bug, but since cloning a SSL context is illegal anyways, it's considered acceptable.
+//Like the serializer, the input will get scrambled. If necessary, re-serialize it.
 void br_ssl_client_unfreeze(br_frozen_ssl_client_context* fr, br_ssl_client_context* cc, br_x509_minimal_context* xc);
+
+//End of public exports.
+
+
+
 
 
 
@@ -69,6 +76,7 @@ static void br_ssl_engine_freeze(br_ssl_engine_context* cc, const uint8_t * t0_i
 	}
 	if (cc->igcm_in    && cc->in.vtable == &cc->igcm_in   ->inner) cc->in.vtable = (br_sslrec_in_class*)3;
 	if (cc->ichapol_in && cc->in.vtable == &cc->ichapol_in->inner) cc->in.vtable = (br_sslrec_in_class*)4;
+	if (cc->iccm_in    && cc->in.vtable == &cc->iccm_in   ->inner) cc->in.vtable = (br_sslrec_in_class*)5;
 	
 	if (cc->out.vtable == &br_sslrec_out_clear_vtable) cc->out.vtable = (br_sslrec_out_class*)1;
 	if (cc->icbc_out && cc->out.vtable == &cc->icbc_out->inner)
@@ -79,6 +87,7 @@ static void br_ssl_engine_freeze(br_ssl_engine_context* cc, const uint8_t * t0_i
 	}
 	if (cc->igcm_out    && cc->out.vtable == &cc->igcm_out   ->inner) cc->out.vtable = (br_sslrec_out_class*)3;
 	if (cc->ichapol_out && cc->out.vtable == &cc->ichapol_out->inner) cc->out.vtable = (br_sslrec_out_class*)4;
+	if (cc->iccm_out    && cc->out.vtable == &cc->iccm_out   ->inner) cc->out.vtable = (br_sslrec_out_class*)5;
 	
 	if (cc->rng.digest_class == cc->mhash.impl[0]) cc->rng.digest_class = (void*)1;
 	if (cc->rng.digest_class == cc->mhash.impl[1]) cc->rng.digest_class = (void*)2;
@@ -110,11 +119,13 @@ static void br_ssl_engine_unfreeze(br_ssl_engine_context* cc, const br_ssl_engin
 	cc->obuf = reference->obuf;
 	
 	cc->icbc_in     = reference->icbc_in;
-	cc->igcm_in     = reference->igcm_in;
-	cc->ichapol_in  = reference->ichapol_in;
 	cc->icbc_out    = reference->icbc_out;
+	cc->igcm_in     = reference->igcm_in;
 	cc->igcm_out    = reference->igcm_out;
+	cc->ichapol_in  = reference->ichapol_in;
 	cc->ichapol_out = reference->ichapol_out;
+	cc->iccm_in     = reference->iccm_in;
+	cc->iccm_out    = reference->iccm_out;
 	
 	if (cc->in.vtable == (void*)2)
 	{
@@ -133,6 +144,12 @@ static void br_ssl_engine_unfreeze(br_ssl_engine_context* cc, const br_ssl_engin
 		cc->in.vtable = &reference->ichapol_in->inner;
 		cc->in.chapol.ichacha = reference->ichacha;
 		cc->in.chapol.ipoly = reference->ipoly;
+	}
+	if (cc->in.vtable == (void*)5)
+	{
+		cc->in.vtable = &reference->iccm_in->inner;
+		cc->in.ccm.vtable.gen = reference->in.ccm.vtable.gen;
+		cc->in.ccm.bc.vtable = reference->iaes_ctrcbc;
 	}
 	if (cc->out.vtable == (void*)1)
 	{
@@ -155,6 +172,12 @@ static void br_ssl_engine_unfreeze(br_ssl_engine_context* cc, const br_ssl_engin
 		cc->out.vtable = &reference->ichapol_out->inner;
 		cc->out.chapol.ichacha = reference->ichacha;
 		cc->out.chapol.ipoly = reference->ipoly;
+	}
+	if (cc->out.vtable == (void*)5)
+	{
+		cc->out.vtable = &reference->iccm_out->inner;
+		cc->out.ccm.vtable.gen = reference->out.ccm.vtable.gen;
+		cc->out.ccm.bc.vtable = reference->iaes_ctrcbc;
 	}
 	
 	if (cc->rng.vtable) cc->rng.vtable = &br_hmac_drbg_vtable;
@@ -179,6 +202,7 @@ static void br_ssl_engine_unfreeze(br_ssl_engine_context* cc, const br_ssl_engin
 	cc->iaes_cbcenc = reference->iaes_cbcenc;
 	cc->iaes_cbcdec = reference->iaes_cbcdec;
 	cc->iaes_ctr = reference->iaes_ctr;
+	cc->iaes_ctrcbc = reference->iaes_ctrcbc;
 	cc->ides_cbcenc = reference->ides_cbcenc;
 	cc->ides_cbcdec = reference->ides_cbcdec;
 	cc->ighash = reference->ighash;

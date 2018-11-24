@@ -120,7 +120,7 @@ void arlib_init_gui(argparse& args, char** argv)
 		
 		gtkarg.arg = G_OPTION_ARG_CALLBACK;
 		GOptionArgFunc tmp =
-			[](const gchar * option_name, const gchar * value, gpointer data, GError* * error)->gboolean
+			[](const gchar * option_name, const gchar * value, gpointer data, GError* * error) -> gboolean
 			{
 				//option_name - The name of the option being parsed. This will be either a single dash
 				//  followed by a single letter (for a short name) or two dashes followed by a long option name.
@@ -484,12 +484,16 @@ public:
 	
 	struct timer_cb {
 		guint source_id;
+		bool repeat;
+		bool inside = false;
+		bool deleted = false;
 		runloop_gtk* parent;
-		function<bool()> callback;
+		function<void()> callback;
 	};
 	refarray<timer_cb> timerinfo;
 	
-	bool need_exit_sync = true;
+	// if runloop is never entered (someone trying to measure startup performance by calling exit() before entering loop), don't sync
+	bool need_exit_sync = false;
 	
 	static const GIOCondition cond_rd = (GIOCondition)(G_IO_IN |G_IO_HUP|G_IO_ERR);
 	static const GIOCondition cond_wr = (GIOCondition)(G_IO_OUT|G_IO_HUP|G_IO_ERR);
@@ -537,26 +541,30 @@ public:
 	/*private*/ static gboolean timer_cb_s(gpointer user_data)
 	{
 		timer_cb* cb = (timer_cb*)user_data;
-		bool ret = cb->callback();
+		cb->inside = true;
+		cb->callback();
+		cb->inside = false;
 		
-		if (ret) return G_SOURCE_CONTINUE;
+		if (cb->repeat && !cb->deleted) return G_SOURCE_CONTINUE;
 		cb->parent->remove_full(cb->source_id, false);
 		return G_SOURCE_REMOVE;
 	}
-	uintptr_t set_timer_rel(unsigned ms, function<bool()> callback)
+	uintptr_t set_timer_rel(unsigned ms, bool repeat, function<void()> callback)
 	{
 		timer_cb& cb = timerinfo.append();
 		cb.callback = callback;
 		cb.parent = this;
+		cb.repeat = repeat;
 		if (ms < 2000) cb.source_id = g_timeout_add(ms, timer_cb_s, &cb);
 		else cb.source_id = g_timeout_add_seconds((ms+750)/1000, timer_cb_s, &cb);
 		return cb.source_id;
 	}
-	uintptr_t set_idle(function<bool()> callback)
+	uintptr_t set_idle(function<void()> callback)
 	{
 		timer_cb& cb = timerinfo.append();
 		cb.callback = callback;
 		cb.parent = this;
+		cb.repeat = false;
 		cb.source_id = g_idle_add(timer_cb_s, &cb);
 		return cb.source_id;
 	}
@@ -576,9 +584,16 @@ public:
 		}
 		for (size_t i=0;i<timerinfo.size();i++)
 		{
-			if (timerinfo[i].source_id == id)
+			timer_cb& cb = timerinfo[i];
+			if (cb.source_id == id)
 			{
-				if (remove_source) g_source_remove(timerinfo[i].source_id);
+				if (cb.inside)
+				{
+					cb.deleted = true;
+					return;
+				}
+				
+				if (remove_source) g_source_remove(cb.source_id);
 				timerinfo.remove(i);
 				return;
 			}
@@ -620,11 +635,28 @@ public:
 	void exit() { gtk_main_quit(); }
 	void step(bool wait)
 	{
-		gtk_main_iteration_do(wait);
-		
-		//workaround for GTK thinking the program is lagging if we only call this every 16ms
-		//we're busy waiting in non-gtk syscalls, waiting less costs us nothing
-		gtk_main_iteration_do(false);
+		if (wait && !gtk_events_pending())
+		{
+			//workaround for Gtk thinking the program is lagging if we only call this every 16ms
+			//we're busy waiting in non-Gtk syscalls, waiting less costs us nothing
+			
+			//yes, I need to call this twice if there are no events; first one is nonblocking for some reason,
+			// even though I ask for blocking, and if I only call this once, the 'first one?' flag is reset by
+			// something in gl.swapBuffers
+			//I suspect Gtk is trying to be "smart" about something, but it just ends up being counterproductive
+			//and I can't find which part of the source code describes such absurd behavior,
+			// nor any sensible way to debug it, track it down, and find a less absurd workaround
+			
+			gtk_main_iteration_do(true);
+			gtk_main_iteration_do(true);
+		}
+		else
+		{
+			//if there are events, we have everything we're suppose to wait for; dispatch them and report we're done
+			//however, we must (again) call this twice, to disable mouse motion compression
+			gtk_main_iteration_do(false);
+			gtk_main_iteration_do(false);
+		}
 		
 		need_exit_sync = true;
 	}
@@ -640,7 +672,7 @@ public:
 		{
 			//GTK BUG WORKAROUND:
 			
-			//gtk docs say "It's OK to use the GLib main loop directly instead of gtk_main(), though it involves slightly more typing"
+			//Gtk docs say "It's OK to use the GLib main loop directly instead of gtk_main(), though it involves slightly more typing"
 			//but that is a lie. gtk_main() does a few deinitialization tasks when it leaves
 			//for example, it saves the clipboard to X11-server-side storage; without that, the clipboard is wiped on app exit
 			//there's no publically exported symbol to perform these cleanup tasks, so gtk_main() must be called
@@ -650,7 +682,7 @@ public:
 			//there could be other events at this point, but they're unlikely and harmless
 			
 			//but this is still an ugly hack. a much better solution would be creating gtk_deinit()
-			// and moving these shutdown actions there, or having gtk put this in its own atexit handler
+			// and moving these shutdown actions there, or having Gtk put this in its own atexit handler
 			
 			g_idle_add([](void*)->gboolean { gtk_main_quit(); return G_SOURCE_REMOVE; }, NULL);
 			gtk_main();

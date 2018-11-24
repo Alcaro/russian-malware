@@ -39,7 +39,7 @@ struct VirtualList
 	unsigned int columns;
 	bool checkboxes;
 	
-	struct widget_listbox_virtual * subject;
+	widget_listbox_virtual * subject;
 	function<const char * (size_t row, int column)> get_cell;
 };
 

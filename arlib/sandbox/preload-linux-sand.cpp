@@ -21,6 +21,8 @@
 
 #include "syscall.h"
 
+//__asm__(".intel_syntax");
+
 //gcc recognizes various function names and reads attributes (such as extern) from the headers, force it not to
 namespace mysand { namespace {
 

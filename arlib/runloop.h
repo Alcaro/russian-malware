@@ -37,32 +37,41 @@ public:
 	//virtual uintptr_t set_socket(socket* sock, function<void()> cb_read, function<void()> cb_write) = 0;
 #endif
 	
-	//Runs once.
+private:
+	virtual uintptr_t set_timer_rel(unsigned ms, bool repeat, function<void()> callback) = 0;
+public:
+	//Runs once. The return value can be used to remove() the callback before it arrives.
 	uintptr_t set_timer_abs(time_t when, function<void()> callback);
-	//Runs repeatedly. To stop it, remove() it, return false from the callback, or both.
+	//Runs repeatedly. To stop, remove() it.
 	//Accuracy is not guaranteed; it may or may not round the timer frequency to something it finds appropriate,
 	// in either direction, and may or may not try to 'catch up' if a call is late (or early).
 	//Don't use for anything that needs tighter timing than ±1 second.
-	virtual uintptr_t set_timer_rel(unsigned ms, function<bool()> callback) = 0;
+	uintptr_t set_timer_loop(unsigned ms, function<void()> callback) { return set_timer_rel(ms, true, callback); }
+	uintptr_t set_timer_once(unsigned ms, function<void()> callback) { return set_timer_rel(ms, false, callback); }
 	
 	//Will be called next time no other events (other than other idle callbacks) are ready, or earlier.
-	//Like set_timer_rel, the return value tells whether to call it again later.
-	virtual uintptr_t set_idle(function<bool()> callback) { return set_timer_rel(0, callback); }
+	// Runs once; if you want another, set a new one.
+	virtual uintptr_t set_idle(function<void()> callback) { return set_timer_rel(0, false, callback); }
 	
 	//Deletes an existing timer and adds a new one.
 	uintptr_t set_timer_abs(uintptr_t prev_id, time_t when, function<void()> callback)
 	{
-		remove(prev_id);
+		if (prev_id) remove(prev_id);
 		return set_timer_abs(when, callback);
 	}
-	uintptr_t set_timer_rel(uintptr_t prev_id, unsigned ms, function<bool()> callback)
+	uintptr_t set_timer_loop(uintptr_t prev_id, unsigned ms, function<void()> callback)
 	{
-		remove(prev_id);
-		return set_timer_rel(ms, callback);
+		if (prev_id) remove(prev_id);
+		return set_timer_loop(ms, callback);
 	}
-	uintptr_t set_idle(uintptr_t prev_id, function<bool()> callback)
+	uintptr_t set_timer_once(uintptr_t prev_id, unsigned ms, function<void()> callback)
 	{
-		remove(prev_id);
+		if (prev_id) remove(prev_id);
+		return set_timer_once(ms, callback);
+	}
+	uintptr_t set_idle(uintptr_t prev_id, function<void()> callback)
+	{
+		if (prev_id) remove(prev_id);
 		return set_idle(callback);
 	}
 	

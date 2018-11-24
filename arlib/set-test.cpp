@@ -296,13 +296,18 @@ test("map", "array", "set")
 		map1.insert(3,6);
 		map<int,int> map2 = std::move(map1);
 		
-		assert(map2[1]==2);
-		assert(map2[2]==4);
-		assert(map2[3]==6);
+		assert_eq(map2[1], 2);
+		assert_eq(map2[2], 4);
+		assert_eq(map2[3], 6);
 		
 		assert(!map1.contains(1));
 		assert(!map1.contains(2));
 		assert(!map1.contains(3));
+		
+		map2.insert(3,42);
+		assert_eq(map2[1], 2);
+		assert_eq(map2[2], 4);
+		assert_eq(map2[3], 42);
 	}
 	
 	{

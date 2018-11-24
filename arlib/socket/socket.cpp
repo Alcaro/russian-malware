@@ -242,7 +242,7 @@ public:
 	socket* i_connect(cstring domain, cstring ip, int port)
 	{
 		socket* ret = socket_raw::create(connect(ip, port), this->loop);
-		if (ret && this->ssl) ret = socket::wrap_ssl(ret, domain, this->loop);
+		if (ret && this->ssl) ret = socket::wrap_ssl_raw(ret, domain, this->loop);
 		return ret;
 	}
 	
@@ -331,13 +331,14 @@ public:
 		set_loop();
 	}
 	
-	/*private*/ bool call_cb_immed()
+	/*private*/ void call_cb_immed()
 	{
+		idle_id = loop->set_idle(idle_id, bind_this(&socketbuf::call_cb_immed));
+		
 		if (cb_read) cb_read();
 		if (cb_write) cb_write();
 		
 		set_loop();
-		return true;
 	}
 	
 	/*private*/ void set_loop()
@@ -347,9 +348,12 @@ public:
 		
 		if (cb_write || (cb_read && !child))
 		{
-			if (!idle_id) idle_id = loop->set_timer_rel(idle_id, 0, bind_this(&socketbuf::call_cb_immed));
+			if (!idle_id) idle_id = loop->set_idle(idle_id, bind_this(&socketbuf::call_cb_immed));
 		}
-		else idle_id = loop->remove(idle_id);
+		else
+		{
+			if (idle_id) idle_id = loop->remove(idle_id);
+		}
 	}
 	/*private*/ bool trysend(bool in_runloop)
 	{
@@ -394,7 +398,7 @@ public:
 	
 	~socketbuf()
 	{
-		loop->remove(idle_id);
+		if (idle_id) loop->remove(idle_id);
 	}
 };
 
@@ -429,6 +433,17 @@ socket* socket::wrap(socket* inner, runloop* loop)
 {
 	return new socketbuf(inner, loop);
 }
+
+socket* socket::wrap_ssl(socket* inner, cstring domain, runloop* loop)
+{
+	return wrap(wrap_ssl_raw(inner, domain, loop), loop);
+}
+
+socket* socket::create_sslmaybe(bool ssl, cstring domain, int port, runloop* loop)
+{
+	return (ssl ? socket::create_ssl : socket::create)(domain, port, loop);
+}
+
 
 #if 0
 static MAYBE_UNUSED int socketlisten_create_ip4(int port)

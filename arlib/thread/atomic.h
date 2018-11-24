@@ -17,7 +17,7 @@
 //(cmp)xchg obviously does, so to ease memorization, the others do too.
 
 #if __GNUC__ > 0
-#if __GNUC__*10+__GNUC_MINOR__ >= 47
+#if defined(__clang__) || (__GNUC__*10+__GNUC_MINOR__ >= 47)
 //https://gcc.gnu.org/onlinedocs/gcc-4.7.0/gcc/_005f_005fatomic-Builtins.html
 #define LOCKD_LOCKS_MODEL(type, model, modelname) \
 	inline type lock_incr ## modelname(type * val) { return __atomic_fetch_add(val, 1, model); } \
@@ -45,8 +45,8 @@
 //https://gcc.gnu.org/onlinedocs/gcc-4.1.2/gcc/Atomic-Builtins.html
 //the memory model isn't used, but all functions must still be defined
 #define LOCKD_LOCKS_MODEL(type, modelname) \
-	inline type lock_incr ## modelname(type * val) { __sync_fetch_and_add(val, 1); } \
-	inline type lock_decr ## modelname(type * val) { __sync_fetch_and_sub(val, 1); } \
+	inline type lock_incr ## modelname(type * val) { return __sync_fetch_and_add(val, 1); } \
+	inline type lock_decr ## modelname(type * val) { return __sync_fetch_and_sub(val, 1); } \
 	inline type lock_cmpxchg ## modelname(type * val, type old, type newval) { return __sync_val_compare_and_swap(val, old, newval); } \
 	inline type lock_xchg ## modelname(type * val, type newval) \
 	{ \
@@ -57,6 +57,7 @@
 			if (prev == prev2) break; \
 			else prev = prev2; \
 		} \
+		return prev; \
 	}
 
 #define LOCKD_LOCKS(type) \

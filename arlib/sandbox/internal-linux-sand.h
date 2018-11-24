@@ -1,6 +1,6 @@
 #pragma once
 //this file requires <sys/socket.h> included
-//this is not done manually, to allow recvmsg/sendmsg to be redefined
+//this is not done here, to allow recvmsg/sendmsg to be redefined
 //#include <sys/socket.h>
 
 enum broker_req_t {

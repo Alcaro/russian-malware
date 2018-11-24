@@ -289,6 +289,7 @@ uint64_t time_ms_ne()
 }
 #endif
 
+#if 0
 //similar to mktime, but UTC timezone
 //from http://stackoverflow.com/a/11324281
 time_t timegm(struct tm * t)
@@ -322,6 +323,7 @@ time_t timegm(struct tm * t)
 #undef MONTHSPERYEAR
     return (result);
 }
+#endif
 
 test("time", "", "time")
 {

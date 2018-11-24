@@ -1,6 +1,10 @@
 #include "init.h"
 #include "runloop.h"
 #include "stringconv.h"
+#ifdef __unix__
+#include <sys/resource.h>
+#endif
+#include "test.h" // TODO: define RUNNING_ON_VALGRIND at some better place
 
 argparse::arg_str& argparse::add(char sname, cstring name, string* target)
 {
@@ -102,7 +106,9 @@ void argparse::single_arg(char sname, cstring value, bool must_use_value, bool* 
 			return;
 		}
 	}
-	error((string)"unknown argument: -"+sname);
+	string e = "unknown argument: -";
+	e += sname; // no operator+(string, char), too high risk it's hit by some accidental operator+(string, int)
+	error(e);
 }
 
 const char * argparse::next_if_appropriate(const char * arg)
@@ -209,6 +215,7 @@ void argparse::parse_post()
 
 #include "test.h"
 
+#ifdef ARLIB_TEST
 template<typename... Args>
 static void test_one_pack(int bools, int strs, int ints, cstring extras, bool error, const char * const argvp[])
 {
@@ -271,7 +278,6 @@ static void test_error(Args... argv)
 	test_one_pack(0, 0, 0, "", true, argvp);
 }
 
-#ifdef ARLIB_TEST
 test("argument parser", "string,array", "argparse")
 {
 	test_one(1, 0, 0, "", "--bool");
@@ -355,6 +361,18 @@ test("argument parser 2","string,array","argparse")
 
 void arlib_init(argparse& args, char** argv)
 {
+#ifdef __unix__
+#ifndef ARLIB_OPT
+	if (!RUNNING_ON_VALGRIND)
+	{
+		rlimit lim;
+		lim.rlim_cur = 64*1024*1024;
+		lim.rlim_max = RLIM_INFINITY;
+		setrlimit(RLIMIT_CORE, &lim);
+	}
+#endif
+#endif
+	
 	srand(time(NULL));
 	arlib_init_file();
 #ifndef ARGUI_NONE

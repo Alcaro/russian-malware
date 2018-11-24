@@ -40,8 +40,8 @@ void widget_layout::construct(unsigned int numchildren, widget_base* * children,
 	widget=grid;
 	
 	m->numchildren=numchildren;
-	m->children=malloc(sizeof(struct widget_base*)*numchildren);
-	memcpy(m->children, children, sizeof(struct widget_base*)*numchildren);
+	m->children=malloc(sizeof(widget_base*)*numchildren);
+	memcpy(m->children, children, sizeof(widget_base*)*numchildren);
 	
 	widthprio=0;
 	heightprio=0;
@@ -724,7 +724,7 @@ class widget_listbox;
 
 
 struct widget_frame::impl {
-	struct widget_base* child;
+	widget_base* child;
 };
 
 widget_frame::widget_frame(const char * text, widget_base* child) : m(new impl)

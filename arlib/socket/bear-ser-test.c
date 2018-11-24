@@ -1,14 +1,12 @@
 /*
 run (Unix only, only tested on Linux) with:
 
-gcc -std=c99 bear-ser.c bear-ser-test.c ../deps/bearssl-0.5/build/libbearssl.a -O0 -g -o bear-ser-a &&
-gcc -std=c99 bear-ser.c bear-ser-test.c ../deps/bearssl-0.5/build/libbearssl.a -O2 -g -o bear-ser-b &&
-gcc -std=c99 bear-ser.c bear-ser-test.c ../deps/bearssl-0.5/build/libbearssl.a -O3 -g -o bear-ser-c &&
+gcc -std=c99 bear-ser.c bear-ser-test.c ../deps/bearssl-0.6/build/libbearssl.a -O0 -g -o bear-ser-a &&
+gcc -std=c99 bear-ser.c bear-ser-test.c ../deps/bearssl-0.6/build/libbearssl.a -O2 -g -o bear-ser-b &&
+gcc -std=c99 bear-ser.c bear-ser-test.c ../deps/bearssl-0.6/build/libbearssl.a -O3 -g -o bear-ser-c &&
 ./bear-ser-a
 
 yes, compile thrice, this makes functions move around and tests that freeze/unfreeze handles this properly
-be careful about BearSSL versions; while I haven't needed to change this between 0.3, 0.4 and 0.5,
-it's pointless to take risks
 
 expected output:
 some technical crap, along with 'HTTP/1.1 500 Domain Not Found', associated headers and body; then
@@ -20,7 +18,7 @@ another 'HTTP/1.1 500 Domain Not Found', but this one's headers/body are truncat
 #include <stdlib.h>
 #include <stdbool.h>
 #include <unistd.h>
-#include "../deps/bearssl-0.5/inc/bearssl.h"
+#include "../deps/bearssl-0.6/inc/bearssl.h"
 
 typedef struct br_frozen_ssl_client_context_ {
 	br_ssl_client_context cc;

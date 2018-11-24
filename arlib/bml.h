@@ -32,7 +32,7 @@ public:
 	
 	//It is not allowed to try to stream data into this object.
 	bmlparser(cstring bml) : m_orig_data(bml), m_data(m_orig_data), m_exit(false) {}
-	event next(); // Returned cstrings are valid until next function (including destructor) called on this object.
+	event next(); // Returned cstrings are valid until next function call (or destructor) on this object.
 	
 private:
 	string m_orig_data; // keep a reference if we're passed in the only copy of a string object
@@ -82,7 +82,7 @@ public:
 	void node(cstring name, cstring val, mode m = ianon); // Equivalent to enter()+exit(), except it supports inline nodes.
 	
 	//TODO: inline nodes on multilines? They're ridiculously ugly, but there are a few cases where they're useful.
-	//I'll decide what to do once I actually need a multiline with children. Maybe add mode multiline_i or something.
+	//I'll decide what to do once I actually need a multiline with children. Maybe add mode imultiline or something.
 	
 	//Tells what mode will actually be used if node() is called with these parameters and in this context.
 	//To ask what enter() would do, call this with a non-inline mode.

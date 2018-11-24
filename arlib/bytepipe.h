@@ -158,7 +158,8 @@ public:
 		
 		return NULL;
 	}
-	//Returns 'line' minus a trailing \r\n or \n. The \n must exist. Usable together with the above.
+	//Returns 'line' minus a trailing \r\n or \n. The \n must exist.
+	//Usable together with the above, though you must acknowledge the \n too.
 	static arrayview<byte> trim_line(arrayview<byte> line)
 	{
 		if (line.size()==1) return NULL;

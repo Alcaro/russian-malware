@@ -66,9 +66,9 @@ string file::resolve(cstring path)
 #ifdef ARLIB_TEST
 
 //criteria for READONLY_FILE:
-//- must be a normal file, no /dev/*
+//- must be a normal file, nothing from /dev/
 //- minimum 66000 bytes
-//- the first few bytes must be known, no .txt files or possibly-shebanged stuff
+//- the first few (min 2) bytes must be known, no .txt files or possibly-shebanged stuff
 //- the file must contain somewhat unpredictable data, no huge streams of the same thing like /dev/zero
 //- must be readable by everyone (assuming absense of sandboxes)
 //- must NOT be writable or deletable by this program

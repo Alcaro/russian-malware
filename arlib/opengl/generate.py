@@ -14,7 +14,7 @@ core - emit only core (unsuffixed) functions
 used - emit only actually used functions
         analyzes all .c and .cpp files in the current directory and children,
           except arlib/
-        only works if your aropengl objects are named 'gl'
+        only works if your aropengl object is named 'gl'
 """)
 	exit()
 
@@ -97,7 +97,7 @@ if filter_used:
 	
 	functions = filter(functions, used)
 	#pointless, the savings are completely dwarfed by whatever the function does
-	#it also makes the resulting binary dependent on os.walk order, which isn't stable
+	#it also makes the resulting header (and thereby binary) dependent on os.walk order, which isn't stable
 	##sort by first index in 'used', not alphabetically, to maximize cache coherence
 	##used.index() throws if it doesn't exist, but filter() says it does
 	#functions.sort(key = lambda fn: used.index(fn['name']))

@@ -1,7 +1,7 @@
 #ifdef ARLIB_SOCKET
 #pragma once
 #include "../global.h"
-#include "../containers.h"
+#include "../array.h"
 #include "../function.h"
 #include "../string.h"
 #include "../file.h"
@@ -24,23 +24,25 @@ public:
 	// For example, it can contain a 256 character message explaining that this is a 256 byte message to avoid amplification attacks.
 	static socket* create_udp(cstring domain, int port, runloop* loop);
 	
-	//The wrapper will buffer write() calls, making them succeed even if the actual socket is full.
-	//The normal creation functions create wrappers already. The runloop must be same as given to the child.
-	static socket* wrap(socket* inner, runloop* loop);
 	//Acts like create(), but no DNS lookups are done, and write() can fail or return partial success.
 	//It is also unsafe to send a 0-byte buffer to such a socket. Wrapped sockets ignore them.
+	//Unless documented otherwise, no funtion can accept a raw socket.
 	static socket* create_raw(cstring ip, int port, runloop* loop);
+	//The wrapper will buffer write() calls, making them succeed even if the actual socket is full.
+	//The normal creation functions create wrappers already. The runloop must be same as given to the child.
+	//(Can be used with a raw socket, of course.)
+	static socket* wrap(socket* inner, runloop* loop);
 	
-	//Wraps the socket in a SSL layer. The returned socket is not wrapped.
+	//Super simple function, just calls create() or create_ssl().
+	//Suitable as default implementation of a 'create socket' callback. Said callback should be expected to return a non-raw socket.
+	static socket* create_sslmaybe(bool ssl, cstring domain, int port, runloop* loop);
+	
+	//Wraps the socket in a SSL layer. This function can accept a raw socket.
 	static socket* wrap_ssl(socket* inner, cstring domain, runloop* loop);
-	//Does not validate the certificate. Generally a bad idea.
-	static socket* create_ssl_noverify(cstring domain, int port, runloop* loop)
-	{
-		//do not use create_raw, DNS lookup is needed
-		//yes, it yields an extra unneeded socketbuf, unavoidable without a lot more complexity
-		return wrap(wrap_ssl_noverify(create(domain, port, loop), domain, loop), loop);
-	}
-	static socket* wrap_ssl_noverify(socket* inner, cstring domain, runloop* loop);
+	//Like the above, but with create_raw's caveats.
+	static socket* wrap_ssl_raw(socket* inner, cstring domain, runloop* loop);
+	//Like the above, but does not validate the certificate. Generally a bad idea. Does not exist under all SSL backends.
+	static socket* wrap_ssl_raw_noverify(socket* inner, runloop* loop);
 	
 #ifdef __unix__
 	//Acts like a socket. fds can be -1, meaning that end will never report activity. Having both be -1 is allowed but pointless.
@@ -94,11 +96,20 @@ public:
 	// store/provide fds
 	// be destructive, SSL state is only usable once
 	// support erroring out, if serialization isn't implemented
+	
+	
+	// Network byte order.
+	static string ip_to_string(arrayview<byte> bytes);
+	static array<byte> string_to_ip(cstring str);
+	// The buffer must be at least 16 bytes. Returns bytes actually used (4 or 16).
+	static int string_to_ip(arrayvieww<byte> out, cstring str);
+	static bool string_to_ip4(arrayvieww<byte> out, cstring str);
+	static bool string_to_ip6(arrayvieww<byte> out, cstring str);
 };
 
 //SSL feature matrix:
 //                      | OpenSSL | SChannel | GnuTLS | BearSSL | TLSe | Comments
-//Basic functionality   | Yes     | ?        | Yes    | Yes     | Yes* | TLSe doesn't support SNI
+//Basic functionality   | Yes     | No       | No     | Yes     | No   | Many are bitrotted (likely easy to fix)
 //Nonblocking           | Yes     | ?        | Yes    | Yes     | Yes  | OpenSSL supports nonblocking, but not blocking
 //Permissive (expired)  | Yes     | ?        | Yes    | No      | No
 //Permissive (bad root) | Yes     | ?        | Yes    | Yes     | No
