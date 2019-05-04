@@ -189,11 +189,13 @@ public:
 	
 	//creepy shit... but gcc demands dependent scopes everywhere to disable this operator for reference T
 	//and having the function exist, even without callers, instantiates array<int&> and throws errors
+	//T3 is not used by anything
+	//T2 is always same as T
 	template<typename T3 = int, typename T2 = typename std::enable_if<!std::is_reference<T>::value || sizeof(T3)==-1, T>::type>
 	operator array<T2>()
 	{
 		array<T> ret;
-		for (T&& item : *this) ret.append(item);
+		for (auto&& item : *this) ret.append(item); // auto rather than T, in case iterator yields const T&
 		return ret;
 	}
 	
@@ -208,7 +210,7 @@ public:
 	operator set<T2>()
 	{
 		set<T> ret;
-		for (T&& item : *this) ret.add(item);
+		for (auto&& item : *this) ret.add(item);
 		return ret;
 	}
 	

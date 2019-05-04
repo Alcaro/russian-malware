@@ -246,6 +246,8 @@ ALLOPER(OP)
 	}
 };
 
+/* these keep showing up in error messages, flushing out anything I actually want
+
 #define OP(op, ope) \
 	template<typename T, typename U> safeint<T> operator op(U a, safeint<T> b) { return safeint<T>(a) op b; } \
 	template<typename T, typename U> safeint<T> operator op(safeint<T> a, U b) { return b op safeint<T>(a); }
@@ -257,5 +259,6 @@ OP(<=, _)
 OP(>, _)
 OP(>=, _)
 #undef OP
+*/
 
 #undef ALLOPER

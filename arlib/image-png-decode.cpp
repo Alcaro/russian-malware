@@ -1,61 +1,16 @@
 #include "image.h"
 #include "bytestream.h"
-
-//TODO: use gdi+ or wic or whatever on windows, to save some kilobytes
-//https://msdn.microsoft.com/en-us/library/windows/desktop/ee719875(v=vs.85).aspx
-//
-//https://msdn.microsoft.com/en-us/library/windows/desktop/ee690179(v=vs.85).aspx says
-// "CopyPixels is one of the two main image processing routines (the other being Lock) triggering the actual processing."
-//so despite the name, it won't create pointless copies in RAM
-//
-//WIC is present on XP SP3 and Vista, aka WIC is present
-
-//other possibilities:
-//https://msdn.microsoft.com/en-us/library/ee719902(v=VS.85).aspx
-//https://stackoverflow.com/questions/39312201/how-to-use-gdi-library-to-decode-a-jpeg-in-memory
-//https://stackoverflow.com/questions/1905476/is-there-any-way-to-draw-a-png-image-on-window-without-using-mfc
-
-//it's possible to use GdkPixbuf for the same purpose on linux, but its output format differs from mine,
-// so that'd yield a space-time tradeoff that would need to be user settable
-//on linux, binary size is way less predictable than windows, with everyone compiling manually and half of them including debug symbols;
-// gtk is also less universal on linux than gdi+ on windows, so let's just keep it disabled
-/*
-bool image::init_decode_jpg(arrayview<byte> jpgdata)
-{
-	if (jpgdata.size() < 3 || jpgdata[0] != 0xFF || jpgdata[1] != 0xD8 || jpgdata[2] != 0xFF)
-		return false;
-	
-	GInputStream* is = g_memory_input_stream_new_from_data(jpgdata.ptr(), jpgdata.size(), NULL);
-	GdkPixbuf* pix = gdk_pixbuf_new_from_stream(is, NULL, NULL);
-	g_object_unref(is);
-	
-	if (!pix)
-		return false;
-	
-	this->width = gdk_pixbuf_get_width(pix);
-	this->height = gdk_pixbuf_get_height(pix);
-	this->fmt = ifmt_xrgb8888;
-	this->stride = width*sizeof(uint32_t);
-	this->storage = malloc(stride*height);
-	
-	this->pixels8 = (uint8_t*)this->storage;
-	
-	uint8_t* bytes = gdk_pixbuf_get_pixels(pix);
-	uint32_t instride = gdk_pixbuf_get_rowstride(pix);
-	uint32_t inchan = gdk_pixbuf_get_n_channels(pix);
-	for (uint32_t y=0;y<height;y++)
-	{
-		for (uint32_t x=0;x<width;x++)
-		{
-			uint8_t* src = bytes + y*instride + x*inchan;
-			pixels32[y*stride/sizeof(uint32_t) + x] = src[0]<<16 | src[1]<<8 | src[2];
-		}
-	}
-	g_object_unref(pix);
-	
-	return true;
-}
-*/
+#include "crc32.h"
+#ifdef __SSE2__
+#include <emmintrin.h>
+#include "stringconv.h"
+inline void debug8(__m128i a){uint8_t n[16];memcpy(n,&a,16);puts(tostringhex(n));}
+inline void debug16(__m128i a){int16_t n[8];memcpy(n,&a,16);printf("%d %d %d %d %d %d %d %d\n",n[0],n[1],n[2],n[3],n[4],n[5],n[6],n[7]);}
+inline void debug32(__m128i a){int32_t n[4];memcpy(n,&a,16);printf("%d %d %d %d\n",n[0],n[1],n[2],n[3]);}
+inline void debug8(const char*n,__m128i a){printf("%s ",n);debug8(a);}
+inline void debug16(const char*n,__m128i a){printf("%s ",n);debug16(a);}
+inline void debug32(const char*n,__m128i a){printf("%s ",n);debug32(a);}
+#endif
 
 #define MINIZ_HEADER_FILE_ONLY
 #include "deps/miniz.c"
@@ -95,10 +50,12 @@ bool image::init_decode_png(arrayview<byte> pngdata)
 			
 			if (ret.len >= 0x80000000 || remaining() < 4 + ret.len + 4) return ret;
 			
-			uint32_t crc32_actual = mz_crc32(MZ_CRC32_INIT, peekbytes(4+ret.len).ptr(), 4+ret.len);
+//verify=false;
+			uint32_t crc32_actual = crc32(peekbytes(4+ret.len));
+			//uint32_t crc32_actual = mz_crc32(MZ_CRC32_INIT, peekbytes(4+ret.len).ptr(), 4+ret.len);
 			
 			ret.type = u32b();
-			ret.reset(bytes(ret.len));
+			ret.init(bytes(ret.len));
 			
 			uint32_t crc32_exp = u32b();
 			if (crc32_actual != crc32_exp) ret.type = 0;
@@ -341,7 +298,76 @@ goto fail;
 			break;
 		
 		case 4: // Paeth
-			for (size_t x=0;x<filter_width;x++)
+		{
+			size_t x = 0;
+#ifdef __SSE2__
+			auto _mm_abs_epi16 = [](__m128i a) -> __m128i { 
+				// abs(x) = max(x, -x) 
+				// Clang optimizes the more obvious one (abs(x) = (x^(x<0)) - (x<0)) to real abs,
+				//  but it can't comprehend this one 
+				// (GCC doesn't do anything useful with either) 
+				return _mm_max_epi16(a, _mm_sub_epi16(_mm_setzero_si128(), a)); 
+			}; 
+			// ignore simding the other filters; Paeth is the most common, and also the most expensive per pixel
+			// it can only be SIMDed to a degree of filter_bpp, so ignore filter_bpp=1
+			// (it's possible to interlace processing of two consecutive Paeth scanlines by having the upper
+			//    one 1px ahead of the one below, but the required data structures would be quite annoying)
+			// macro instead of lambda is 7% faster
+#define SIMD_PAETH(filter_bpp) \
+					uint32_t a32 = *(uint32_t*)(defilter_out+x                  -filter_bpp);            \
+					uint32_t b32 = *(uint32_t*)(defilter_out+x-defilter_out_line           );            \
+					uint32_t c32 = *(uint32_t*)(defilter_out+x-defilter_out_line-filter_bpp);            \
+					__m128i a = _mm_unpacklo_epi8(_mm_cvtsi32_si128(a32), _mm_setzero_si128());          \
+					__m128i b = _mm_unpacklo_epi8(_mm_cvtsi32_si128(b32), _mm_setzero_si128());          \
+					__m128i c = _mm_unpacklo_epi8(_mm_cvtsi32_si128(c32), _mm_setzero_si128());          \
+					                                                                                     \
+					__m128i p = _mm_sub_epi16(_mm_add_epi16(a, b), c);                                   \
+					__m128i pa = _mm_abs_epi16(_mm_sub_epi16(p, a));                                     \
+					__m128i pb = _mm_abs_epi16(_mm_sub_epi16(p, b));                                     \
+					__m128i pc = _mm_abs_epi16(_mm_sub_epi16(p, c));                                     \
+					                                                                                     \
+					/* 0 to use pa, 1 for something else */                                              \
+					__m128i pa_skip = _mm_cmplt_epi16(_mm_min_epi16(pb, pc), pa);                        \
+					/* 1 to use pc, 0 for something else */                                              \
+					__m128i pc_use = _mm_and_si128(pa_skip, _mm_cmplt_epi16(pc, pb));                    \
+					__m128i pb_use = _mm_andnot_si128(pc_use, pa_skip);                                  \
+					                                                                                     \
+					__m128i prediction = _mm_or_si128(_mm_andnot_si128(pa_skip, a),                      \
+					                     _mm_or_si128(_mm_and_si128(   pb_use, b),                       \
+					                                  _mm_and_si128(   pc_use, c)));                     \
+					                                                                                     \
+					uint32_t* outp = (uint32_t*)(defilter_out+x);                                        \
+					__m128i out = _mm_add_epi8(_mm_cvtsi32_si128(*outp),                                 \
+					                           _mm_packus_epi16(prediction, _mm_undefined_si128()));     \
+					uint32_t out32 = _mm_cvtsi128_si32(out);                                             \
+					if (filter_bpp == 3)                                                                 \
+						out32 = (out32&0xFFFFFF00) | (*outp&0x000000FF);                                 \
+					*outp = out32;
+			if (filter_bpp == 3)
+			{
+				//three bytes at the time, no need for a scalar tail loop
+				//shift one byte to the left, so we don't overflow the malloc at the last scanline
+				defilter_out--;
+				while (x < filter_width)
+				{
+					SIMD_PAETH(3);
+					x += 3;
+				}
+				break;
+			}
+			if (filter_bpp == 4)
+			{
+				while (x < filter_width)
+				{
+					SIMD_PAETH(4);
+					x += 4;
+				}
+				break;
+			}
+			
+			// not SIMD_LOOP_TAIL, since 1byte-per-pixel isn't manually vectorized
+#endif
+			while (x < filter_width)
 			{
 				int a = defilter_out[x-filter_bpp];
 				int b = defilter_out[x-defilter_out_line];
@@ -358,8 +384,11 @@ goto fail;
 				else prediction = c;
 				
 				defilter_out[x] += prediction;
+				
+				x++;
 			}
-			break;
+		}
+		break;
 		
 		default:
 			goto fail;
@@ -373,8 +402,8 @@ goto fail;
 	if (color_type == 0 && bits_per_sample < 8)
 	{
 		//treating gray as a palette makes things a fair bit simpler, especially with tRNS handling
-		//not doing it for bpp=8, 1KB table is boring, but that one doesn't pack
-		// multiple pixels in a single byte so it's easy to put in the non-palette decoder
+		//not doing it for bpp=8, 1KB table is boring, but that one doesn't pack multiple
+		// pixels in a single byte so it's easy to put in the non-palette decoder
 		static const uint32_t gray_1bpp[] = { 0xFF000000, 0xFFFFFFFF };
 		static const uint32_t gray_2bpp[] = { 0xFF000000, 0xFF555555, 0xFFAAAAAA, 0xFFFFFFFF };
 		static const uint32_t gray_4bpp[] = { 0xFF000000, 0xFF111111, 0xFF222222, 0xFF333333,
@@ -496,7 +525,29 @@ static inline void unpack_pixels(uint32_t width, uint32_t height, uint32_t* pixe
 	
 	for (uint32_t y=0;y<height;y++)
 	{
-		for (uint32_t x=0;x<width;x++)
+		uint32_t x = 0;
+#ifdef __SSE2__
+		if (color_type == 2)
+		{
+			image::convert_scanline<ifmt_rgb888, ifmt_argb8888>(pixels, source, width);
+			x = width;
+		}
+		if (color_type == 6)
+		{
+			while (x+3 < width)
+			{
+				uint8_t* sourceat = source + x*nsamp;
+				__m128i rgba = _mm_loadu_si128((__m128i*)sourceat);
+				__m128i _g_a = _mm_and_si128(rgba, _mm_set1_epi32(0xFF00FF00));
+				__m128i bxgx = _mm_shufflehi_epi16(_mm_shufflelo_epi16(rgba, _MM_SHUFFLE(2,3,0,1)), _MM_SHUFFLE(2,3,0,1));
+				__m128i bgra = _mm_or_si128(_g_a, _mm_and_si128(bxgx, _mm_set1_epi32(0x00FF00FF)));
+				_mm_storeu_si128((__m128i*)(pixels+x), bgra);
+				x += 4;
+			}
+		}
+#endif
+		
+		while (x < width)
 		{
 			uint8_t* sourceat = source + x*nsamp;
 			
@@ -508,6 +559,7 @@ static inline void unpack_pixels(uint32_t width, uint32_t height, uint32_t* pixe
 				pixels[x] = sourceat[1]<<24 | sourceat[0]*0x010101;
 			if (color_type == 6)
 				pixels[x] = sourceat[3]<<24 | sourceat[0]<<16 | sourceat[1]<<8 | sourceat[2]<<0;
+			x++;
 		}
 		
 		pixels += width;

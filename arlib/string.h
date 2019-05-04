@@ -40,7 +40,7 @@ class cstring {
 		struct {
 			uint8_t* m_data;
 			uint32_t m_len;
-			bool m_nul; // whether the string is properly terminated (always true if owning)
+			bool m_nul; // whether the string is properly terminated (always true for string, possibly false for cstring)
 			uint8_t reserved; // matches the last byte of the inline data; never ever access this
 		};
 	};
@@ -162,6 +162,22 @@ public:
 		if (ptr) return ptr - this->ptr();
 		else return (size_t)-1;
 	}
+	size_t lastindexof(cstring other) const
+	{
+		size_t ret = -1;
+		const uint8_t* start = this->ptr();
+		const uint8_t* find = start;
+		const uint8_t* find_end = find + this->length();
+		if (!other) return this->length();
+		
+		while (true)
+		{
+			find = (uint8_t*)memmem(find, find_end-find, other.ptr(), other.length());
+			if (!find) return ret;
+			ret = find-start;
+			find += 1;
+		}
+	}
 	bool startswith(cstring other) const
 	{
 		if (other.length() > this->length()) return false;
@@ -263,15 +279,16 @@ public:
 	inline string upper() const;
 	
 	bool isutf8() const; // NUL is considered valid UTF-8. U+D800, overlong encodings, etc are not.
-	// Treats the string as UTF-8 and returns the codepoint there. If not UTF-8 or not a start index, returns U+DC80 through U+DCFF.
-	// If out of bounds, returns zero.
+	// Treats the string as UTF-8 and returns the codepoint there.
+	// If not UTF-8 or not a start index, returns U+DC80 through U+DCFF. Callers are welcome to treat this as an error.
 	// The index is updated to point to the next codepoint. Initialize it to zero; stop when it equals the string's length.
+	// If index is out of bounds, returns zero and does not advance index.
 	uint32_t codepoint_at(uint32_t& index) const;
 	
-	//Whether the string matches a glob pattern. ? matches any one byte, * matches zero or more bytes.
+	//Whether the string matches a glob pattern. ? in 'pat' matches any one byte, * matches zero or more bytes.
 	//NUL bytes are treated as any other byte, in both strings.
-	bool matches_glob(cstring pat);
-	bool matches_globi(cstring pat); // Case insensitive. Considers ASCII only, øØ are considered nonequal.
+	bool matches_glob(cstring pat) const __attribute__ ((pure));
+	bool matches_globi(cstring pat) const __attribute__ ((pure)); // Case insensitive. Considers ASCII only, øØ are considered nonequal.
 	
 	size_t hash() const { return ::hash((char*)ptr(), length()); }
 	
@@ -297,6 +314,7 @@ private:
 			}
 		}
 		operator const char *() const { return ptr; }
+		const char * c_str() const { return ptr; }
 		~c_string() { if (do_free) free(ptr); }
 	};
 public:
@@ -340,7 +358,7 @@ class string : public cstring {
 	void init_from(string&& other)
 	{
 		memcpy(this, &other, sizeof(*this));
-		other.m_inline_len = 0;
+		other.init_from("");
 	}
 	
 	void reinit_from(const char * str)
@@ -481,14 +499,15 @@ public:
 	
 	static string codepoint(uint32_t cp);
 	
-	//Does a bytewise comparison, where end is considered before NUL (00).
-	//If a comes first, return value is positive; if equal, zero; if b comes first, negative.
-	//The return value is not guaranteed to be in [-1..1].
-	//It is not even guaranteed that truncation retains the correctness; the function is allowed to return 256.
-	static int compare(cstring a, cstring b);
+	//3-way comparison. If a comes first, return value is negative; if equal, zero; if b comes first, positive.
+	//Comparison is bytewise. End is considered before NUL (00).
+	//The return value is not guaranteed to be in [-1..1]. It's not even guaranteed to fit in anything smaller than int.
+	static int compare3(cstring a, cstring b);
 	//Like the above, but 0x61-0x7A (a-z) are treated as 0x41-0x5A (A-Z).
-	//If the strings are equal, the comparison is redone, but case sensitively.
-	static int icompare(cstring a, cstring b);
+	//If the strings are case-insensitively equal, uppercase goes first. If equal, they're equal.
+	static int icompare3(cstring a, cstring b);
+	static bool less(cstring a, cstring b) { return compare3(a, b) < 0; }
+	static bool iless(cstring a, cstring b) { return icompare3(a, b) < 0; }
 };
 
 #undef OBJ_SIZE

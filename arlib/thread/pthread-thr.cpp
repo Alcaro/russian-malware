@@ -61,11 +61,10 @@ unsigned int thread_num_cores()
 
 unsigned int thread_num_cores_idle()
 {
-	//this function should return physical core count, or cores minus 1 if no hyperthreading, but there doesn't seem to be an easy way to do that
+	//this function should return physical core count, or cores minus 1 if no hyperthreading,
+	// but there doesn't seem to be an easy way to get number of real cores
 	//so this is good enough
 	unsigned int cores = thread_num_cores();
-	if (cores > 4) return cores-2;
-	if (cores > 1) return cores-1;
-	return cores;
+	return (cores+1)/2;
 }
 #endif

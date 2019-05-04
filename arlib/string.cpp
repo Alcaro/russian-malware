@@ -71,10 +71,10 @@ void string::reinit_from(arrayview<byte> data)
 	const uint8_t * str = data.ptr();
 	uint32_t len = data.size();
 	
-	if (str == ptr() && len == length()) return;
-	
 	if (str >= this->ptr() && str <= this->ptr()+this->length())
 	{
+		if (str == this->ptr() && len == this->length()) return;
+		
 		memmove(this->ptr(), str, len);
 		resize(len);
 	}
@@ -195,7 +195,7 @@ array<cstring> cstring::crsplit(cstring sep, size_t limit) const
 	{
 		if (datastart+sepl > data) break;
 		const uint8_t * next = data-sepl;
-		while (memcmp(next, sepp, sepl)!=0)
+		while (memcmp(next, sepp, sepl) != 0)
 		{
 			if (datastart==next) goto done;
 			next--;
@@ -250,7 +250,7 @@ done:
 }
 
 
-int string::compare(cstring a, cstring b)
+int string::compare3(cstring a, cstring b)
 {
 	size_t cmplen = min(a.length(), b.length());
 	int ret = memcmp(a.bytes().ptr(), b.bytes().ptr(), cmplen);
@@ -259,7 +259,7 @@ int string::compare(cstring a, cstring b)
 	else return a.length() - b.length();
 }
 
-int string::icompare(cstring a, cstring b)
+int string::icompare3(cstring a, cstring b)
 {
 	int ret_i = a.length() - b.length();
 	
@@ -287,23 +287,23 @@ int string::icompare(cstring a, cstring b)
 string string::codepoint(uint32_t cp)
 {
 	string ret;
-	if (cp<=0x7F)
+	if (cp <= 0x7F)
 	{
 		ret += (uint8_t)cp;
 	}
-	else if (cp<=0x07FF)
+	else if (cp <= 0x07FF)
 	{
 		ret += (uint8_t)(((cp>> 6)     )|0xC0);
 		ret += (uint8_t)(((cp    )&0x3F)|0x80);
 	}
-	else if (cp>=0xD800 && cp<=0xDFFF) return "\xEF\xBF\xBD"; // curse utf16 forever
-	else if (cp<=0xFFFF)
+	else if (cp >= 0xD800 && cp <= 0xDFFF) return "\xEF\xBF\xBD"; // curse utf16 forever
+	else if (cp <= 0xFFFF)
 	{
 		ret += (uint8_t)(((cp>>12)&0x0F)|0xE0);
 		ret += (uint8_t)(((cp>>6 )&0x3F)|0x80);
 		ret += (uint8_t)(((cp    )&0x3F)|0x80);
 	}
-	else if (cp<=0x10FFFF)
+	else if (cp <= 0x10FFFF)
 	{
 		ret += (uint8_t)(((cp>>18)&0x07)|0xF0);
 		ret += (uint8_t)(((cp>>12)&0x3F)|0x80);
@@ -420,7 +420,7 @@ fail:
 	return 0xDC00 | head;
 }
 
-bool cstring::matches_glob(cstring pat)
+bool cstring::matches_glob(cstring pat) const
 {
 	const uint8_t * s = ptr();
 	const uint8_t * p = pat.ptr();
@@ -462,7 +462,7 @@ bool cstring::matches_glob(cstring pat)
 	return (p == pe);
 }
 
-bool cstring::matches_globi(cstring pat)
+bool cstring::matches_globi(cstring pat) const
 {
 	const uint8_t * s = ptr();
 	const uint8_t * p = pat.ptr();
@@ -575,7 +575,7 @@ test("strtoken", "", "string")
 	//assert(strtoken("", "", ','));
 }
 
-test("string", "", "string")
+test("string", "array", "string")
 {
 	{
 		const char * g = "hi";
@@ -639,6 +639,7 @@ test("string", "", "string")
 		assert_eq(a.replace("1", ""), "abcdefgh");
 		assert_eq(a.replace("1", "@"), "@abc@de@fgh@");
 		assert_eq(a.replace("1", "@@"), "@@abc@@de@@fgh@@");
+		assert_eq(cstring("aaaaaaaa").replace("aa","aba"), "abaabaabaaba");
 	}
 	
 	{
@@ -828,27 +829,24 @@ test("string", "", "string")
 	}
 	
 	{
-		cstring a = "a";
-		cstring ab = "ab";
-		cstring ac = "ac";
-		cstring b = "b";
+		cstring strs[] = {
+		  "aBa",
+		  "aBc",
+		  "aBcd",
+		  "aBd",
+		  "a_c",
+		  "abc",
+		};
 		
-		assert_eq(string::compare(a,a), 0);
-		assert_lt(string::compare(a,ab), 0);
-		assert_lt(string::compare(a,ac), 0);
-		assert_lt(string::compare(a,b), 0);
-		assert_gt(string::compare(ab,a), 0);
-		assert_eq(string::compare(ab,ab), 0);
-		assert_lt(string::compare(ab,ac), 0);
-		assert_lt(string::compare(ab,b), 0);
-		assert_gt(string::compare(ac,a), 0);
-		assert_gt(string::compare(ac,ab), 0);
-		assert_eq(string::compare(ac,ac), 0);
-		assert_lt(string::compare(ac,b), 0);
-		assert_gt(string::compare(b,a), 0);
-		assert_gt(string::compare(b,ab), 0);
-		assert_gt(string::compare(b,ac), 0);
-		assert_eq(string::compare(b,b), 0);
+		for (size_t a=0;a<ARRAY_SIZE(strs);a++)
+		for (size_t b=0;b<ARRAY_SIZE(strs);b++)
+		{
+			if (a <  b) testctx(strs[a]+" < "+strs[b]) assert_lt(string::compare3(strs[a], strs[b]), 0);
+			if (a == b) testctx(strs[a]+" = "+strs[b]) assert_eq(string::compare3(strs[a], strs[b]), 0);
+			if (a >  b) testctx(strs[a]+" > "+strs[b]) assert_gt(string::compare3(strs[a], strs[b]), 0);
+			if (a <  b) testctx(strs[a]+" < "+strs[b]) assert(string::less(strs[a], strs[b]));
+			else       testctx(strs[a]+" >= "+strs[b]) assert(!string::less(strs[a], strs[b]));
+		}
 	}
 	
 	{
@@ -864,10 +862,27 @@ test("string", "", "string")
 		for (size_t a=0;a<ARRAY_SIZE(strs);a++)
 		for (size_t b=0;b<ARRAY_SIZE(strs);b++)
 		{
-			if (a <  b) testctx(strs[a]+" < "+strs[b]) assert_lt(string::icompare(strs[a], strs[b]), 0);
-			if (a == b) testctx(strs[a]+" = "+strs[b]) assert_eq(string::icompare(strs[a], strs[b]), 0);
-			if (a >  b) testctx(strs[a]+" > "+strs[b]) assert_gt(string::icompare(strs[a], strs[b]), 0);
+			if (a <  b) testctx(strs[a]+" < "+strs[b]) assert_lt(string::icompare3(strs[a], strs[b]), 0);
+			if (a == b) testctx(strs[a]+" = "+strs[b]) assert_eq(string::icompare3(strs[a], strs[b]), 0);
+			if (a >  b) testctx(strs[a]+" > "+strs[b]) assert_gt(string::icompare3(strs[a], strs[b]), 0);
+			if (a <  b) testctx(strs[a]+" < "+strs[b]) assert(string::iless(strs[a], strs[b]));
+			else       testctx(strs[a]+" >= "+strs[b]) assert(!string::iless(strs[a], strs[b]));
 		}
+	}
+	
+	{
+		cstring strs[]    = { "fl","lo","oa","at","ti","in","ng","g "," m","mu","un","nc","ch","he","er","rs" };
+		cstring strsort[] = { " m","at","ch","er","fl","g ","he","in","lo","mu","nc","ng","oa","rs","ti","un" };
+		
+		arrayvieww<cstring>(strs).sort(&string::less);
+		assert_eq(arrayview<cstring>(strs), arrayview<cstring>(strsort));
+	}
+	
+	{
+		array<string> x = { "fl","oa","ti","ng","mu","nc","he","rf","lo","at","in","gm","un","ch","er" };
+		array<string> y = { "at","ch","er","fl","gm","he","in","lo","mu","nc","ng","oa","rf","ti","un" };
+		x.sort([](cstring a, cstring b) { return string::less(a,b); });
+		assert_eq(x, y);
 	}
 	
 	{

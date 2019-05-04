@@ -82,8 +82,9 @@ public:
 #ifdef ARLIB_THREAD
 	//submit(fn) calls fn() on the runloop's thread, as soon as possible.
 	//Unlike the other functions on this object, submit() may be called from a foreign thread.
-	// It may also be called reentrantly, and from signal handlers.
-	//Make sure there is no other reference to cb, otherwise there will be a race condition on the reference count.
+	// It may also be called from signal handlers.
+	//Make sure either the function has no destructor, or there is no other reference to cb;
+	// otherwise, there will be a race condition on the reference count.
 	virtual void submit(function<void()>&& cb) = 0;
 	//prepare_submit() must be called on the owning thread before submit() is allowed.
 	//There is no way to 'unprepare' submit(), other than deleting the runloop.

@@ -40,6 +40,8 @@ void sandproc::filesystem::grant_native_redir(string cpath, string ppath, int ma
 	m.type = ty_native;
 	if (!mountfds.contains(mntpath))
 	{
+		// open all permitted paths eagerly; juggling them at br_open is a timing leak
+		// (not sure if kernel is constant-time, but at least I am)
 		int fd = open(mntpath, O_DIRECTORY|O_PATH);
 		if (fd < 0)
 		{
@@ -53,7 +55,7 @@ void sandproc::filesystem::grant_native_redir(string cpath, string ppath, int ma
 	if (m.n_fd < 0)
 	{
 	fail:
-		//TODO: report error to caller
+		//TODO: report error to parent-process caller
 		m.type = ty_error;
 		m.e_error = ENOENT;
 	}
@@ -283,8 +285,9 @@ void sandproc::send_rsp(int sock, broker_rsp* rsp, int fd)
 	if (send_fd(sock, rsp, sizeof(*rsp), MSG_DONTWAIT|MSG_NOSIGNAL|MSG_EOR, fd) <= 0)
 	{
 		//full buffer or otherwise failed send means misbehaving child or child exited
-		//in the former case, die; in the latter, killing what's dead is harmless
-		//(okay, it could hit if a threaded child calls open() and exit() simultaneously, but let's just assume they don't.)
+		//in the former case, kill; in the latter, killing what's dead is harmless
+		//(okay, it could hit if a threaded child calls open() and exit() simultaneously,
+		//  but that's a badly designed child. and killing what's dead is still harmless.)
 		terminate();
 	}
 }
@@ -301,8 +304,8 @@ void sandproc::on_readable(uintptr_t sock)
 		close(sock);
 		if (!socks.size())
 		{
-			//if that was the last one, either the entire child tree is terminated or it's misbehaving
-			//in both cases, it won't do anything desirable anymore
+			//if that was the last one, either the entire child tree is terminated, or it's misbehaving
+			//in both cases, it won't do anything desirable anymore, so kill it
 			terminate();
 		}
 		return;

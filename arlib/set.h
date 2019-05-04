@@ -189,8 +189,8 @@ public:
 		construct();
 		for (const T& item : c) add(item);
 	}
-	set& operator=(const set& other) { destruct(); construct(other); }
-	set& operator=(set&& other) { destruct(); construct(std::move(other)); }
+	set& operator=(const set& other) { destruct(); construct(other); return *this; }
+	set& operator=(set&& other) { destruct(); construct(std::move(other)); return *this; }
 	~set() { destruct(); }
 	
 	template<typename T2>

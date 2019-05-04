@@ -12,11 +12,11 @@ protected:
 	const uint8_t* end;
 	
 public:
-	bytestream(arrayview<uint8_t> buf)  { reset(buf); }
-	bytestream(const bytestream& other) : start(other.start), at(other.at), end(other.at) {}
+	bytestream(arrayview<uint8_t> buf)  { init(buf); }
+	bytestream(const bytestream& other) : start(other.start), at(other.at), end(other.end) {}
 	bytestream() : start(NULL), at(NULL), end(NULL) {}
 	
-	void reset(arrayview<uint8_t> buf)
+	void init(arrayview<uint8_t> buf)
 	{
 		start = buf.ptr();
 		at = buf.ptr();

@@ -1,4 +1,5 @@
 #include "global.h"
+#include <new>
 
 void malloc_fail(size_t size)
 {
@@ -7,20 +8,29 @@ void malloc_fail(size_t size)
 	abort();
 }
 
-//these are the only libstdc++ functions I use. if I reimplement them, I don't need that library at all,
-// saving several hundred kilobytes and a DLL
-//(doesn't matter on linux where libstdc++ already exists, also Valgrind hates it so keep them disabled on Linux)
+//for windows:
+//  these are the only libstdc++ functions I use. if I reimplement them, I don't need that library at all,
+//   saving several hundred kilobytes and a DLL
+//  (doesn't matter on linux where libstdc++ already exists)
+//for tests:
+//  need to override them, so they can be counted and leak checked
+//  unfortunately, Valgrind overrides my override with an LD_PRELOAD, and I haven't found a reasonable way to override its override
+//  (the unreasonable one is -s, which confuses Valgrind enough that it leaves new alone)
+//  and valgrind's malloc/delete mismatch detector is also quite valuable
+#if defined(__MINGW32__) || defined(ARLIB_TESTRUNNER)
+void* operator new(std::size_t n) _GLIBCXX_THROW(std::bad_alloc) { return malloc(n); }
+void operator delete(void* p) noexcept { free(p); }
+#if __cplusplus >= 201402
+void operator delete(void* p, std::size_t n) noexcept { free(p); }
+#endif
+#if __cplusplus >= 201703
+void* operator new(std::size_t n, std::align_val_t al)
+#endif
+#endif
+
 #ifdef __MINGW32__
 #error check what -fno-exceptions does; when exceptions are enabled, libstdc++ is already included, so importing these symbols does no harm
 #error also check whether they can be inlined into global.h, like malloc_check
-void* operator new(size_t n) { return malloc(n); }
-void* operator new[](size_t n) { return malloc(n); }
-void operator delete(void * p) { free(p); }
-void operator delete[](void * p) { free(p); }
-#if __cplusplus >= 201402
-void operator delete(void * p, size_t n) { free(p); }
-void operator delete[](void * p, size_t n) { free(p); }
-#endif
 extern "C" void __cxa_pure_virtual(); // predeclaration for -Wmissing-declarations
 extern "C" void __cxa_pure_virtual() { puts("__cxa_pure_virtual"); abort(); }
 #endif
@@ -43,4 +53,10 @@ test("bitround", "", "")
 	assert_eq(bitround((signed)640), 1024);
 	assert_eq(bitround((signed)0x3FFFFFFF), 0x40000000);
 	assert_eq(bitround((signed)0x40000000), 0x40000000);
+}
+
+test("test_nomalloc", "", "")
+{
+	test_skip("unfixable expected-failure");
+	if (RUNNING_ON_VALGRIND) test_expfail("Valgrind doesn't catch new within test_nomalloc, rerun with gdb or standalone");
 }

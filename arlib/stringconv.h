@@ -49,7 +49,7 @@ inline string tostring(const char * s) { return s; } // only exists as tostring,
 
 template<typename T>
 typename std::enable_if<
-	std::is_convertible<T, string>::value
+	sizeof((string)std::declval<T>()) != 0
 	, string>::type
 tostring(const T& val)
 {

@@ -9,8 +9,11 @@ gcc -std=c99 bear-ser.c bear-ser-test.c ../deps/bearssl-0.6/build/libbearssl.a -
 yes, compile thrice, this makes functions move around and tests that freeze/unfreeze handles this properly
 
 expected output:
-some technical crap, along with 'HTTP/1.1 500 Domain Not Found', associated headers and body; then
+some technical crap, along with 'HTTP/1.1 500 Domain Not Found', and associated headers and body; then
 another 'HTTP/1.1 500 Domain Not Found', but this one's headers/body are truncated
+
+file license: MIT; full details available in ../deps/bearssl-0.6/LICENSE.txt
+
 */
 
 #define _POSIX_C_SOURCE 200112L

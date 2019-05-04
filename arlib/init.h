@@ -19,7 +19,7 @@ class argparse {
 		bool can_use = true;
 		bool can_use_multi = false;
 		
-		virtual bool parse(cstring arg) = 0;
+		virtual bool parse(bool has_value, cstring arg) = 0;
 	public:
 		virtual ~arg_base() {}
 		
@@ -52,16 +52,26 @@ private:
 	class arg_str : public arg_t<arg_str> {
 		friend class argparse;
 		
-		arg_str(string* target) : arg_t(false, true), target(target) {}
+		arg_str(bool* has_target, string* target) : arg_t(has_target, true), has_target(has_target), target(target) {}
 		~arg_str() {}
+		bool* has_target;
 		string* target;
-		bool parse(cstring arg) { return fromstring(arg, *target); }
+		bool parse(bool has_value, cstring arg) { if (has_target) *has_target = true; if (has_value) *target = arg; return true; }
 	public:
 		//none
 	};
 public:
-	arg_str& add(char sname, cstring name, string* target);
-	arg_str& add(cstring name, string* target) { return add('\0', name, target); }
+	arg_str& add(char sname, cstring name, bool* has_target, string* target)
+	{
+		arg_str* arg = new arg_str(has_target, target);
+		arg->name = name;
+		arg->sname = sname;
+		m_args.append_take(*arg);
+		return *arg;
+	}
+	arg_str& add(            cstring name, bool* has_target, string* target) { return add('\0',  name, has_target, target); }
+	arg_str& add(char sname, cstring name,                   string* target) { return add(sname, name, NULL,       target); }
+	arg_str& add(            cstring name,                   string* target) { return add('\0',  name, NULL,       target); }
 	
 private:
 	class arg_strmany : public arg_t<arg_strmany> {
@@ -69,27 +79,44 @@ private:
 		
 		arg_strmany(array<string>* target) : arg_t(false, true), target(target) { this->can_use_multi = true; }
 		array<string>* target;
-		bool parse(cstring arg) { target->append(arg); return true; }
+		bool parse(bool has_value, cstring arg) { target->append(arg); return true; }
 	public:
 		//none
 	};
 public:
-	arg_strmany& add(char sname, cstring name, array<string>* target);
+	arg_strmany& add(char sname, cstring name, array<string>* target)
+	{
+		arg_strmany* arg = new arg_strmany(target);
+		arg->name = name;
+		arg->sname = sname;
+		m_args.append_take(*arg);
+		return *arg;
+	}
 	arg_strmany& add(cstring name, array<string>* target) { return add('\0', name, target); }
 	
 private:
 	class arg_int : public arg_t<arg_int> {
 		friend class argparse;
 		
-		arg_int(int* target) : arg_t(false, true), target(target) {}
+		arg_int(bool* has_target, int* target) : arg_t(false, true), has_target(has_target), target(target) {}
+		bool* has_target;
 		int* target;
-		bool parse(cstring arg) { return fromstring(arg, *target); }
+		bool parse(bool has_value, cstring arg) { if (has_target) *has_target = true; return fromstring(arg, *target); }
 	public:
 		//none
 	};
 public:
-	arg_int& add(char sname, cstring name, int* target);
-	arg_int& add(cstring name, int* target) { return add('\0', name, target); }
+	arg_int& add(char sname, cstring name, bool* has_target, int* target)
+	{
+		arg_int* arg = new arg_int(has_target, target);
+		arg->name = name;
+		arg->sname = sname;
+		m_args.append_take(*arg);
+		return *arg;
+	}
+	arg_int& add(            cstring name, bool* has_target, int* target) { return add('\0',  name, has_target, target); }
+	arg_int& add(char sname, cstring name,                   int* target) { return add(sname, name, NULL,       target); }
+	arg_int& add(            cstring name,                   int* target) { return add('\0',  name, NULL,       target); }
 	
 private:
 	class arg_bool : public arg_t<arg_bool> {
@@ -97,13 +124,48 @@ private:
 		
 		arg_bool(bool* target) : arg_t(true, false), target(target) {}
 		bool* target;
-		bool parse(cstring arg) { *target = true; return true; }
+		bool parse(bool has_value, cstring arg) { *target = true; return true; }
 	public:
 		//none
 	};
 public:
-	arg_bool& add(char sname, cstring name, bool* target);
+	arg_bool& add(char sname, cstring name, bool* target)
+	{
+		arg_bool* arg = new arg_bool(target);
+		arg->name = name;
+		arg->sname = sname;
+		m_args.append_take(*arg);
+		return *arg;
+	}
 	arg_bool& add(cstring name, bool* target) { return add('\0', name, target); }
+	
+private:
+	template<typename Tl>
+	class arg_cb : public arg_t<arg_cb<Tl>> {
+		friend class argparse;
+		
+		arg_cb(bool accept_no_value, bool accept_value, Tl&& cb) : arg_t<arg_cb<Tl>>(accept_no_value, accept_value), cb(std::move(cb)) {}
+		Tl cb;
+		bool parse(bool has_value, cstring arg) { return cb(has_value, arg); }
+	public:
+		//none
+	};
+public:
+	//takes function<bool(bool has_value, cstring arg)>
+	template<typename Tl>
+	arg_cb<Tl>& add(char sname, cstring name, bool accept_no_value, bool accept_value, Tl&& cb)
+	{
+		arg_cb<Tl>* arg = new arg_cb<Tl>(accept_no_value, accept_value, std::move(cb));
+		arg->name = name;
+		arg->sname = sname;
+		m_args.append_take(*arg);
+		return *arg;
+	}
+	template<typename Tl>
+	arg_cb<Tl>& add(cstring name, bool accept_no_value, bool accept_value, Tl&& cb)
+	{
+		return add('\0', accept_no_value, accept_value, std::move(cb));
+	}
 	
 	void add_cli() { m_accept_cli = true; }
 	bool has_gui() { return m_has_gui; }

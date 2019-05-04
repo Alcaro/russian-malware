@@ -12,32 +12,31 @@
 #endif
 #ifdef __GNUC__
 #define DLLEXPORT extern "C" __attribute__((__visibility__("default")))
-#define DLLINIT __attribute__((constructor))
 #endif
 #ifdef _MSC_VER
 #define DLLEXPORT extern "C" __declspec(dllexport)
 #endif
 
 class dylib : nocopy {
-	void* handle;
+	void* handle = NULL;
 	
 public:
-	dylib() { handle = NULL; }
-	dylib(const char * filename) { handle = NULL; init(filename); }
+	dylib() = default;
+	dylib(const char * filename) { init(filename); }
 	
 	//if called multiple times on the same object, undefined behavior, call deinit() first
 	bool init(const char * filename);
 	//like init, but if the library is loaded already, it fails
 	//does not protect against a subsequent init() loading the same thing
 	bool init_uniq(const char * filename);
-	//like init, but if the library is loaded already, it loads a new instance, if supported by the platform
+	//like init_uniq, but if the library is loaded already, it loads a new instance, if supported by the platform
 	bool init_uniq_force(const char * filename);
 	//guaranteed to return NULL if initialization fails
 	void* sym_ptr(const char * name);
 	//separate function because
 	//  "The ISO C standard does not require that pointers to functions can be cast back and forth to pointers to data."
 	//  -- POSIX dlsym, http://pubs.opengroup.org/onlinepubs/009695399/functions/dlsym.html#tag_03_112_08
-	//pretty sure the cast works fine in practice, but why not
+	//the cast works fine in practice, but why not
 	//compiler optimizes it out anyways
 	funcptr sym_func(const char * name)
 	{

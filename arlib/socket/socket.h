@@ -114,9 +114,9 @@ public:
 //Permissive (expired)  | Yes     | ?        | Yes    | No      | No
 //Permissive (bad root) | Yes     | ?        | Yes    | Yes     | No
 //Permissive (bad name) | Yes     | ?        | Yes    | No      | No
-//Serialize             | No      | No       | No     | Yes*    | No*  | TLSe claims to support it, but I can't get it working
+//Serialize             | No      | No       | No     | Yes*    | No*  | TLSe claims to support it, but seems to be server-only
 //                                                                     | BearSSL is homemade and will need rewrites if upstream changes
 //Server                | No      | No       | No     | No      | No   | Likely possible on everything, I'm just lazy
-//Reputable author      | Yes     | Yes      | Yes    | Yes     | No
+//Reputable author      | Yes     | Yes      | Yes    | Yes     | No   | Not saying TLSe is bad, just that I don't know
 //Binary size           | 4       | 2.5      | 4      | 80      | 169  | In kilobytes, estimated; DLLs not included
 #endif

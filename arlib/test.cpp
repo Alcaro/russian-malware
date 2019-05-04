@@ -65,6 +65,14 @@ static array<string> ctxstack;
 int _teststack_pushstr(string text) { ctxstack.append(text); return 1; }
 int _teststack_popstr() { ctxstack.resize(ctxstack.size()-1); return 0; }
 
+static size_t n_malloc = 0;
+static size_t n_free = 0;
+static size_t n_malloc_block = 0;
+void _test_malloc() { if (UNLIKELY(n_malloc_block)) { if (result == err_ok) test_nothrow(assert(false)); } n_malloc++; }
+void _test_free()   { if (UNLIKELY(n_malloc_block)) { if (result == err_ok) test_nothrow(assert(false)); } n_free++; }
+int _test_blockmalloc() { n_malloc_block++; return 1; }
+int _test_unblockmalloc() { n_malloc_block--; return 0; }
+
 static string fmt_callstack(int top)
 {
 	if (top<0) return "";
@@ -106,6 +114,7 @@ void _test_nothrow(int add)
 
 static void _testfail(cstring why)
 {
+	result = err_fail;
 	puts(why.c_str());
 	fflush(stdout);
 	debug_or_ignore();
@@ -114,11 +123,13 @@ static void _testfail(cstring why)
 
 void _testfail(cstring why, int line)
 {
+	result = err_fail;
 	_testfail(why+stack(line));
 }
 
 void _testcmpfail(cstring name, int line, cstring expected, cstring actual)
 {
+	result = err_fail;
 	if (expected.contains("\n") || actual.contains("\n") || name.length()+expected.length()+actual.length()>240)
 	{
 		_testfail("\nFailed assertion "+name+stack(line)+"\nexpected:\n"+expected+"\nactual:\n"+actual);
@@ -400,12 +411,17 @@ int main(int argc, char* argv[])
 			else
 				printf(ESC_ERASE_LINE "Test %d/%d (%s)... ", testnum, numtests, cur_test->name);
 			fflush(stdout);
-			callstack.reset();
 			result = err_ok;
+			callstack.reset();
+			ctxstack.reset();
 			nothrow_level = 0;
+			n_malloc = 0;
+			n_free = 0;
+			n_malloc_block = 0;
 			try {
 				uint64_t start_time = time_us_ne();
 				cur_test->func();
+				//assert_eq(n_malloc, n_free);
 				uint64_t end_time = time_us_ne();
 				uint64_t time_us = end_time - start_time;
 				uint64_t time_lim = (all_tests ? 5000*1000 : 500*1000);
@@ -465,6 +481,9 @@ int main(int argc, char* argv[])
 	
 	return 0;
 }
+
+#undef free
+void free_test(void* ptr) { _test_free(); free(ptr); }
 
 #ifdef ARLIB_TEST_ARLIB
 static int testnum = 0;

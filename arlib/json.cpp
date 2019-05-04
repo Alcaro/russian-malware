@@ -328,7 +328,7 @@ void JSON::serialize(jsonwriter& w) const
 			{
 				items.append(&e);
 			}
-			items.sort([](const map<string,JSON>::node* a, const map<string,JSON>::node* b)->bool { return string::compare(b->key, a->key) < 0; });
+			items.sort([](const map<string,JSON>::node* a, const map<string,JSON>::node* b) { return string::less(a->key, b->key); });
 			for (const map<string,JSON>::node* e : items)
 			{
 				w.map_key(e->key);

@@ -376,7 +376,7 @@ void zip::sort()
 		size_t b;
 		for (b=0;b<a;b++)
 		{
-			if (string::compare(filenames[b], filenames[a]) > 0) break;
+			if (string::less(filenames[a], filenames[b])) break;
 		}
 		filenames.swap(a, b);
 		filedat.swap(a, b);
@@ -580,6 +580,11 @@ test("ZIP writing", "file", "zip")
 	assert(member(files, "hello2.txt"));
 	assert(member(files, "hello.txt"));
 	assert(member(files, "inner.zip"));
+	
+	z2.sort();
+	assert_eq(z2.files()[0], "hello.txt");
+	assert_eq(z2.files()[1], "hello2.txt");
+	assert_eq(z2.files()[2], "inner.zip");
 	
 	time_t t;
 	assert_eq(string(z2.read("hello.txt", &t)), "Hello World");

@@ -39,8 +39,6 @@ namespace {
 
 //most of this is copied from bearssl-0.3/tools/certs.c and files.c, somewhat rewritten
 
-//I'd prefer to get rid of this one's destructor, it's not needed,
-//but GCC bug 19661 says I can't do that.
 static array<br_x509_trust_anchor> certs;
 
 static void bytes_append(void* dest_ctx, const void * src, size_t len)

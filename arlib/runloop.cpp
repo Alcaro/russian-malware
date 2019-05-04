@@ -229,6 +229,7 @@ public:
 	void submit(function<void()>&& cb) override
 	{
 		//full pipe should be impossible
+		static_assert(sizeof(cb) <= PIPE_BUF);
 		if (write(submit_fds[1], &cb, sizeof(cb)) != sizeof(cb)) abort();
 		memset(&cb, 0, sizeof(cb));
 	}
@@ -470,4 +471,4 @@ test("private runloop", "function,array,set,time", "runloop")
 {
 	test_runloop(false);
 }
-test("epoll","","") { assert(!"replace epoll with normal poll, epoll doesn't help at our small scale"); }
+test("epoll","","") { test_expfail("replace epoll with normal poll, epoll doesn't help at our small scale"); }

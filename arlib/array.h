@@ -13,8 +13,8 @@ template<typename T> class array;
 //this object does not own its storage, it's just a pointer wrapper
 template<typename T> class arrayview : public linqbase<arrayview<T>> {
 protected:
-	T * items; // not const, despite not necessarily being writable; this makes arrayvieww/array a lot simpler
-	size_t count;
+	T * items = NULL; // not const, despite not necessarily being writable; this makes arrayvieww/array a lot simpler
+	size_t count = 0; // initialized here 
 	
 protected:
 	//must be functions, Clang won't like it otherwise
@@ -36,11 +36,7 @@ public:
 	
 	explicit operator bool() const { return count; }
 	
-	arrayview()
-	{
-		this->items=NULL;
-		this->count=0;
-	}
+	arrayview() = default;
 	
 	arrayview(nullptr_t)
 	{
@@ -180,11 +176,7 @@ public:
 	T* ptr() { return this->items; }
 	const T* ptr() const { return this->items; }
 	
-	arrayvieww()
-	{
-		this->items=NULL;
-		this->count=0;
-	}
+	arrayvieww() = default;
 	
 	arrayvieww(nullptr_t)
 	{
@@ -230,39 +222,57 @@ public:
 		memcpy(this->items+b, tmp, sizeof(T));
 	}
 	
-	//stable sort
-	//comparer should return whether the items are in wrong order and should be swapped
+	//unstable sort - default because equivalent-but-nonidentical states are extremely rare
 	template<typename Tless>
 	void sort(const Tless& less)
 	{
-		//insertion sort, without binary search optimization for finding the new position
 		//TODO: less lazy
-		for (size_t a=0;a<this->count;a++)
-		{
-			size_t b;
-			for (b=0;b<a;b++)
-			{
-				if (less(this->items[b], this->items[a])) break;
-			}
-			swap(a, b);
-		}
+		ssort(less);
 	}
 	
 	void sort()
 	{
-		sort([](const T& a, const T& b) { return b < a; });
+		sort([](const T& a, const T& b) { return a < b; });
 	}
 	
-	//unstable sort, not necessarily quicksort
+	//stable sort
 	template<typename Tless>
-	void qsort(const Tless& less)
+	void ssort(const Tless& less)
 	{
-		sort(less); // TODO: less lazy
+		//insertion sort
+		for (size_t a=1;a<this->count;a++)
+		{
+			if (less(this->items[a-1], this->items[a]))
+				continue;
+			
+			size_t probe = 1;
+			while (probe < a && !less(this->items[a-probe], this->items[a]))
+				probe *= 2;
+			
+			size_t min = a-probe;
+			probe /= 2;
+			while (probe)
+			{
+				if (min+probe > a || less(this->items[min+probe], this->items[a]))
+					min += probe;
+				probe /= 2;
+			}
+			
+			if (min > a || less(this->items[min], this->items[a]))
+				min++;
+			
+			size_t newpos = min;
+			
+			char tmp[sizeof(T)];
+			memcpy(tmp, &this->items[a], sizeof(T));
+			memmove(&this->items[newpos+1], &this->items[newpos], sizeof(T)*(a-newpos));
+			memcpy(&this->items[newpos], tmp, sizeof(T));
+		}
 	}
 	
-	void qsort()
+	void ssort()
 	{
-		sort(); // TODO: less lazy
+		ssort([](const T& a, const T& b) { return a < b; });
 	}
 	
 	void shuffle()
@@ -421,7 +431,6 @@ public:
 	T& prepend(T&& item) { return insert(0, std::move(item)); }
 	T& prepend(const T& item) { return insert(0, item); }
 	T& prepend() { return insert(0); }
-	void reset() { resize_shrink(0); }
 	
 	void remove(size_t index)
 	{
@@ -429,6 +438,8 @@ public:
 		memmove(this->items+index, this->items+index+1, sizeof(T)*(this->count-1-index));
 		resize_shrink_noinit(this->count-1);
 	}
+	
+	void reset() { resize_shrink(0); }
 	
 	T pop(size_t index = 0)
 	{
@@ -439,11 +450,7 @@ public:
 	
 	T pop_tail() { return std::move(pop(this->count - 1)); }
 	
-	array()
-	{
-		this->items = NULL;
-		this->count = 0;
-	}
+	array() = default;
 	
 	array(nullptr_t)
 	{
@@ -552,9 +559,8 @@ public:
 	static array<T> create_usurp(arrayvieww<T> data)
 	{
 		array<T> ret;
-		ret.items = data.ptr(); // should be x, but y
-		ret.count = 0;
-		ret.resize_grow_noinit(data.size());
+		ret.items = realloc(data.ptr(), sizeof(T)*bitround(data.size()));
+		ret.count = data.size();
 		return ret;
 	}
 	
@@ -804,12 +810,13 @@ private:
 	{
 		memcpy(this, &other, sizeof(*this));
 		other.nbits = 0;
+		memset(other.bits_inline, 0, sizeof(other.bits_inline));
 	}
 public:
 	
 	array() { construct(); }
 	array(const array& other) { construct(other); }
-	array(array&& other) { construct(other); }
+	array(array&& other) { construct(std::move(other)); }
 	~array() { destruct(); }
 	
 	array& operator=(const array& other)
@@ -822,7 +829,7 @@ public:
 	array& operator=(array&& other)
 	{
 		destruct();
-		construct(other);
+		construct(std::move(other));
 		return *this;
 	}
 	
@@ -865,6 +872,7 @@ public:
 		items.append(&item);
 	}
 	void remove(size_t index) { items.remove(index); }
+	void reset() { items.reset(); }
 	size_t size() { return items.size(); }
 	
 private:

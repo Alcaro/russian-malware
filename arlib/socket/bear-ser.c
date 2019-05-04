@@ -1,6 +1,14 @@
-//This program allows serializing a BearSSL context to a byte stream, allowing passing it between programs, across an exec(), or similar.
-//A serialized context can only be used with the exact BearSSL version it was serialized with, due to T0-relative pointers.
-//Additionally, the serializer itself may break between BearSSL versions; while 0.3->0.4->0.5 didn't need any changes, 0.5->0.6 did.
+//This function allows serializing a BearSSL context to a byte stream, allowing passing it between
+// programs, across an exec(), or similar.
+//A serialized context can only be used with the exact BearSSL version it was serialized with, due
+// to T0-relative pointers.
+//Additionally, the serializer itself may break between BearSSL versions; while 0.3->0.4->0.5 didn't
+// need any changes, 0.5->0.6 did.
+//I have proposed this feature upstream, but the maintainer has not yet added it, nor given a clear
+// answer on when or if he will.
+
+//This file is available under the MIT License, same as BearSSL itself.
+//See ../deps/bearssl-0.6/LICENSE.txt for details.
 
 #include "../deps/bearssl-0.6/inc/bearssl.h"
 
@@ -11,6 +19,8 @@ extern "C" {
 //This file exports the following two functions and struct:
 
 typedef struct br_frozen_ssl_client_context_ {
+	// This struct should be considered logically opaque.
+	// Feel free to sizeof and memcpy it, but don't try to decompose its members.
 	br_ssl_client_context cc;
 	br_x509_minimal_context xc;
 } br_frozen_ssl_client_context;
@@ -18,9 +28,11 @@ typedef struct br_frozen_ssl_client_context_ {
 
 //A frozen context can safely be transferred between processes.
 //Don't use the context after freezing it, obviously. Deallocate it.
-// The context will be scrambled, so you can't serialize it then change your mind.
-//This is a bug, but I can't think of any situation where it'd be an issue. Worst case, deserialize back into the original process.
-void br_ssl_client_freeze(br_frozen_ssl_client_context* fr, br_ssl_client_context* cc, br_x509_minimal_context* xc);
+//The context will be scrambled, so you can't serialize it then change your mind.
+//(This is a bug, but I can't think of any situation where it'd be an issue. Worst case, deserialize
+// it back into the same process.)
+void br_ssl_client_freeze(br_frozen_ssl_client_context* fr,
+                          br_ssl_client_context* cc, br_x509_minimal_context* xc);
 
 //cc/xc must be initialized in the same way as the original objects prior to calling this.
 //This includes, but is not limited to, the following functions (if used originally):
@@ -30,7 +42,8 @@ void br_ssl_client_freeze(br_frozen_ssl_client_context* fr, br_ssl_client_contex
 //- br_ssl_client_reset (other than the domain name, which may differ, or even be NULL)
 //- The list of trust anchors in the x509, including order
 //Like the serializer, the input will get scrambled. If necessary, re-serialize it.
-void br_ssl_client_unfreeze(br_frozen_ssl_client_context* fr, br_ssl_client_context* cc, br_x509_minimal_context* xc);
+void br_ssl_client_unfreeze(br_frozen_ssl_client_context* fr,
+                            br_ssl_client_context* cc, br_x509_minimal_context* xc);
 
 //End of public exports.
 
@@ -51,8 +64,8 @@ static const uint8_t * br_t0_extract(void(*fn)(void* t0ctx))
 	return cpu.ip;
 }
 
-//I need to use these functions, which aren't part of the public API. (Thanks for not making x509's init static.)
-//It's about nine million kinds of unsafe, but I have no other choice, other than changing upstream code...
+//I need to use these functions, which aren't part of the public API. Good thing they're not static.
+//It's about nine million kinds of unsafe, but my only other option is changing upstream code...
 extern void br_ssl_hs_client_init_main(void* ctx);
 static const uint8_t * br_ssl_client_get_default_t0()
 {
@@ -99,8 +112,8 @@ static void br_ssl_engine_freeze(br_ssl_engine_context* cc, const uint8_t * t0_i
 	cc->cpu.dp -= ((uintptr_t)cc->dp_stack)/sizeof(uint32_t);
 	cc->cpu.rp -= ((uintptr_t)cc->rp_stack)/sizeof(uint32_t);
 	// I can't find the buffer start, only a fixed point in it, so I can't be sure it won't subtract to null
-	// but it probably won't hit size 100000
-	if (cc->cpu.ip) cc->cpu.ip -= (uintptr_t)t0_init - 100000;
+	// but given that BearSSL is designed to be lightweight, a 50KB table seems unlikely
+	if (cc->cpu.ip) cc->cpu.ip -= (uintptr_t)t0_init - 50000;
 	
 	if (cc->hbuf_in )       cc->hbuf_in        -= (uintptr_t)cc->ibuf - 1; // -1 to make sure hbuf_in==ibuf doesn't change hbuf_in==NULL
 	if (cc->hbuf_out)       cc->hbuf_out       -= (uintptr_t)cc->obuf - 1;
@@ -185,7 +198,7 @@ static void br_ssl_engine_unfreeze(br_ssl_engine_context* cc, const br_ssl_engin
 	
 	cc->cpu.dp += ((uintptr_t)reference->dp_stack)/4;
 	cc->cpu.rp += ((uintptr_t)reference->rp_stack)/4;
-	if (cc->cpu.ip) cc->cpu.ip += (uintptr_t)t0_init - 100000;
+	if (cc->cpu.ip) cc->cpu.ip += (uintptr_t)t0_init - 50000;
 	if (cc->hbuf_in )       cc->hbuf_in        += (uintptr_t)reference->ibuf - 1;
 	if (cc->hbuf_out)       cc->hbuf_out       += (uintptr_t)reference->obuf - 1;
 	if (cc->saved_hbuf_out) cc->saved_hbuf_out += (uintptr_t)reference->obuf - 1;
@@ -234,7 +247,7 @@ static void br_x509_minimal_freeze(br_x509_minimal_context* xc, const br_ssl_eng
 	
 	xc->cpu.dp -= ((uintptr_t)xc->dp_stack)/sizeof(uint32_t);
 	xc->cpu.rp -= ((uintptr_t)xc->rp_stack)/sizeof(uint32_t);
-	if (xc->cpu.ip) xc->cpu.ip -= (uintptr_t)br_x509_minimal_get_default_t0() - 100000;
+	if (xc->cpu.ip) xc->cpu.ip -= (uintptr_t)br_x509_minimal_get_default_t0() - 50000;
 	
 	if (xc->hbuf) xc->hbuf -= (uintptr_t)engine; // points to ssl_engine->pad if set
 }
@@ -255,7 +268,7 @@ static void br_x509_minimal_unfreeze(br_x509_minimal_context* xc, const br_x509_
 	
 	xc->cpu.dp += ((uintptr_t)reference->dp_stack)/4;
 	xc->cpu.rp += ((uintptr_t)reference->rp_stack)/4;
-	if (xc->cpu.ip) xc->cpu.ip += (uintptr_t)br_x509_minimal_get_default_t0() - 100000;
+	if (xc->cpu.ip) xc->cpu.ip += (uintptr_t)br_x509_minimal_get_default_t0() - 50000;
 	
 	if (xc->server_name) xc->server_name = engine->server_name;
 	

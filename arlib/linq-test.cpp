@@ -90,5 +90,12 @@ test("LINQ", "array,set", "linq")
 		            .join(),
 		          1-1 + 3-1 + 5-1 + 7-1 + 9-1);
 	}
+	
+	{
+		string foo[5] = { "muncher", "robot", "floating muncher", "walrus", "viking" };
+		arrayview<string> bar = foo;
+		array<string> baz = bar.where([](cstring str)->bool { return str.contains("muncher"); });
+		assert_eq(baz.join(","), "muncher,floating muncher");
+	}
 }
 #endif

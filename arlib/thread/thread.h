@@ -4,15 +4,14 @@
 #include "atomic.h"
 
 #ifdef ARLIB_THREAD
-//It is safe to malloc() something in one thread and free() it in another.
+//It is safe (though may yield a performance penalty) to malloc() something in one thread and free() it in another.
 //A thread is rather heavy; for short-running jobs, use thread_create_short or thread_split.
-//
 enum priority_t { pri_default = 0, pri_high, pri_low, pri_idle };
 void thread_create(function<void()> start, priority_t pri = pri_default);
 
 //Returns the number of threads to create to utilize the system resources optimally.
 unsigned int thread_num_cores();
-//Returns the number of low-priority threads that can be created without interfering with other programs.
+//Returns the number of low-priority threads that can be created as pri_idle without interfering with other programs.
 unsigned int thread_num_cores_idle();
 
 #include <string.h>
@@ -31,7 +30,7 @@ unsigned int thread_num_cores_idle();
 //lock() is not guaranteed to release the CPU if it can't grab the lock. It may be implemented as a
 // busy loop, or a hybrid scheme that spins a few times and then sleeps.
 //Remember to create all relevant mutexes before creating a thread.
-class mutex : nocopy {
+class mutex : nomove {
 protected:
 #if defined(__unix__)
 	pthread_mutex_t mut;
@@ -52,13 +51,8 @@ public:
 	// apparently MSVC2008 doesn't understand struct S item = {0}. let's do something it does understand and hope it's optimized out.
 	SRWLOCK srwlock;
 public:
-	mutex() { srwlock.Ptr = NULL; } // and let's hope MS doesn't change the definition of RTL_SRWLOCK.
+	mutex_base() { srwlock.Ptr = NULL; } // and let's hope MS doesn't change the definition of RTL_SRWLOCK.
 #endif
-	//I could define a path for Windows 8+ that uses WaitOnAddress to shrink it to one single byte, but
-	//(1) The more code paths, the more potential for bugs, especially the code paths I don't regularly test
-	//(2) Saving seven bytes is pointless, a mutex is for protecting other resources and they're bigger
-	//(3) Microsoft's implementation is probably better optimized
-	//(4) I can't test it without a machine running 8 or higher, and I don't have that
 	
 public:
 	void lock() { AcquireSRWLockExclusive(&srwlock); }
@@ -78,31 +72,35 @@ public:
 #endif
 };
 
-
+// Recursive mutex - can be locked while holding it. Should be unlocked as many times as it's locked.
 class mutex_rec : public mutex {
 #if defined(__unix__)
 public:
 	mutex_rec();
 #else
 private: // unimplemented
-	mutex_rec();
+	mutex_rec() = delete;
 #endif
 };
 
-
 class mutexlocker : nocopy {
-	mutexlocker();
+	mutexlocker() = delete;
 	mutex* m;
 public:
-	mutexlocker(mutex* m) { this->m = m;  this->m->lock(); }
+	mutexlocker(mutex* m) { this->m =  m; this->m->lock(); }
 	mutexlocker(mutex& m) { this->m = &m; this->m->lock(); }
-	void unlock() { if (this->m) this->m->unlock(); this->m = NULL; }
-	~mutexlocker() { unlock(); }
+	//void unlock() { if (this->m) this->m->unlock(); this->m = NULL; }
+	//~mutexlocker() { unlock(); }
+	~mutexlocker() { m->unlock(); }
 };
 #define synchronized(mutex) using(mutexlocker LOCK(mutex))
 
 
-//A semaphore starts in the locked state.
+//A semaphore is a cross-thread notification mechanism; the intention is one thread waits, the other releases. It starts locked.
+//Can be used as a mutex, but a real mutex is faster.
+//It is possible to release a semaphore multiple times, then wait multiple times.
+//wait() is guaranteed to release the CPU after a while.
+//Can be destroyed while fully locked, or while having a few releases, though not while anyone is waiting.
 class semaphore : nomove {
 #ifdef __unix__
 	sem_t sem;
@@ -152,6 +150,20 @@ public:
 #define RUN_ONCE(fn) do { static runonce once; once.run(fn); } while(0);
 #define RUN_ONCE_FN(name) static void name##_core(); static void name() { RUN_ONCE(name##_core); } static void name##_core()
 
+//A more read-focused runonce. 
+#ifdef __unix__
+class runonce_rcu : nomove {
+	typedef void (*once_fn_t)(void);
+	pthread_once_t once = PTHREAD_ONCE_INIT;
+public:
+	void run(once_fn_t fn) { pthread_once(&once, fn); }
+};
+#else
+#define runonce_rcu runonce
+#endif
+#define RUN_ONCE_RCU(fn) do { static runonce_rcu once; once.run(fn); } while(0);
+#define RUN_ONCE_RCU_FN(name) static void name##_core(); static void name() { RUN_ONCE_RCU(name##_core); } static void name##_core()
+
 
 //void thread_sleep(unsigned int usec);
 
@@ -200,6 +212,7 @@ public:
 	bool try_lock() { return true; }
 	void unlock() { }
 };
+class mutex_rec : public mutex {};
 class semaphore : nomove {
 public:
 	void release() {}

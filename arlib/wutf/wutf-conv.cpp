@@ -315,7 +315,7 @@ static int utf16_to_utf8_len(int flags, const uint16_t* ptr, const uint16_t* end
 				if (!(flags & WUTF_WTF8))
 				{
 					if ((flags & WUTF_INVALID_MASK) == WUTF_INVALID_ABORT) return WUTF_E_INVALID;
-					if ((flags & WUTF_INVALID_MASK) == WUTF_INVALID_DROP) ret--; continue;
+					if ((flags & WUTF_INVALID_MASK) == WUTF_INVALID_DROP) { ret--; continue; }
 					if ((flags & WUTF_INVALID_MASK) == WUTF_INVALID_FFFD) continue;
 					if ((flags & WUTF_INVALID_MASK) == WUTF_INVALID_DCXX)
 					{

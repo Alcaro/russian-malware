@@ -121,8 +121,11 @@ namespace sigchld {
 				struct sigaction act_prev;
 				act.sa_sigaction = handler_nat;
 				sigemptyset(&act.sa_mask);
-				//unbounded recursion (SA_NODEFER) is bad, but the alternative is trying to waitpid every single child as soon as one dies
-				//and it's not unbounded anyways, it's bounded by number of child processes, which won't go very high. stack can handle that
+				// unbounded recursion (SA_NODEFER) is bad, but the alternative is trying to waitpid
+				//  every single child as soon as one dies
+				// and it's not unbounded anyways, it's bounded by number of child processes, which won't go very high
+				// https://ldpreload.com/blog/signalfd-is-useless says SIGCHLD can be coalesced even with NODEFER,
+				//  but that's just broken kernel behavior
 				act.sa_flags = SA_SIGINFO|SA_NODEFER|SA_NOCLDSTOP;
 				sigaction(SIGCHLD, &act, &act_prev);
 				

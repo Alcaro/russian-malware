@@ -251,8 +251,9 @@ uint64_t time_us_ne()
 #include <time.h>
 
 //these functions calculate n/1000 and n/1000000, respectively
-//-O3 optimizes this automatically, but I want -Os on most of the program, only speed-optimizing the hottest spots
+//-O2 optimizes this automatically, but I want -Os on most of the program, only speed-optimizing the hottest spots
 //this is one of said hotspots; the size penalty is tiny (2 bytes, 4 for both), and it's about twice as fast
+//attribute optimize -O2 is ignored
 static inline uint32_t div1000(uint32_t n)
 {
 	return 274877907*(uint64_t)n >> 38;

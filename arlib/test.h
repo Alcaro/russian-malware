@@ -58,8 +58,10 @@ void _test_nothrow(int add);
 
 void _teststack_push(int line);
 void _teststack_pop();
-int _teststack_pushstr(string text); // Returns 1.
+int _teststack_pushstr(string text); // Returns 1, to simplify below macros.
 int _teststack_popstr(); // Returns 0.
+int _test_blockmalloc(); // Returns 1.
+int _test_unblockmalloc(); // Returns 0.
 
 void _test_skip(cstring why);
 void _test_skip_force(cstring why);
@@ -162,10 +164,10 @@ void _assert_range(const T&  actual, const char * actual_exp,
 
 #define _test_return(...) if (_test_should_exit()) return __VA_ARGS__;
 #define TESTFUNCNAME JOIN(_testfunc, __LINE__)
-//'name' is printed to the user, but does nothing.
+//'name' is printed to the user, and can be used for test filtering.
 //'provides' is what feature this test is for.
-//'requires' is which features this test requires to function correctly, comma separated;
-// if not set correctly, this test could be blamed for an underlying fault.
+//'requires' is which features this test requires to function correctly, comma separated; if not set correctly,
+// this test could be blamed for an underlying fault. (Though incomplete testing of underlying components yield that result too.)
 //If multiple tests provide the same feature, all of them must run before anything depending on it can run
 // (however, the test will run even if the prior one fails).
 //Requiring a feature that no test provides, or cyclical dependencies, causes a test failure.
@@ -199,7 +201,8 @@ void _assert_range(const T&  actual, const char * actual_exp,
 #define assert_fail(msg) do { _testfail((string)"\n"+msg, __LINE__); } while(0)
 #define assert_unreachable() do { _testfail("\nassert_unreachable() wasn't unreachable", __LINE__); } while(0)
 #define assert_fail_nostack(msg) do { _testfail((string)"\n"+msg, -1); } while(0)
-#define testctx(x) for (int i=_teststack_pushstr(x); i; i = _teststack_popstr())
+#define test_nomalloc for (int _testi=_test_blockmalloc(); _testi; _testi=_test_unblockmalloc())
+#define testctx(x) for (int _testi=_teststack_pushstr(x); _testi; _testi=_teststack_popstr())
 #define testcall(x) do { _teststack_push(__LINE__); x; _teststack_pop(); } while(0)
 #define test_skip(x) do { _test_skip(x); } while(0)
 #define test_skip_force(x) do { _test_skip_force(x); } while(0)
@@ -229,8 +232,9 @@ int not_quite_main(int argc, char** argv);
 #define assert_gte_ret(x,y,r) ((void)((x)<(y)))
 #define assert_gte(x,y) ((void)((x)<(y)))
 #define assert_range(x,y,z) ((void)((x)<(y)))
-#define testcall(x) x
+#define test_nomalloc
 #define testctx(x)
+#define testcall(x) x
 #define test_skip(x) return
 #define test_skip_force(x) return
 #define test_inconclusive(x) return

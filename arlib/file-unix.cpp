@@ -251,9 +251,7 @@ again: ;
 	g_exepath = buf.release().ptr();
 	
 	
-	char* cwd_true = getcwd(NULL, 0);
-	string cwd = cwd_true;
-	free(cwd_true);
+	string cwd = string::create_usurp(getcwd(NULL, 0));
 	if (!cwd.endswith("/")) cwd += "/";
 	g_cwd = strdup(cwd);
 	

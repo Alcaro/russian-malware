@@ -6,46 +6,6 @@
 #endif
 #include "test.h" // TODO: define RUNNING_ON_VALGRIND at some better place
 
-argparse::arg_str& argparse::add(char sname, cstring name, string* target)
-{
-	arg_str* arg = new arg_str(target);
-	arg->name = name;
-	arg->sname = sname;
-	
-	m_args.append_take(*arg);
-	return *arg;
-}
-
-argparse::arg_strmany& argparse::add(char sname, cstring name, array<string>* target)
-{
-	arg_strmany* arg = new arg_strmany(target);
-	arg->name = name;
-	arg->sname = sname;
-	
-	m_args.append_take(*arg);
-	return *arg;
-}
-
-argparse::arg_int& argparse::add(char sname, cstring name, int* target)
-{
-	arg_int* arg = new arg_int(target);
-	arg->name = name;
-	arg->sname = sname;
-	
-	m_args.append_take(*arg);
-	return *arg;
-}
-
-argparse::arg_bool& argparse::add(char sname, cstring name, bool* target)
-{
-	arg_bool* arg = new arg_bool(target);
-	arg->name = name;
-	arg->sname = sname;
-	
-	m_args.append_take(*arg);
-	return *arg;
-}
-
 string argparse::get_usage()
 {
 	return "TODO";
@@ -75,12 +35,12 @@ void argparse::single_arg(arg_base& arg, cstring value, bool must_use_value, boo
 	
 	if (value && arg.accept_value)
 	{
-		if (!arg.parse(value)) error("invalid value for --"+arg.name);
+		if (!arg.parse(true, value)) error("invalid value for --"+arg.name);
 		if (used_value) *used_value = true;
 	}
 	else
 	{
-		arg.parse("");
+		arg.parse(false, "");
 	}
 }
 void argparse::single_arg(cstring name, cstring value, bool must_use_value, bool* used_value)
@@ -341,7 +301,7 @@ static void test_getopt(bool a, bool b, const char * c, const char * nonopts, Ar
 	assert_eq(realnonopts.join("/"), nonopts);
 }
 
-test("argument parser 2","string,array","argparse")
+test("argument parser 2", "string,array", "argparse")
 {
 	//getopt examples, https://www.gnu.org/software/libc/manual/html_node/Example-of-Getopt.html
 	//0/1 as bool because the example does so
@@ -363,13 +323,10 @@ void arlib_init(argparse& args, char** argv)
 {
 #ifdef __unix__
 #ifndef ARLIB_OPT
-	if (!RUNNING_ON_VALGRIND)
-	{
-		rlimit lim;
-		lim.rlim_cur = 64*1024*1024;
-		lim.rlim_max = RLIM_INFINITY;
-		setrlimit(RLIMIT_CORE, &lim);
-	}
+	rlimit lim;
+	lim.rlim_cur = (RUNNING_ON_VALGRIND ? 1 : 64*1024*1024);
+	lim.rlim_max = RLIM_INFINITY;
+	setrlimit(RLIMIT_CORE, &lim);
 #endif
 #endif
 	

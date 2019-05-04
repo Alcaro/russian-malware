@@ -3,10 +3,9 @@ ifneq ($(OS),linux)
 endif
 
 ifeq ($(CC_FAMILY),clang)
-# Clang 6.0.0 emits 'call memcpy@PLT' all over, despite -ffreestanding.
-# There is no PLT in the emulator, and no flag to not emit memcpy.
+# Clang 6.0.0 emits 'call memset@PLT' all over (or 'call memset' without -fpic, but that has its own issues).
+# There is no PLT in the emulator, and no flag to not emit memset. -fno-builtin-memset exists, but doesn't help.
 # As such, Clang is currently unusable for the purpose of building the sandbox emulator.
-# (It also rejects %rax, insisting on a plain rax. Finally, it requires a __asm__(".intel_syntax") early in the C++, which confuses gcc.)
 # Broker/launcher are untested, probably fine.
 $(error Clang cannot be used to build the sandbox)
 endif
@@ -15,21 +14,33 @@ SOURCES_ARLIB += arlib/sandbox/*.cpp
 DEFINES += ARLIB_SANDBOX
 
 #ensure we're usable as linker, with ASLR enabled
-PRELOADER_CFLAGS := -fpic
-PRELOADER_LFLAGS := -static -shared -Wl,-Bsymbolic -Wl,--no-dynamic-linker
+PRELOADER_CFLAGS += -fpic
+PRELOADER_LFLAGS += -static -shared -Wl,-Bsymbolic -Wl,--no-dynamic-linker
+
 #runtime libraries aren't available, don't use them and don't use anything using them
 PRELOADER_CFLAGS += -ffreestanding
 PRELOADER_LFLAGS += -nostdlib -nostartfiles -nodefaultlibs
+PRELOADER_CFLAGS += -fno-builtin-memcpy -fno-builtin-memset -fno-builtin-memmove
+#nothing should nor can override our symbols, and allowing it causes relocation issues
+PRELOADER_CFLAGS += -fvisibility=hidden
 #gcc sure loves inserting calls to random stuff, force it not to
 #I'd prefer if I could enable -fstack-protector, but the stack cookie is at %fs:40, which is a segfault
 #I could set it up, but that'd require a bunch of assembly, leak memory, and confuse the real libc when it tries to set up %fs
-#glibc seems built without stack protector, anyways, and the low amount of stack used by this thing is easy to audit by hand
-PRELOADER_CFLAGS += -fno-stack-protector -fno-exceptions -fno-rtti -fno-jump-tables -fno-sync-libcalls
-#nothing should nor can override our symbols, and allowing it causes relocation issues
-PRELOADER_CFLAGS += -fvisibility=hidden
+#glibc seems built without stack protector anyways, and the low amount of stack used by this thing is easy to audit by hand
+PRELOADER_CFLAGS += -fno-stack-protector -fno-exceptions -fno-rtti -fno-jump-tables
+ifeq ($(CC_FAMILY),gcc)
+PRELOADER_CFLAGS += -fno-sync-libcalls
+endif
+
 #AT&T assembly is ugly
 #yes, there's only ~7 lines of asm in this thing, AT&T is still ugly
 PRELOADER_CFLAGS += -masm=intel
+ifeq ($(CC_FAMILY),clang)
+#Clang's integrated assembler doesn't support .intel_syntax prefix
+#if that's fixed, Clang will also need a __asm__(".intel_syntax") early in the C++
+#(under an ifdef, gcc doesn't like that)
+PRELOADER_CFLAGS += -fno-integrated-as
+endif
 
 #I could include TRUE_{C,L}FLAGS, but that includes silly stuff like -pthread and -lgtk-3, so just hardcode them
 #CFLAGS/LFLAGS are set by command line only, empty by default, let's include them
