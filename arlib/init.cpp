@@ -331,7 +331,6 @@ void arlib_init(argparse& args, char** argv)
 #endif
 	
 	srand(time(NULL));
-	arlib_init_file();
 #ifndef ARGUI_NONE
 	arlib_init_gui(args, argv);
 #else

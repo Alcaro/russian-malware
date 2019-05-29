@@ -225,32 +225,12 @@ bool file::unlink(cstring filename)
 #endif
 
 
-static char* g_exepath;
-cstring file::exepath() { return g_exepath; }
+/*
 static char* g_cwd;
 cstring file::cwd() { return g_cwd; }
 
 void arlib_init_file()
 {
-	array<char> buf;
-	buf.resize(64);
-	
-again: ;
-	ssize_t r = readlink("/proc/self/exe", buf.ptr(), buf.size());
-	if (r <= 0) abort();
-	if ((size_t)r >= buf.size()-1)
-	{
-		buf.resize(buf.size() * 2);
-		goto again;
-	}
-	
-	buf[r] = '\0';
-	char * end = strrchr(buf.ptr(), '/')+1; // a / is known to exist
-	*end = '\0';
-	
-	g_exepath = buf.release().ptr();
-	
-	
 	string cwd = string::create_usurp(getcwd(NULL, 0));
 	if (!cwd.endswith("/")) cwd += "/";
 	g_cwd = strdup(cwd);
@@ -286,4 +266,5 @@ again: ;
 //		!chdir("/");
 //	cwd_bogus = getcwd(NULL, 0); // POSIX does not specify getcwd(NULL), it's Linux-specific
 }
+*/
 #endif

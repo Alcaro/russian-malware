@@ -538,6 +538,14 @@ template<typename T> static inline T bitround(T in)
 #define SIMD_LOOP_TAIL // nop
 #endif
 
+class initrunner {
+public:
+	initrunner(void(*fn)()) { fn(); }
+};
+#define oninit() static void oninit##__LINE__(); \
+                 static MAYBE_UNUSED initrunner initrun##__LINE__(oninit##__LINE__); \
+                 static void oninit##__LINE__()
+
 
 //If an interface defines a function to set some state, and a callback for when this state changes,
 // calling that function will not trigger the state callback.

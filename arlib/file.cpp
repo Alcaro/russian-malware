@@ -127,6 +127,9 @@ test("file reading", "array", "file")
 	
 	f.unmap(map);
 	
+	assert(f.open(READONLY_FILE));
+	assert_eq(f.tell(), 0);
+	
 	assert(!f.open(file::dirname(READONLY_FILE))); // opening a directory should fail
 	assert(file::dirname(READONLY_FILE).endswith("/"));
 	

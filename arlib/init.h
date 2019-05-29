@@ -208,6 +208,5 @@ void arlib_init(argparse& args, char** argv);
 void arlib_init(nullptr_t, char** argv);
 
 
-//Called by arlib_init(). Don't use them yourself.
-void arlib_init_file();
+//Called by arlib_init(). Don't use it yourself.
 void arlib_init_gui(argparse& args, char** argv);

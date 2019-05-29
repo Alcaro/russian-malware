@@ -170,7 +170,7 @@ void _assert_range(const T&  actual, const char * actual_exp,
 // this test could be blamed for an underlying fault. (Though incomplete testing of underlying components yield that result too.)
 //If multiple tests provide the same feature, all of them must run before anything depending on it can run
 // (however, the test will run even if the prior one fails).
-//Requiring a feature that no test provides, or cyclical dependencies, causes a test failure.
+//Requiring a feature that no test provides, or cyclical dependencies, causes a test failure. Providing something nothing needs is fine.
 #define test(name, requires, provides) \
 	static void TESTFUNCNAME(); \
 	static KEEP_OBJECT _testdecl JOIN(_testdecl, __LINE__)(TESTFUNCNAME, __FILE__, __LINE__, name, requires, provides); \

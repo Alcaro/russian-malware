@@ -58,7 +58,7 @@ public:
 	~dylib() { deinit(); }
 };
 
-//If the program is run under a debugger, this triggers a breakpoint. If not, ignored.
+//If the program is run under a debugger, this triggers a breakpoint. If not, does nothing.
 //Returns whether it did something. The other three do too, but they always do something, if they return at all.
 bool debug_or_ignore();
 //If the program is run under a debugger, this triggers a breakpoint. If not, the program whines to stderr, and a nearby file.
@@ -74,6 +74,7 @@ uint64_t time_ms();
 uint64_t time_us(); // this will overflow in year 586524
 //No epoch; the epoch may vary across machines or reboots. In exchange, it may be faster.
 //ms/us will have the same epoch as each other, and will remain constant unless the machine is rebooted.
+//It is unspecified whether this clock ticks while the machine is suspended or hibernated.
 uint64_t time_ms_ne();
 uint64_t time_us_ne();
 

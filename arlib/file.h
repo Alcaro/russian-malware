@@ -56,8 +56,8 @@ public:
 	};
 	
 	file() : core(NULL) {}
-	file(file&& f) { core = f.core; f.core = NULL; }
-	file& operator=(file&& f) { delete core; core = f.core; f.core = NULL; return *this; }
+	file(file&& f) { core = f.core; pos = f.pos; f.core = NULL; }
+	file& operator=(file&& f) { delete core; core = f.core; f.core = NULL; pos = f.pos; return *this; }
 	file(cstring filename, mode m = m_read) : core(NULL) { open(filename, m); }
 	
 	//A path refers to a directory if it ends with a slash, and file otherwise. Directories may not be open()ed.
@@ -65,12 +65,14 @@ public:
 	{
 		delete core;
 		core = open_impl(filename, m);
+		pos = 0;
 		return core;
 	}
 	void close()
 	{
 		delete core;
 		core = NULL;
+		pos = 0;
 	}
 	static file wrap(impl* core) { return file(core); }
 	
@@ -119,7 +121,7 @@ public:
 	static bool replace_atomic(cstring path, arrayview<byte> data);
 	static bool replace_atomic(cstring path, cstring data) { return replace_atomic(path, data.bytes()); }
 	
-	//Seeking outside the file is fine. This will return short reads, or extend the file 
+	//Seeking outside the file is fine. This will return short reads, or extend the file on write.
 	bool seek(size_t pos) { this->pos = pos; return true; }
 	size_t tell() { return pos; }
 	size_t read(arrayvieww<byte> data)

@@ -647,20 +647,21 @@ Each of these would either enable additional functionality, or simplify somethin
       http://elixir.free-electrons.com/linux/latest/source/kernel/fork.c#L1564
     setting /proc/sys/kernel/pid_max to 10 would also work, but that too is a global parameter, not per-pid-namespace
 - A way to disable the filesystem completely, rather than just chroot to an empty (except . and ..) directory, it feels wrong
-    and I can't find a guaranteed-empty directory (preferably one in a non-weird filesystem, /proc creeps me out sometimes)
+    and I can't find an always-existing guaranteed-empty directory (preferably one in a non-weird filesystem, /proc creeps me out)
 - Allow execveat(pathname=NULL) and consider it equivalent to pathname="", that final-byte trick is kinda creepy
-    the original execveat proposal https://lkml.org/lkml/2012/9/11/528 used NULL rather than "", it's unclear why it changed
+    the original execveat proposal <https://lkml.org/lkml/2012/9/11/528> used NULL rather than "", it's unclear why it changed
     alternatively, consider execveat(pathname!={NULL,""}, flags=AT_EMPTY_PATH|...) a nonsensical combination and make it fail
       though that is a strange request when I rely on the nonsensical
         combination clone(flags=CLONE_PARENT_SETTID|..., ptid=NULL) working and being a nop
-- Slightly less bizarre naming policy in the kernel, these foobar/__foobar pairs confuse me (there's even ___sys_sendmsg)
+- Slightly less convoluted naming policy in the kernel, these foobar/__foobar pairs confuse me (there's even ___sys_sendmsg)
 - MSG_NOADDR in sendmsg(), to block non-NULL msg_name (for use with seccomp-bpf)
-- A control mechanism for global disk bandwidth usage
+- A control mechanism for global disk bandwidth usage - probably available with cgroups, but CLONE_NEWUSER doesn't give me that
 - fcntl(F_GETPATH) (like OSX), or similar
 - A way to list existing fds in the process without /proc/self/fd
-    My favorite interface would be fcntl(F_NEXTFD), which returns the lowest fd >= this (or error if there is none)
+    my favorite interface would be fcntl(F_NEXTFD), which returns the lowest fd >= this (or error if there is none)
 - A way to list threads in the process without /proc/self/tasks/, and a way to terminate them
-- O_BENEATH or similar (AT_BENEATH/etc <https://lwn.net/Articles/723057/> <https://lwn.net/Articles/767547/>, maybe?)
+- O_BENEATH or similar; it keeps getting proposed, but never gets merged
+    <https://lwn.net/Articles/723057/> <https://lwn.net/Articles/767547/> <https://lwn.net/Articles/788914/>
 
 
 Future - Networking
