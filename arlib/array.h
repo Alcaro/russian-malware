@@ -439,6 +439,14 @@ public:
 		resize_shrink_noinit(this->count-1);
 	}
 	
+	void remove_range(size_t start, size_t end)
+	{
+		for (size_t n=start;n<end;n++)
+			this->items[n].~T();
+		memmove(this->items+start, this->items+end, sizeof(T)*(this->count-end));
+		resize_shrink_noinit(this->count - (end-start));
+	}
+	
 	void reset() { resize_shrink(0); }
 	
 	T pop(size_t index = 0)

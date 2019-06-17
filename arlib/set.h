@@ -3,6 +3,7 @@
 #include "array.h"
 #include "hash.h"
 #include "linqbase.h"
+#include "string.h"
 
 template<typename T>
 class set : public linqbase<set<T>> {
@@ -357,6 +358,15 @@ public:
 		node* ret = items.get_or_null(key);
 		if (ret) return ret->value;
 		else return std::move(def);
+	}
+	template<typename Tk2> // sizeof && because not using Tk2 is a hard error, not a SFINAE
+	typename std::enable_if<sizeof(Tk2) && std::is_same<Tvalue, string>::value, cstring>::type
+	get_or(const Tk2& key, const char * def) const
+	{
+		node* ret = items.get_or_null(key);
+		if (ret) return ret->value;
+		else return def;
+		//else return cstring(arrayview<byte>((byte*)def, N));
 	}
 	template<typename Tk2>
 	Tvalue* get_or_null(const Tk2& key)

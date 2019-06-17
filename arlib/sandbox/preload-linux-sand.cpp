@@ -137,7 +137,7 @@ static inline Elf64_Ehdr* map_binary(int fd, uint8_t*& base, uint8_t* hbuf, size
 //ld-linux can be the main program, in which case it opens the main binary as a normal library and executes that.
 //It checks this by checking if the main program's entry point is its own.
 //So how does the loader find this entry point? As we all know, main() has three arguments: argc,
-// argv, envp. But the loader actually gets a fourth argument, auxv, containing some entropy (for
+// argv, envp. But the loader also gets a fourth argument, auxv, containing some entropy (for
 // stack cookies), user ID, page size, ELF header size, the main program's entry point, and some
 // other stuff.
 //Since we're the main program, we're the entry point, both in auxv and the actual entry, and

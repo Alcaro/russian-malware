@@ -52,6 +52,13 @@ test("array", "", "array")
 		assert_eq(x[1], 5);
 		assert_eq(x[2], 6);
 	}
+	
+	{
+		array<int> x = { 0,1,2,3,4,5,6,7,8,9 };
+		x.remove_range(3, 5);
+		array<int> y = { 0,1,2,5,6,7,8,9 };
+		assert_eq(x, y);
+	}
 }
 
 

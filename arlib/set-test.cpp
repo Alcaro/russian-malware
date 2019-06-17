@@ -344,5 +344,13 @@ test("map", "array", "set")
 		foo.insert(n1, n2);
 		assert_eq(n_instancecount, 2);
 	}
+	
+	{
+		// ensure map<?, string>::get_or(?, "string literal") returns cstring, not string
+		map<int,string> a;
+		a.insert(42, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+		cstring b = a.get_or(42, "");
+		assert_eq(b, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+	}
 }
 #endif

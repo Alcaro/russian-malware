@@ -34,6 +34,10 @@
 //
 //with that many increasingly-complex and hard-to-test cases, it is possible I missed a few
 //
+//pid_t pid = waitpid(-1, ...) would be a reasonable proposal, but that's a process-global resource,
+//  and I can't be confident that using it won't mess up some other library
+//waitpid for all children, one by one, is also possible, but messy
+//
 //
 //if it gets too unmaintainable, I can switch to a completely different configuration that wouldn't need tombstones:
 //keep an array or linked list of pid_t, and use clone(CLONE_PARENT_SETTID) instead of fork().
