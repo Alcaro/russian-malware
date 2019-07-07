@@ -15,9 +15,9 @@
 #include <linux/memfd.h> // documented as sys/memfd.h, but that doesn't exist
 
 //#include <linux/ioprio.h> // ioprio_set - header doesn't exist for me, copying the content
-//these defines are in a file that claims to be GPL, but the userspace ABI/API is not GPL and
-// it's impossible to use ioprio_set without them, so I believe that license tag is incorrect
-// and/or the 'only one possible definition' defense applies
+//these defines are in a file that claims to be GPL, but the userspace ABI is not GPL and it's
+// impossible to use ioprio_set without them, so I believe that license tag is incorrect, and/or
+// the 'only one possible definition' defense applies
 
 #define IOPRIO_CLASS_SHIFT	(13)
 #define IOPRIO_PRIO_MASK	((1UL << IOPRIO_CLASS_SHIFT) - 1)

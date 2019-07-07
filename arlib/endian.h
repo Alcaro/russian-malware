@@ -48,17 +48,17 @@
 #if defined(__GNUC__)
 //This one is mostly useless (GCC detects the pattern and optimizes it).
 //However, MSVC doesn't, so I need the intrinsics. Might as well use both sets.
-static inline uint8_t  end_swap8 (uint8_t n) { return n; }
+static inline uint8_t  end_swap8( uint8_t  n)  { return n; }
 static inline uint16_t end_swap16(uint16_t n) { return __builtin_bswap16(n); }
 static inline uint32_t end_swap32(uint32_t n) { return __builtin_bswap32(n); }
 static inline uint64_t end_swap64(uint64_t n) { return __builtin_bswap64(n); }
 #elif defined(_MSC_VER)
-static inline uint8_t  end_swap8 (uint8_t n) { return n; }
+static inline uint8_t  end_swap8( uint8_t  n) { return n; }
 static inline uint16_t end_swap16(uint16_t n) { return _byteswap_ushort(n); }
 static inline uint32_t end_swap32(uint32_t n) { return _byteswap_ulong(n); }
 static inline uint64_t end_swap64(uint64_t n) { return _byteswap_uint64(n); }
 #else
-static inline uint8_t  end_swap8 (uint8_t n) { return n; }
+static inline uint8_t  end_swap8( uint8_t  n) { return n; }
 static inline uint16_t end_swap16(uint16_t n) { return n>>8 | n<<8; }
 static inline uint32_t end_swap32(uint32_t n)
 {
@@ -79,7 +79,7 @@ static inline uint32_t end_swap24(uint32_t n)
 	return end_swap32(n) >> 8;
 }
 
-static inline uint8_t  end_swap(uint8_t  n) { return end_swap8 (n); }
+static inline uint8_t  end_swap(uint8_t  n) { return end_swap8( n); }
 static inline uint16_t end_swap(uint16_t n) { return end_swap16(n); }
 static inline uint32_t end_swap(uint32_t n) { return end_swap32(n); }
 static inline uint64_t end_swap(uint64_t n) { return end_swap64(n); }
@@ -121,6 +121,8 @@ inline uint32_t readu_be32(const uint8_t* in) { uint32_t ret; memcpy(&ret, in, s
 inline uint64_t readu_le64(const uint8_t* in) { uint64_t ret; memcpy(&ret, in, sizeof(ret)); return end_nat_to_le(ret); }
 inline uint64_t readu_be64(const uint8_t* in) { uint64_t ret; memcpy(&ret, in, sizeof(ret)); return end_nat_to_be(ret); }
 
+//this one is usually used to represent various on-disk or on-wire structures, which aren't necessarily properly aligned
+//it's a performance penalty, but if that's significant, the data should be converted to native types
 #ifdef _MSC_VER
 #pragma pack(push,1)
 #endif
@@ -138,6 +140,8 @@ public:
 		// these 'this' should be &val, but that makes Clang throw warnings about misaligned pointers
 		memcpy(this, bytes.ptr(), sizeof(val));
 	}
+	arrayvieww<byte> bytes() { return arrayvieww<byte>((byte*)this, sizeof(val)); }
+	arrayview<byte> bytes() const { return arrayview<byte>((byte*)this, sizeof(val)); }
 	
 	operator T() const
 	{
@@ -150,9 +154,6 @@ public:
 		if (little == (ENDIAN==END_LITTLE)) val = newval;
 		else val = end_swap(newval);
 	}
-	
-	arrayvieww<byte> bytes() { return arrayvieww<byte>((byte*)this, sizeof(val)); }
-	arrayview<byte> bytes() const { return arrayview<byte>((byte*)this, sizeof(val)); }
 }
 #ifdef __GNUC__
 __attribute__((__packed__))
@@ -167,6 +168,7 @@ __attribute__((__packed__))
 //This one doesn't optimize properly. While it does get unrolled, it remains as four byte loads, and some shift/or.
 template<typename T, bool little> class endian_core
 {
+	__attribute__((aligned(sizeof(T))))
 	uint8_t m_bytes[sizeof(T)];
 	
 public:

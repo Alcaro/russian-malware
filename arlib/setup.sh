@@ -25,7 +25,7 @@ cat > main.cpp <<EOF
 
 int main(int argc, char** argv)
 {
-	arlib_init(NULL, argv);
+	arlib_init(nullptr, argv);
 	return 0;
 }
 EOF

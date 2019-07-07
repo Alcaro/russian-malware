@@ -10,6 +10,8 @@
 //files in directories are normal files with / in the name
 //directories themselves are represented as size-0 files with names ending with /, no special flags except minimum version
 
+//TODO: reject zips where any byte is part of multiple files (counting CDR as a file), or where any byte is not part of anything
+
 static time_t fromdosdate(uint32_t date)
 {
 	if (!date) return 0;

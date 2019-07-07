@@ -2,7 +2,7 @@
 
 #ifdef ARLIB_THREAD
 //This header defines several functions for atomically operating on integers or pointers.
-//You can use int32_t, uint32_t, any typedef thereof, and any pointer.
+//You can use int32_t, uint32_t, any typedef thereof, and any pointer (enum not allowed).
 //The following functions exist:
 //lock_read(T*)
 //lock_write(T*, T)
@@ -15,6 +15,8 @@
 
 //All of these functions (except store) return the value before the operation.
 //(cmp)xchg obviously does, so to ease memorization, the others do too.
+
+//If doing cmpxchg on pointers and array indices, make sure you're not vulnerable to ABA problems.
 
 #if __GNUC__ > 0
 #if defined(__clang__) || (__GNUC__*10+__GNUC_MINOR__ >= 47)

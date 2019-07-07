@@ -164,4 +164,29 @@ test("function", "", "function")
 		assert_eq(std::is_trivially_move_constructible<decltype(val_bind)>::value, true);
 		assert_eq(std::is_trivially_move_constructible<decltype(ref_bind)>::value, true);
 	}
+	
+	/*
+	test_nomalloc {
+		function<int(int arg, ...)> foo = bind_lambda([](int arg, ...)->int {
+			va_list args;
+			va_start(args, arg);
+			return va_arg(args, int);
+		});
+		
+		assert_eq(foo(42, 123), 123);
+		assert_eq(foo(42, 123, 456), 123);
+	}
+	
+	test_nomalloc {
+		void* ctx;
+		int(*foo)(void* ctx, int arg, ...) = bind_lambda([](int arg, ...)->int {
+			va_list args;
+			va_start(args, arg);
+			return va_arg(args, int);
+		}).decompose(&ctx);
+		
+		assert_eq(foo(ctx, 42, 123), 123);
+		assert_eq(foo(ctx, 42, 123, 456), 123);
+	}
+	*/
 }
