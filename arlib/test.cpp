@@ -68,8 +68,8 @@ int _teststack_popstr() { ctxstack.resize(ctxstack.size()-1); return 0; }
 static size_t n_malloc = 0;
 static size_t n_free = 0;
 static size_t n_malloc_block = 0;
-void _test_malloc() { if (UNLIKELY(n_malloc_block)) { if (result == err_ok) test_nothrow(assert(false)); } n_malloc++; }
-void _test_free()   { if (UNLIKELY(n_malloc_block)) { if (result == err_ok) test_nothrow(assert(false)); } n_free++; }
+void _test_malloc() { if (UNLIKELY(n_malloc_block)) { if (result == err_ok) test_nothrow(assert(!"can't malloc here")); } n_malloc++; }
+void _test_free() { n_free++; }
 int _test_blockmalloc() { n_malloc_block++; return 1; }
 int _test_unblockmalloc() { n_malloc_block--; return 0; }
 

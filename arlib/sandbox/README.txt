@@ -1,3 +1,6 @@
+Gravelcube sandbox
+==================
+
 (this was originally a school project, this is basically the report I wrote minus a bunch of fluff
  plus a bunch of updates)
 
@@ -41,7 +44,7 @@ Under the same sandbox policy, if a malicious program is substituted, it cannot 
 (2) contact or disrupt any unrelated process
 (3) keep running beyond termination of the sandbox
 
-"Private data" includes (unless authorized by sandbox policy):
+"Private data" includes (unless permitted by sandbox policy):
 - Everything in /home
 - The user's name, ID, and home directory location
 - The list of installed packages
@@ -93,8 +96,8 @@ but does not include:
     they can do it already, using aforementioned side channels
 - Cache timing side channels to leak data from non-sandboxed processes
     again, impossible to block, other than by using constant-time algorithms in the victim
-    this includes Meltdown/Spectre; only the victim can defend against that, the sandbox can't do
-      anything about it (though Spectre may possibly be usable against the sandbox itself, just like against any other program)
+    this includes Meltdown/Spectre; only the victim can defend against that, the sandbox can't do anything
+      about it (though Spectre may possibly be usable against the sandbox itself, just like against any other program)
 though again, such permissions will not be granted frivolously.
 
 The above applies even if the attacker is able to cause arbitrary syscalls to fail during sandbox
@@ -662,6 +665,7 @@ Each of these would either enable additional functionality, or simplify somethin
 - A way to list threads in the process without /proc/self/tasks/, and a way to terminate them
 - O_BENEATH or similar; it keeps getting proposed, but never gets merged
     <https://lwn.net/Articles/723057/> <https://lwn.net/Articles/767547/> <https://lwn.net/Articles/788914/>
+- A way to read pointed-to arguments from seccomp (would require a massive restructuring of the kernel, but likely worthwhile long-term)
 
 
 Future - Networking

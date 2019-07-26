@@ -137,5 +137,14 @@ test("array<bool>", "", "array")
 		n = n.skip(32);
 		assert_eq(n.size(), 0);
 	}
+	
+	{
+		array<int> a;
+		a.resize(32);
+		array<int> b;
+		test_nomalloc {
+			b = std::move(a);
+		}
+	}
 }
 #endif
