@@ -63,6 +63,32 @@ string file::resolve(cstring path)
 	return parts.join("/");
 }
 
+string file::change_ext(cstring path, cstring new_ext)
+{
+	array<cstring> dir_name = path.crspliti<1>("/");
+	if (dir_name.size() == 1)
+		return dir_name[0].crsplit<1>(".")[0] + new_ext;
+	else
+		return dir_name[0] + dir_name[1].crsplit<1>(".")[0] + new_ext;
+}
+
+#ifdef ARGUI_NONE
+file::impl* file::open_impl(cstring filename, mode m)
+{
+	return open_impl_fs(filename, m);
+}
+
+bool file::unlink(cstring filename)
+{
+	return unlink_fs(filename);
+}
+
+bool file::mkdir(cstring filename)
+{
+	return mkdir_fs(filename);
+}
+#endif
+
 #ifdef ARLIB_TEST
 
 //criteria for READONLY_FILE:
@@ -85,6 +111,7 @@ string file::resolve(cstring path)
 #define READONLY_FILE_HEAD "MZ"
 #define WRITABLE_FILE "C:/Temp/arlib-selftest.txt"
 #define CREATABLE_DIR "C:/Temp/arlib-selftest/"
+#define rmdir RemoveDirectory
 #else
 #define READONLY_FILE "/bin/sh"
 #define READONLY_FILE_HEAD "\x7F""ELF"
@@ -263,5 +290,15 @@ test("file::mkdir", "array,string", "")
 	assert_eq(file::mkdir(READONLY_FILE), false);
 	
 	rmdir(CREATABLE_DIR);
+}
+
+test("file::change_ext", "array,string", "")
+{
+	assert_eq(file::change_ext("/foo.bar/bar/baz.bin", ".txt"), "/foo.bar/bar/baz.txt");
+	assert_eq(file::change_ext("/foo.bar/bar/baz", ".txt"), "/foo.bar/bar/baz.txt");
+	assert_eq(file::change_ext("/foo.bar/bar/baz.bin", ""), "/foo.bar/bar/baz");
+	assert_eq(file::change_ext("baz.bin", ".txt"), "baz.txt");
+	assert_eq(file::change_ext("baz", ".txt"), "baz.txt");
+	assert_eq(file::change_ext("baz.bin", ""), "baz");
 }
 #endif

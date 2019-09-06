@@ -21,12 +21,29 @@ void DNS::init(cstring resolver, int port, runloop* loop)
 	this->sock = socket::create_udp(resolver, port, loop);
 	sock->callback(bind_this(&DNS::sock_cb), NULL);
 	
-	for (cstring line : string(file::readall("/etc/hosts")).split("\n"))
+	for (cstring line : string(file::readall("/etc/hosts")).spliti("\n"))
 	{
-		array<cstring> words = line.csplit("#")[0].csplitw();
-		for (cstring host : words.skip(1))
+		auto classify = [](char ch) -> int {
+			if (ch == '\0' || ch == '\r' || ch == '\n' || ch == '#') return 0;
+			if (ch == '\t' || ch == ' ') return 1;
+			return 2;
+		};
+		
+		size_t i = 0;
+		while (classify(line[i]) == 1) i++;
+		size_t addrstart = i;
+		while (classify(line[i]) == 2) i++;
+		if (addrstart == i) continue;
+		
+		cstring addr = line.substr(addrstart, i);
+		while (classify(line[i]) != 0)
 		{
-			hosts_txt.insert(host, words[0]);
+			while (classify(line[i]) == 1) i++;
+			size_t domstart = i;
+			while (classify(line[i]) == 2) i++;
+			if (domstart == i) continue;
+			
+			hosts_txt.insert(addr, line.substr(domstart, i));
 		}
 	}
 }
@@ -72,7 +89,7 @@ void DNS::resolve(cstring domain, unsigned timeout_ms, function<void(string doma
 	packet.u16b(0x0001); // class IN
 	//judging by musl libc, there's no way to ask for both ipv4 and ipv6 but not everything else, it sends two separate queries
 	
-	sock->send(packet.out());
+	sock->send(packet.finish());
 	
 	query& q = queries.get_create(trid);
 	q.callback = callback;

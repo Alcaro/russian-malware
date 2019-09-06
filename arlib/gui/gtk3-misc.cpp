@@ -136,7 +136,7 @@ void arlib_init_gui(argparse& args, char** argv)
 				{
 					if (arg.name == name || arg.sname == sname)
 					{
-						argsp->single_arg(arg, value, false, NULL);
+						argsp->single_arg(arg, value, argparse::al_tight, NULL);
 						return true;
 					}
 				}

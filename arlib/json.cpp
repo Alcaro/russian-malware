@@ -653,6 +653,12 @@ test("JSON container", "string,array,set", "json")
 		assert_neq(json.serialize(),       R"({"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8,"i":9})");
 	}
 	
+	{
+		JSONw json;
+		json["\x01\x02\x03\n\\n☃\""].str() = "\x01\x02\x03\n\\n☃\"";
+		assert_eq(json.serialize(), R"({"\u0001\u0002\u0003\n\\n☃\"":"\u0001\u0002\u0003\n\\n☃\""})");
+	}
+	
 	if (false) // disabled, JSON::construct runs through all 200000 events from the jsonparser which is slow
 	{
 		char spam[200001];

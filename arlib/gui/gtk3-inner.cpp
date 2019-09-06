@@ -46,8 +46,8 @@ void widget_layout::construct(unsigned int numchildren, widget_base* * children,
 	widthprio=0;
 	heightprio=0;
 	
-	bool posused[totheight*totwidth];
-	memset(posused, 0, sizeof(posused));
+	array<bool> posused;
+	posused.resize(totheight*totwidth);
 	unsigned int firstempty=0;
 	for (unsigned int i=0;i<numchildren;i++)
 	{

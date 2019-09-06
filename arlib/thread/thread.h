@@ -83,7 +83,7 @@ private: // unimplemented
 #endif
 };
 
-class mutexlocker : nocopy {
+class mutexlocker : nomove {
 	mutexlocker() = delete;
 	mutex* m;
 public:

@@ -114,7 +114,7 @@ public:
 #define gmtime_r(a,b) (*(b)=*gmtime(a))
 #endif
 
-#if 0 // this function exists on all platforms I've seen
+#ifdef _WIN32 // this function exists on all platforms I've seen
 #undef timegm
 #define timegm timegm_local
 //similar to mktime, but UTC timezone

@@ -1,6 +1,6 @@
 #include "process.h"
 
-#ifdef _WIN32
+#ifdef _WIN32_disabled
 static string escapearg(cstring arg)
 {
 	//https://msdn.microsoft.com/en-us/library/windows/desktop/17w5ykft(v=vs.85).aspx

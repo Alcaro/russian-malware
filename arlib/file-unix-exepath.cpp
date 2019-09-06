@@ -1,7 +1,4 @@
 #include "file.h"
-#include "os.h"
-#include "thread.h"
-#include "init.h"
 
 #ifdef __unix__
 #include <unistd.h>
@@ -14,6 +11,8 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <errno.h>
+
+//separate file so the two oninit can be optimized out separately
 
 static char* g_exepath;
 cstring file::exepath() { return g_exepath; }

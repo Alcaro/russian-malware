@@ -159,11 +159,44 @@ public:
 		buf += valn.bytes();
 	}
 	
+	void f32l(float val)
+	{
+		static_assert(sizeof(float) == 4);
+		uint32_t ival;
+		memcpy(&ival, &val, sizeof(float));
+		ival = end_nat_to_le(ival);
+		buf += arrayview<byte>((uint8_t*)&ival, sizeof(uint32_t));
+	}
+	void f32b(float val)
+	{
+		static_assert(sizeof(float) == 4);
+		uint32_t ival;
+		memcpy(&ival, &val, sizeof(float));
+		ival = end_nat_to_be(ival);
+		buf += arrayview<byte>((uint8_t*)&ival, sizeof(uint32_t));
+	}
+	void f64l(double val)
+	{
+		static_assert(sizeof(double) == 8);
+		uint64_t ival;
+		memcpy(&ival, &val, sizeof(double));
+		ival = end_nat_to_le(ival);
+		buf += arrayview<byte>((uint8_t*)&ival, sizeof(uint64_t));
+	}
+	void f64b(double val)
+	{
+		static_assert(sizeof(double) == 8);
+		uint64_t ival;
+		memcpy(&ival, &val, sizeof(double));
+		ival = end_nat_to_be(ival);
+		buf += arrayview<byte>((uint8_t*)&ival, sizeof(uint64_t));
+	}
+	
 	arrayview<byte> peek()
 	{
 		return buf;
 	}
-	array<byte> out()
+	array<byte> finish()
 	{
 		return std::move(buf);
 	}

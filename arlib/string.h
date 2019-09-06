@@ -6,11 +6,11 @@
 #include <ctype.h>
 
 //A string is a mutable byte container. It usually represents UTF-8 text, but can be arbitrary binary data, including NULs.
-//All string:: functions taking or returning a char* assume/guarantee NUL termination. Anything using uint8_t* does not.
+//All string functions taking or returning a char* assume/guarantee NUL termination. Anything using uint8_t* does not.
 
-//cstring is an immutable sequence of bytes that does not own its storage.
+//cstring is an immutable sequence of bytes that does not own its storage. If the storage is modified, the cstring may not be used.
 //In most contexts, it's called stringview, but I feel that's too long.
-//cstring is short for 'const string&'; long ago, cstring was just a typedef.
+//Long ago, cstring was just a typedef to 'const string&', hence its name.
 
 
 class string;
@@ -231,12 +231,19 @@ public:
 	
 	string replace(cstring in, cstring out) const;
 	
+	//crsplitwi - cstring-returning backwards-counting split on word boundaries, inclusive
+	//cstring-returning - obvious
+	//backwards-counting - splits at the rightmost opportunity, "a b c d".rsplit<1>(" ") is ["a b c", "d"]
+	//word boundary - isspace()
+	//inclusive - the boundary string is included in the output, "a\nb\n".spliti("\n") is ["a\n", "b\n"]
+	//all subsets of splitting flags are supported
+	
 	array<cstring> csplit(cstring sep, size_t limit) const;
 	template<size_t limit = SIZE_MAX>
 	array<cstring> csplit(cstring sep) const { return csplit(sep, limit); }
 	
 	array<cstring> crsplit(cstring sep, size_t limit) const;
-	template<size_t limit = SIZE_MAX>
+	template<size_t limit>
 	array<cstring> crsplit(cstring sep) const { return crsplit(sep, limit); }
 	
 	array<string> split(cstring sep, size_t limit) const { return csplit(sep, limit).cast<string>(); }
@@ -244,24 +251,43 @@ public:
 	array<string> split(cstring sep) const { return split(sep, limit); }
 	
 	array<string> rsplit(cstring sep, size_t limit) const { return crsplit(sep, limit).cast<string>(); }
-	template<size_t limit = SIZE_MAX>
+	template<size_t limit>
 	array<string> rsplit(cstring sep) const { return rsplit(sep, limit); }
 	
-	array<cstring> csplitw(size_t limit) const;
-	template<size_t limit = SIZE_MAX>
-	array<cstring> csplitw() const { return csplitw(limit); }
 	
-	array<cstring> crsplitw(size_t limit) const;
+	array<cstring> cspliti(cstring sep, size_t limit) const;
 	template<size_t limit = SIZE_MAX>
-	array<cstring> crsplitw() const { return crsplitw(limit); }
+	array<cstring> cspliti(cstring sep) const { return cspliti(sep, limit); }
 	
-	array<string> splitw(size_t limit) const { return csplitw(limit).cast<string>(); }
-	template<size_t limit = SIZE_MAX>
-	array<string> splitw() const { return splitw(limit); }
+	array<cstring> crspliti(cstring sep, size_t limit) const;
+	template<size_t limit>
+	array<cstring> crspliti(cstring sep) const { return crspliti(sep, limit); }
 	
-	array<string> rsplitw(size_t limit) const { return crsplitw(limit).cast<string>(); }
+	array<string> spliti(cstring sep, size_t limit) const { return cspliti(sep, limit).cast<string>(); }
 	template<size_t limit = SIZE_MAX>
-	array<string> rsplitw() const { return rsplitw(limit); }
+	array<string> spliti(cstring sep) const { return spliti(sep, limit); }
+	
+	array<string> rspliti(cstring sep, size_t limit) const { return crspliti(sep, limit).cast<string>(); }
+	template<size_t limit>
+	array<string> rspliti(cstring sep) const { return rspliti(sep, limit); }
+	
+	//TODO: do I need these?
+	
+	//array<cstring> csplitw(size_t limit) const;
+	//template<size_t limit = SIZE_MAX>
+	//array<cstring> csplitw() const { return csplitw(limit); }
+	//
+	//array<cstring> crsplitw(size_t limit) const;
+	//template<size_t limit>
+	//array<cstring> crsplitw() const { return crsplitw(limit); }
+	//
+	//array<string> splitw(size_t limit) const { return csplitw(limit).cast<string>(); }
+	//template<size_t limit = SIZE_MAX>
+	//array<string> splitw() const { return splitw(limit); }
+	//
+	//array<string> rsplitw(size_t limit) const { return crsplitw(limit).cast<string>(); }
+	//template<size_t limit>
+	//array<string> rsplitw() const { return rsplitw(limit); }
 	
 	cstring trim() const
 	{
@@ -286,8 +312,8 @@ public:
 	
 	//Whether the string matches a glob pattern. ? in 'pat' matches any one byte, * matches zero or more bytes.
 	//NUL bytes are treated as any other byte, in both strings.
-	bool matches_glob(cstring pat) const __attribute__ ((pure));
-	bool matches_globi(cstring pat) const __attribute__ ((pure)); // Case insensitive. Considers ASCII only, øØ are considered nonequal.
+	bool matches_glob(cstring pat) const __attribute__((pure));
+	bool matches_globi(cstring pat) const __attribute__((pure)); // Case insensitive. Considers ASCII only, øØ are considered nonequal.
 	
 	size_t hash() const { return ::hash((char*)ptr(), length()); }
 	
@@ -484,7 +510,7 @@ private:
 	friend class charref;
 	
 public:
-	//Reading the NUL terminator is fine. Writing extends the string. Poking outside the string is undefined.
+	//Reading the NUL terminator is fine. Writing the terminator extends the string. Poking beyond the NUL is undefined.
 	//charref operator[](uint32_t index) { return charref(this, index); }
 	charref operator[](int index) { return charref(this, index); }
 	//char operator[](uint32_t index) const { return getchar(index); }

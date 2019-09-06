@@ -165,11 +165,11 @@ void WebSocket::send(arrayview<byte> message, int type)
 if(L_DEBUG)puts("SEND:"+tostringhex(header.peek())+" "+tostringhex(message));
 	if (inHandshake)
 	{
-		tosend.push(header.out(), message);
+		tosend.push(header.finish(), message);
 	}
 	else
 	{
-		sock->send(header.out());
+		sock->send(header.finish());
 		sock->send(message);
 	}
 }

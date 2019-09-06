@@ -107,7 +107,7 @@ bool fromstring(cstring s, bool& out)
 
 string tostring(double val)
 {
-	char ret[1024]; // yes, buffer needs to be this big. https://stackoverflow.com/q/7235456
+	char ret[512]; // max double is about 1.79 * 10^308, give it space for that and a little more https://stackoverflow.com/q/7235456
 	sprintf(ret, "%f", val);
 	char* end = strchr(ret, '\0');
 	while (end > ret && end[-1] == '0') end--;

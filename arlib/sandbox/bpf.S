@@ -149,7 +149,7 @@ jmp ENOTTY_S
 execveat:
 #int execveat(int dirfd, const char * pathname, char * const * argv, char * const * envp, int flags)
 #accept from sysemu, intercept from others
-#sysemu is detected by pathname == 0x00007fff'ffffefff (the last mappable byte)
+#sysemu is detected by pathname == 0x00007fff'ffffefff (the last mappable byte) (also normal programs use execve)
 
 ld [arg2h]
 jne #0x00007fff, emulate
@@ -179,7 +179,7 @@ ld [arg1l]
 #threads are fine, there's not even any point intercepting them
 jset #CLONE_THREAD, clone_thread
 
-#for fork(), only this flag is allowed, no unsharing
+#for fork(), only this flag combination is allowed, no unsharing
 jne #SIGCHLD|CLONE_CHILD_SETTID|CLONE_CHILD_CLEARTID|CLONE_PARENT_SETTID, emulate
 ld [arg3h]
 jne #0, emulate

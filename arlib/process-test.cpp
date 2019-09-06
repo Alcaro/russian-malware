@@ -27,6 +27,9 @@
 
 test("process", "array,string,runloop", "process")
 {
+#ifdef _WIN32
+	test_fail("unimplemented");
+#else
 	test_skip("kinda slow");
 	
 	autoptr<runloop> loop = runloop::create();
@@ -197,6 +200,7 @@ test("process", "array,string,runloop", "process")
 	//	// but there's no 'dump argv' program on windows (linux doesn't need it), so can't do it
 	//	//and windows has about 50 different quote parsers anyways, impossible to know which to follow
 	//}
+#endif
 }
 
 #ifdef ARLIB_SANDBOX

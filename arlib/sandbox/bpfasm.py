@@ -10,18 +10,16 @@
 #this mostly follows the assembly language specified in
 #  https://www.kernel.org/doc/Documentation/networking/filter.txt
 #with a few exceptions:
-#  this is an optimizing assembler
+#  this is an optimizing assembler; the what-if rule is applied liberally
 #    most prominently, je followed by jmp is merged
 #      as such, addressing mode 7 (combined je/jne) is not implemented; it's harder to read
 #        instead, I added a jnset opcode
-#    (TODO) large sequences of 'je' comparing to integer constants are turned into binary trees
-#    additionally, the what-if rule is applied liberally
 #  je out-of-bounds throws errors rather than truncating (TODO: convert to jne+jmp)
 #  supports a primitive preprocessor: 'let __NR_open = 0' defines a named constant
 #    you can also use 'defines /usr/include/x86_64-linux-gnu/asm/unistd_64.h' to read #defines from that file
 #      (other preprocessor directives ignored)
 #    unknown constants are passed to the C compiler, so you can #include the file there if you prefer
-#      but that inhibits the je-ladder optimization
+#      but that may inhibit some optimizations
 #  /* */ comments not supported; # (start of line only) and ; (anywhere) are
 #seccomp-specific docs: https://www.kernel.org/doc/Documentation/prctl/seccomp_filter.txt
 
@@ -298,7 +296,7 @@ def assemble(bpf):
 			return op.jf and label_op[op.jt] is label_op[op.jf]
 		
 		delete = [False for _ in opcodes]
-		for i in range(len(opcodes)):
+		for i,_ in enumerate(opcodes):
 			hasnext = (i+1 != len(opcodes))
 			
 			#label isn't used -> remove
@@ -431,7 +429,7 @@ def testsuite(silent):
 	#     "BPF_STMT(BPF_LD|BPF_W|BPF_ABS, (uint32_t)(1)), "+ # b2: ld [1]
 	#     "BPF_STMT(BPF_RET|BPF_IMM, (uint32_t)(1)),")       # ret #1
 #testsuite(False)
-testsuite(True)
+#testsuite(True)
 
 
 import os, sys

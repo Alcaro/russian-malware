@@ -208,7 +208,8 @@ done:
 	return ret;
 }
 
-array<cstring> cstring::csplitw(size_t limit) const
+
+array<cstring> cstring::cspliti(cstring sep, size_t limit) const
 {
 	array<cstring> ret;
 	const uint8_t * data = ptr();
@@ -216,38 +217,90 @@ array<cstring> cstring::csplitw(size_t limit) const
 	
 	while (ret.size() < limit)
 	{
-		const uint8_t * next = data;
-		while (next < dataend && !isspace(*next)) next++;
-		if (next == dataend) break;
-		ret.append(arrayview<uint8_t>(data, next-data));
-		data = next+1;
+		const uint8_t * next = (uint8_t*)memmem(data, dataend-data, sep.ptr(), sep.length());
+		if (!next) break;
+		ret.append(arrayview<uint8_t>(data, next-data+sep.length()));
+		data = next+sep.length();
 	}
-	ret.append(arrayview<uint8_t>(data, dataend-data));
+	if (dataend != data)
+		ret.append(arrayview<uint8_t>(data, dataend-data));
 	return ret;
 }
 
-array<cstring> cstring::crsplitw(size_t limit) const
+//TODO: this function is pretty messy
+array<cstring> cstring::crspliti(cstring sep, size_t limit) const
 {
 	array<cstring> ret;
 	const uint8_t * datastart = ptr();
 	const uint8_t * data = ptr()+length();
 	
-	while (ret.size() < limit)
+	const uint8_t * sepp = sep.ptr();
+	size_t sepl = sep.length();
+	
+	size_t outlen = 0;
+	while (outlen < limit)
 	{
-		if (datastart+1 > data) break;
-		const uint8_t * next = data-1;
-		while (!isspace(*next))
+		if (datastart+sepl > data) break;
+		const uint8_t * next = data-sepl;
+		while (memcmp(next, sepp, sepl) != 0)
 		{
 			if (datastart==next) goto done;
 			next--;
 		}
-		ret.insert(0, arrayview<uint8_t>(next+1, data-(next+1)));
+		size_t len = data - (next+sepl) + (data == ptr()+length() ? 0 : sepl);
+		if (len)
+			ret.insert(0, arrayview<uint8_t>(next+sepl, len));
+		outlen++;
 		data = next;
 	}
 done:
-	ret.insert(0, arrayview<uint8_t>(datastart, data-datastart));
+	size_t len = data - datastart + (data == ptr()+length() ? 0 : sepl);
+	if (len)
+		ret.insert(0, arrayview<uint8_t>(datastart, len));
 	return ret;
 }
+
+
+//array<cstring> cstring::csplitw(size_t limit) const
+//{
+//	array<cstring> ret;
+//	const uint8_t * data = ptr();
+//	const uint8_t * dataend = ptr()+length();
+//	
+//	while (ret.size() < limit)
+//	{
+//		const uint8_t * next = data;
+//		while (next < dataend && !isspace(*next)) next++;
+//		if (next == dataend) break;
+//		ret.append(arrayview<uint8_t>(data, next-data));
+//		data = next+1;
+//	}
+//	ret.append(arrayview<uint8_t>(data, dataend-data));
+//	return ret;
+//}
+//
+//array<cstring> cstring::crsplitw(size_t limit) const
+//{
+//	array<cstring> ret;
+//	const uint8_t * datastart = ptr();
+//	const uint8_t * data = ptr()+length();
+//	
+//	while (ret.size() < limit)
+//	{
+//		if (datastart+1 > data) break;
+//		const uint8_t * next = data-1;
+//		while (!isspace(*next))
+//		{
+//			if (datastart==next) goto done;
+//			next--;
+//		}
+//		ret.insert(0, arrayview<uint8_t>(next+1, data-(next+1)));
+//		data = next;
+//	}
+//done:
+//	ret.insert(0, arrayview<uint8_t>(datastart, data-datastart));
+//	return ret;
+//}
 
 
 int string::compare3(cstring a, cstring b)
@@ -762,7 +815,6 @@ test("string", "array", "string")
 		a = "192.168.0.1";
 		assert_eq(a.split(".").join("/"), "192/168/0/1");
 		assert_eq(a.split<1>(".").join("/"), "192/168.0.1");
-		assert_eq(a.rsplit(".").join("/"), "192/168/0/1");
 		assert_eq(a.rsplit<1>(".").join("/"), "192.168.0/1");
 		
 		a = "baaaaaaaaaaaaaaa";
@@ -778,41 +830,66 @@ test("string", "array", "string")
 		assert_eq(a.split<1>("x").join("."), "aaaaaaaaaaaaaaab");
 		
 		a = "baaaaaaaaaaaaaaa";
-		assert_eq(a.rsplit("a").join("."), "b...............");
-		assert_eq(a.rsplit("aa").join("."), "ba.......");
 		assert_eq(a.rsplit<1>("aa").join("."), "baaaaaaaaaaaaa.");
 		assert_eq(a.rsplit<1>("x").join("."), "baaaaaaaaaaaaaaa");
 		
 		a = "aaaaaaaaaaaaaaab";
-		assert_eq(a.rsplit("a").join("."), "...............b");
-		assert_eq(a.rsplit("aa").join("."), "a.......b");
 		assert_eq(a.rsplit<1>("aa").join("."), "aaaaaaaaaaaaa.b");
 		assert_eq(a.rsplit<1>("x").join("."), "aaaaaaaaaaaaaaab");
 	}
 	
+	//{
+	//	string a;
+	//	a = "192 168 0 1";
+	//	assert_eq(a.splitw().join("/"), "192/168/0/1");
+	//	assert_eq(a.splitw<1>().join("/"), "192/168 0 1");
+	//	assert_eq(a.rsplitw().join("/"), "192/168/0/1");
+	//	assert_eq(a.rsplitw<1>().join("/"), "192 168 0/1");
+	//	
+	//	a = "b               ";
+	//	assert_eq(a.splitw().join("."), "b...............");
+	//	assert_eq(a.splitw<1>().join("."), "b.              ");
+	//	
+	//	a = "               b";
+	//	assert_eq(a.splitw().join("."), "...............b");
+	//	assert_eq(a.splitw<1>().join("."), ".              b");
+	//	
+	//	a = "b               ";
+	//	assert_eq(a.rsplitw().join("."), "b...............");
+	//	assert_eq(a.rsplitw<1>().join("."), "b              .");
+	//	
+	//	a = "               b";
+	//	assert_eq(a.rsplitw().join("."), "...............b");
+	//	assert_eq(a.rsplitw<1>().join("."), "              .b");
+	//}
+	
 	{
 		string a;
-		a = "192 168 0 1";
-		assert_eq(a.splitw().join("/"), "192/168/0/1");
-		assert_eq(a.splitw<1>().join("/"), "192/168 0 1");
-		assert_eq(a.rsplitw().join("/"), "192/168/0/1");
-		assert_eq(a.rsplitw<1>().join("/"), "192 168 0/1");
+		a = "192.168.0.1";
+		assert_eq(a.spliti(".").join("/"), "192./168./0./1");
+		assert_eq(a.spliti<1>(".").join("/"), "192./168.0.1");
+		assert_eq(a.rspliti<1>(".").join("/"), "192.168.0./1");
 		
-		a = "b               ";
-		assert_eq(a.splitw().join("."), "b...............");
-		assert_eq(a.splitw<1>().join("."), "b.              ");
+		a = "baaaaaaaaaaaaaaa";
+		assert_eq(a.spliti("a").join("."), "ba.a.a.a.a.a.a.a.a.a.a.a.a.a.a");
+		assert_eq(a.spliti("aa").join("."), "baa.aa.aa.aa.aa.aa.aa.a");
+		assert_eq(a.spliti<1>("aa").join("."), "baa.aaaaaaaaaaaaa");
+		assert_eq(a.spliti<1>("x").join("."), "baaaaaaaaaaaaaaa");
 		
-		a = "               b";
-		assert_eq(a.splitw().join("."), "...............b");
-		assert_eq(a.splitw<1>().join("."), ".              b");
+		a = "aaaaaaaaaaaaaaab";
+		assert_eq(a.spliti("a").join("."), "a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.b");
+		assert_eq(a.spliti("aa").join("."), "aa.aa.aa.aa.aa.aa.aa.ab");
+		assert_eq(a.spliti<1>("aa").join("."), "aa.aaaaaaaaaaaaab");
+		assert_eq(a.spliti<1>("x").join("."), "aaaaaaaaaaaaaaab");
 		
-		a = "b               ";
-		assert_eq(a.rsplitw().join("."), "b...............");
-		assert_eq(a.rsplitw<1>().join("."), "b              .");
+		a = "baaaaaaaaaaaaaaa";
+		assert_eq(a.rspliti<1>("aa").join("."), "baaaaaaaaaaaaaaa");
+		assert_eq(a.rspliti<1>("x").join("."), "baaaaaaaaaaaaaaa");
+		assert_eq(a.rspliti<2>("aa").join("."), "baaaaaaaaaaaaa.aa");
 		
-		a = "               b";
-		assert_eq(a.rsplitw().join("."), "...............b");
-		assert_eq(a.rsplitw<1>().join("."), "              .b");
+		a = "aaaaaaaaaaaaaaab";
+		assert_eq(a.rspliti<1>("aa").join("."), "aaaaaaaaaaaaaaa.b");
+		assert_eq(a.rspliti<1>("x").join("."), "aaaaaaaaaaaaaaab");
 	}
 	
 	{

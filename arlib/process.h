@@ -17,6 +17,9 @@ class process : nocopy {
 public:
 	class input;
 	class output;
+protected:
+	runloop* loop;
+	
 private:
 	input* ch_stdin = NULL;
 	output* ch_stdout = NULL;
@@ -35,8 +38,6 @@ protected:
 	//seems impossible to fix, the correct runloop may be stuck in terminate()
 	pid_t pid = -1;
 	int exitcode = -1;
-	
-	runloop* loop;
 	
 	
 	//Closes all open file descriptors in the process, except those which are numerically strictly less than lowfd.
@@ -75,7 +76,7 @@ public:
 private:
 #endif
 	
-#ifdef _WIN32
+#ifdef _WIN32_disabled
 #error outdated
 	HANDLE proc = NULL;
 	int exitcode = -1;
@@ -202,9 +203,11 @@ public:
 	output* set_stderr(output& outp) { ch_stderr = &outp; return &outp; }
 	
 	
+#ifdef __linux__
 	bool running() { return (lock_read_loose(&pid) != -1); }
 	//Returns exit code, or -1 if it's still running. Can be called multiple times.
 	int status() { return lock_read_loose(&exitcode); }
+#endif
 	//Doesn't return until the process is gone and onexit() is called.
 	//The process is automatically terminated when the object is destroyed.
 	void terminate();

@@ -1,7 +1,4 @@
 #include "file.h"
-#include "os.h"
-#include "thread.h"
-#include "init.h"
 
 #ifdef __unix__
 #include <unistd.h>
@@ -182,15 +179,6 @@ bool file::unlink_fs(cstring filename)
 	return ret==0 || (ret==-1 && errno==ENOENT);
 }
 
-string file::dirname(cstring path)
-{
-	return path.rsplit<1>("/")[0]+"/";
-}
-string file::basename(cstring path)
-{
-	return path.rsplit<1>("/")[1];
-}
-
 array<string> file::listdir(cstring path)
 {
 	DIR* dir = opendir(path.c_str());
@@ -211,18 +199,6 @@ array<string> file::listdir(cstring path)
 	closedir(dir);
 	return ret;
 }
-
-#ifdef ARGUI_NONE
-file::impl* file::open_impl(cstring filename, mode m)
-{
-	return open_impl_fs(filename, m);
-}
-
-bool file::unlink(cstring filename)
-{
-	return unlink_fs(filename);
-}
-#endif
 
 
 /*

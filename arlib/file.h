@@ -236,8 +236,17 @@ public:
 	static array<string> listdir(cstring path); //Returns all items in the given directory, as absolute paths.
 	static bool mkdir(cstring path); // Returns whether that's now a directory. If it existed already, returns true; if a file, false.
 	static bool unlink(cstring filename); // Returns whether the file is now gone. If the file didn't exist, returns true.
-	static string dirname(cstring path); //If the input path is a directory, the basename is blank.
-	static string basename(cstring path);
+	static string dirname(cstring path){ return path.rsplit<1>("/")[0]+"/"; } //If the input path is a directory, the basename is blank.
+	static string basename(cstring path) { return path.rsplit<1>("/")[1]; }
+	static string change_ext(cstring path, cstring new_ext); // new_ext should be ".bin" (can be blank)
+	
+	//Arlib does not recognize backslashes in filenames as legitimate.
+#ifdef _WIN32
+	static string sanitize_path(cstring path) { return path.replace("\\", "/"); }
+#else
+	static cstring sanitize_path(cstring path) { return path; }
+	static string sanitize_path(string path) { return std::move(path); }
+#endif
 	
 	//Returns whether the path is absolute.
 	//On Unix, absolute paths start with a slash.

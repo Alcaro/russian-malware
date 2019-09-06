@@ -198,14 +198,13 @@ void _assert_range(const T&  actual, const char * actual_exp,
 		_assert_range(actual, #actual, min, #min, max, #max, __LINE__); \
 	} while(0)
 #define assert_range(actual,min,max) assert_range_ret(actual,min,max,)
-#define assert_fail(msg) do { _testfail((string)"\n"+msg, __LINE__); } while(0)
 #define assert_unreachable() do { _testfail("\nassert_unreachable() wasn't unreachable", __LINE__); } while(0)
-#define assert_fail_nostack(msg) do { _testfail((string)"\n"+msg, -1); } while(0)
 #define test_nomalloc for (int _testi=_test_blockmalloc(); _testi; _testi=_test_unblockmalloc())
 #define testctx(x) for (int _testi=_teststack_pushstr(x); _testi; _testi=_teststack_popstr())
 #define testcall(x) do { _teststack_push(__LINE__); x; _teststack_pop(); } while(0)
 #define test_skip(x) do { _test_skip(x); } while(0)
 #define test_skip_force(x) do { _test_skip_force(x); } while(0)
+#define test_fail(msg) do { _testfail((string)"\n"+msg, __LINE__); } while(0)
 #define test_inconclusive(x) do { _test_inconclusive(x); } while(0)
 #define test_expfail(x) do { _test_expfail(x); } while(0)
 #define test_nothrow(x) do { _test_nothrow(+1); x; _test_nothrow(-1); } while(0)
@@ -237,6 +236,7 @@ int not_quite_main(int argc, char** argv);
 #define testcall(x) x
 #define test_skip(x) return
 #define test_skip_force(x) return
+#define test_fail(msg) return
 #define test_inconclusive(x) return
 #define test_expfail(x) return
 #define assert_unreachable() return
@@ -252,11 +252,9 @@ void socket_test_http(socket* sock, runloop* loop);
 void socket_test_fail(socket* sock, runloop* loop);
 #endif
 
-#ifdef __linux__
-# define HAVE_VALGRIND
-#endif
-#ifdef HAVE_VALGRIND
-# include "deps/valgrind/memcheck.h"
+#if __has_include(<valgrind/memcheck.h>)
+# include <valgrind/memcheck.h>
 #else
 # define RUNNING_ON_VALGRIND false
+# define VALGRIND_PRINTF_BACKTRACE(...) abort()
 #endif

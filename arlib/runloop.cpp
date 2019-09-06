@@ -1,6 +1,7 @@
 #include "runloop.h"
 #include "set.h"
-#include "test.h"
+#include <time.h>
+#include "test.h" // for the runloop-is-empty check
 
 #ifdef __linux__
 #include <sys/epoll.h>
@@ -300,6 +301,7 @@ uintptr_t runloop::set_timer_abs(time_t when, function<void()> callback)
 }
 
 #ifdef ARGUI_NONE
+#ifndef _WIN32
 runloop* runloop::global()
 {
 	//ignore thread safety, this function can only be used from main thread
@@ -308,8 +310,8 @@ runloop* runloop::global()
 	return ret;
 }
 #endif
+#endif
 
-#include "test.h"
 #include "os.h"
 #include "thread.h"
 
@@ -348,6 +350,7 @@ class runloop_blocktest : public runloop {
 		this->end();
 	}
 	
+#ifndef _WIN32
 	uintptr_t set_fd(uintptr_t fd, function<void(uintptr_t)> cb_read, function<void(uintptr_t)> cb_write) override
 	{
 		function<void(uintptr_t)> cb_read_w;
@@ -356,6 +359,7 @@ class runloop_blocktest : public runloop {
 		if (cb_write) cb_write_w = bind_lambda([this, cb_write](uintptr_t fd){ this->do_cb(cb_write, fd); });
 		return loop->set_fd(fd, std::move(cb_read_w), std::move(cb_write_w));
 	}
+#endif
 	
 	uintptr_t set_timer_rel(unsigned ms, bool repeat, function<void()> callback) override
 	{
@@ -413,6 +417,9 @@ void runloop_blocktest_recycle(runloop* loop)
 
 static void test_runloop(bool is_global)
 {
+#ifdef _WIN32
+	test_fail("unimplemented");
+#else
 	runloop* loop = (is_global ? runloop::global() : runloop::create());
 	
 	//must be before the other one, loop->enter() must be called to ensure it doesn't actually run
@@ -462,6 +469,7 @@ static void test_runloop(bool is_global)
 	//Okay, they should vary which runloop they use.
 	
 	if (!is_global) delete loop;
+#endif
 }
 test("global runloop", "function,array,set,time", "runloop")
 {

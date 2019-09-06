@@ -37,15 +37,15 @@ class linqbase {
 		return typename alias<_>::linq_t(typename alias<_>::src(impl().begin(), impl().end()));
 	}
 public:
+	//could switch those to full-auto return type, but that leaves T2 unused and compiler sees the two selects as equivalent
+	//TODO: find a way to solve that
 	template<typename Tconv, typename T2 = typename std::result_of<Tconv(typename alias<Tconv>::T)>::type>
-	//TODO: use full-auto return type when switching to C++14
-	//TODO: move t_select into t_base when switching to full-auto return type, then kill namespace and rename them
 	auto select(Tconv conv) const -> linq::t_linq<T2, linq::t_select<T2, typename alias<Tconv>::src, Tconv>>
 	{
 		return as_linq<void>().select(conv);
 	}
-	template<typename Tconv, typename T2 = typename std::result_of<Tconv(size_t, typename alias<Tconv>::T)>::type>
 	
+	template<typename Tconv, typename T2 = typename std::result_of<Tconv(size_t, typename alias<Tconv>::T)>::type>
 	auto select(Tconv conv) const -> linq::t_linq<T2, linq::t_select_idx<T2, typename alias<Tconv>::src, Tconv>>
 	{
 		return as_linq<void>().select_idx(conv);
@@ -191,7 +191,7 @@ public:
 	//and having the function exist, even without callers, instantiates array<int&> and throws errors
 	//T3 is not used by anything
 	//T2 is always same as T
-	template<typename T3 = int, typename T2 = typename std::enable_if<!std::is_reference<T>::value || sizeof(T3)==-1, T>::type>
+	template<typename T3 = int, typename T2 = typename std::enable_if<!std::is_reference_v<T> || sizeof(T3)==-1, T>::type>
 	operator array<T2>()
 	{
 		array<T> ret;
@@ -200,13 +200,13 @@ public:
 	}
 	
 	template<typename T2 = int>
-	typename std::enable_if<!std::is_reference<T>::value || sizeof(T2)==-1, array<T>>::type
+	typename std::enable_if<!std::is_reference_v<T> || sizeof(T2)==-1, array<T>>::type
 	as_array()
 	{
 		return *this;
 	}
 	
-	template<typename T3 = int, typename T2 = typename std::enable_if<!std::is_reference<T>::value || sizeof(T3)==-1, T>::type>
+	template<typename T3 = int, typename T2 = typename std::enable_if<!std::is_reference_v<T> || sizeof(T3)==-1, T>::type>
 	operator set<T2>()
 	{
 		set<T> ret;
@@ -215,7 +215,7 @@ public:
 	}
 	
 	template<typename T2 = int>
-	typename std::enable_if<!std::is_reference<T>::value || sizeof(T2)==-1, set<T>>::type
+	typename std::enable_if<!std::is_reference_v<T> || sizeof(T2)==-1, set<T>>::type
 	as_set()
 	{
 		return *this;

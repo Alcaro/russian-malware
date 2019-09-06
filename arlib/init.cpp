@@ -5,6 +5,7 @@
 #include <sys/resource.h>
 #endif
 #include "test.h" // TODO: define RUNNING_ON_VALGRIND at some better place
+#include <time.h>
 
 string argparse::get_usage()
 {
@@ -22,7 +23,7 @@ void argparse::error(cstring why)
 	fputs(m_appname+": "+why+"\n", stderr);
 	exit(1);
 }
-void argparse::single_arg(arg_base& arg, cstring value, bool must_use_value, bool* used_value)
+void argparse::single_arg(arg_base& arg, const char * value, arglevel_t arglevel, bool* used_value)
 {
 	if (!arg.can_use) error("can't use --"+arg.name+" more than once");
 	if (!arg.can_use_multi) arg.can_use = false;
@@ -31,9 +32,9 @@ void argparse::single_arg(arg_base& arg, cstring value, bool must_use_value, boo
 	if (used_value) *used_value = false;
 	
 	if (!value && !arg.accept_no_value) error("missing argument for --"+arg.name);
-	if (must_use_value && !arg.accept_value) error("--"+arg.name+" doesn't allow an argument");
+	if (arglevel == al_mandatory && !arg.accept_value) error("--"+arg.name+" doesn't allow an argument");
 	
-	if (value && arg.accept_value)
+	if (value && arg.accept_value && (!arg.accept_no_value || arglevel > al_loose))
 	{
 		if (!arg.parse(true, value)) error("invalid value for --"+arg.name);
 		if (used_value) *used_value = true;
@@ -43,40 +44,34 @@ void argparse::single_arg(arg_base& arg, cstring value, bool must_use_value, boo
 		arg.parse(false, "");
 	}
 }
-void argparse::single_arg(cstring name, cstring value, bool must_use_value, bool* used_value)
+void argparse::single_arg(cstring name, const char * value, arglevel_t arglevel, bool* used_value)
 {
 	for (arg_base& arg : m_args)
 	{
 		if (arg.name == name)
 		{
-			single_arg(arg, value, must_use_value, used_value);
+			single_arg(arg, value, arglevel, used_value);
 			return;
 		}
 	}
 	if (name != "") error("unknown argument: --"+name);
 	else error("non-arguments not supported");
 }
-void argparse::single_arg(char sname, cstring value, bool must_use_value, bool* used_value)
+void argparse::single_arg(char sname, const char * value, arglevel_t arglevel, bool* used_value)
 {
 	for (arg_base& arg : m_args)
 	{
 		if (arg.sname == sname)
 		{
-			single_arg(arg, value, must_use_value, used_value);
+			single_arg(arg, value, arglevel, used_value);
 			return;
 		}
 	}
 	string e = "unknown argument: -";
-	e += sname; // no operator+(string, char), too high risk it's hit by some accidental operator+(string, int)
+	e += sname; // no operator+(string, char), too high risk it's hit by an accidental operator+(string, int)
 	error(e);
 }
 
-const char * argparse::next_if_appropriate(const char * arg)
-{
-	if (!arg) return NULL;
-	if (arg[0] != '-' || arg[1] == '\0') return arg;
-	else return NULL;
-}
 void argparse::parse_pre(const char * const * argv)
 {
 	if (m_appname)
@@ -103,7 +98,7 @@ void argparse::parse(const char * const * argv)
 					// just --
 					while (*argv)
 					{
-						single_arg("", *argv, true, NULL);
+						single_arg("", *argv, al_mandatory, NULL);
 						argv++;
 					}
 				}
@@ -115,12 +110,12 @@ void argparse::parse(const char * const * argv)
 					const char * eq = strchr(arg+3, '=');
 					if (eq)
 					{
-						single_arg(arrayview<char>(arg+2, eq-(arg+2)), eq+1, true, NULL);
+						single_arg(arrayview<char>(arg+2, eq-(arg+2)), eq+1, al_mandatory, NULL);
 					}
 					else
 					{
 						bool used;
-						single_arg(arg+2, next_if_appropriate(*argv), false, &used);
+						single_arg(arg+2, *argv, al_loose, &used);
 						if (used) argv++;
 					}
 				}
@@ -128,25 +123,26 @@ void argparse::parse(const char * const * argv)
 			else if (arg[1] == '\0')
 			{
 				// a lone -
-				single_arg("", "-", true, NULL);
+				single_arg("", "-", al_mandatory, NULL);
 			}
 			else
 			{
 				// - followed by something
-				
 				arg++;
 				while (*arg)
 				{
 					if (arg[1])
 					{
+						// -ab (*arg is 'a', argument is "b")
 						bool used;
-						single_arg(*arg, arg+1, false, &used);
+						single_arg(*arg, arg+1, al_tight, &used);
 						if (used) break;
 					}
 					else
 					{
+						// -a b (*arg is 'a', next is "b")
 						bool used;
-						single_arg(*arg, next_if_appropriate(*argv), false, &used);
+						single_arg(*arg, *argv, al_loose, &used);
 						if (used) argv++;
 					}
 					arg++;
@@ -156,7 +152,7 @@ void argparse::parse(const char * const * argv)
 		else
 		{
 			// no leading -
-			single_arg("", arg, true, NULL);
+			single_arg("", arg, al_mandatory, NULL);
 		}
 	}
 	m_has_gui = false;
@@ -168,8 +164,37 @@ void argparse::parse_post()
 {
 	for (arg_base& arg : m_args)
 	{
-		if (arg.must_use) error("missing required argument --"+arg.name);
+		if (arg.must_use)
+		{
+			if (arg.name) error("missing required argument --"+arg.name);
+			else error("missing required positional argument");
+		}
 	}
+}
+
+void arlib_init(argparse& args, char** argv)
+{
+#ifdef __unix__
+#ifndef ARLIB_OPT
+	rlimit lim;
+	lim.rlim_cur = (RUNNING_ON_VALGRIND ? 1 : 64*1024*1024);
+	lim.rlim_max = RLIM_INFINITY;
+	setrlimit(RLIMIT_CORE, &lim);
+#endif
+#endif
+	
+	srand(time(NULL));
+#ifndef ARGUI_NONE
+	arlib_init_gui(args, argv);
+#else
+	args.parse(argv);
+#endif
+}
+
+void arlib_init(nullptr_t, char** argv)
+{
+	argparse dummy;
+	arlib_init(dummy, argv);
 }
 
 
@@ -177,29 +202,27 @@ void argparse::parse_post()
 
 #ifdef ARLIB_TEST
 template<typename... Args>
-static void test_one_pack(int bools, int strs, int ints, cstring extras, bool error, const char * const argvp[])
+static void test_one_pack(const char * opts, cstring extras, bool error, const char * const argvp[])
 {
-	bool b[5] = { };
-	string s[5] = { };
-	int i[5] = { };
+	bool b[3] = {};
+	string s[3];
+	int i = 0;
+	string os;
+	bool hos = false;
+	string ns;
+	bool hns = false;
 	array<string> extra;
 	
 	argparse args;
 	args.add('a', "bool",  &b[0]);
 	args.add('b', "bool2", &b[1]);
 	args.add('c', "bool3", &b[2]);
-	args.add('d', "bool4", &b[3]);
-	args.add('e', "bool5", &b[4]);
+	args.add('i', "int",  &i);
 	args.add('A', "str",  &s[0]);
 	args.add('B', "str2", &s[1]);
 	args.add('C', "str3", &s[2]);
-	args.add('D', "str4", &s[3]);
-	args.add('E', "str5", &s[4]);
-	args.add("int",  &i[0]);
-	args.add("int2", &i[1]);
-	args.add("int3", &i[2]);
-	args.add("int4", &i[3]);
-	args.add("int5", &i[4]);
+	args.add('N', "nullstr", &hns, &ns);
+	args.add('O', "optstr", &hos, &os);
 	if (extras) args.add("", &extra);
 	
 	if (error) args.onerror([](cstring){ throw 42; });
@@ -214,67 +237,45 @@ static void test_one_pack(int bools, int strs, int ints, cstring extras, bool er
 	}
 	if (error) assert_unreachable();
 	
-	for (int j=0;j<bools;j++) assert(b[j]);
-	for (int j=0;j<strs;j++)
+#define opt(ch, val, yes, no) if (strchr(opts, ch)) assert_eq(val, yes); else assert_eq(val, no);
+	opt('a', b[0], true, false);
+	opt('b', b[1], true, false);
+	opt('c', b[2], true, false);
+	opt('i', i, 42, 0);
+	opt('A', s[0], "value", "");
+	opt('B', s[1], "value", "");
+	opt('C', s[2], "-value", "");
+	opt('N', hns, true, false);
+	assert_eq(ns, "");
+#undef opt
+	
+	if (strchr(opts, 'o'))
 	{
-		if (s[j] != "-value") assert_eq(s[j], "value"); // accept both
+		assert(hos);
+		assert_eq(os, "");
 	}
-	for (int j=0;j<ints;j++) assert_eq(i[j], 42);
+	else if (strchr(opts, 'O'))
+	{
+		assert(hos);
+		assert_eq(os, "value");
+	}
+	else assert(!hos);
 	
 	assert_eq(extra.join("/"), extras);
 }
 
 template<typename... Args>
-static void test_one(int bools, int strs, int ints, cstring extras, Args... argv)
+static void test_one(const char * opts, cstring extras, Args... argv)
 {
 	const char * const argvp[] = { "x", argv..., NULL };
-	test_one_pack(bools, strs, ints, extras, false, argvp);
+	test_one_pack(opts, extras, false, argvp);
 }
 
 template<typename... Args>
 static void test_error(Args... argv)
 {
 	const char * const argvp[] = { "x", argv..., NULL };
-	test_one_pack(0, 0, 0, "", true, argvp);
-}
-
-test("argument parser", "string,array", "argparse")
-{
-	test_one(1, 0, 0, "", "--bool");
-	test_one(0, 1, 0, "", "--str=value");
-	test_one(1, 0, 0, "arg/--arg", "--bool", "arg", "--", "--arg");
-	test_one(0, 1, 0, "", "--str", "value");
-	test_one(2, 0, 0, "", "--bool", "--bool2");
-	test_one(2, 0, 0, "-", "--bool", "-", "--bool2");
-	test_one(1, 0, 0, "--arg", "--bool", "--", "--arg");
-	test_error("--nonexistent");
-	test_error("--=error");
-	test_one(0, 0, 0, "", "--");
-	test_one(0, 0, 0, "--", "--", "--");
-	test_one(2, 1, 0, "", "-abAvalue");
-	test_one(2, 1, 0, "", "-abA", "value");
-	test_one(2, 0, 0, "arg", "-ab", "arg");
-	test_error("-A", "-ab"); // empty -A
-	test_one(0, 1, 0, "", "-A-value");
-	test_error("-x"); // nonexistent
-	test_error("--bool", "--bool"); // more than once
-	test_error("--str"); // missing argument
-	test_error("--bool=error"); // argument not allowed
-	test_error("--int=error"); // can't parse
-	test_error("eee"); // extras not allowed here
-	
-	//missing-required, not tested by the above
-	try
-	{
-		argparse args;
-		args.onerror([](cstring){ throw 42; });
-		string foo;
-		args.add("foo", &foo).required();
-		const char * const argvp[] = { "x", NULL };
-		args.parse(argvp);
-		assert_unreachable();
-	}
-	catch(int) {}
+	test_one_pack(nullptr, "", true, argvp);
 }
 
 template<typename... Args>
@@ -301,10 +302,59 @@ static void test_getopt(bool a, bool b, const char * c, const char * nonopts, Ar
 	assert_eq(realnonopts.join("/"), nonopts);
 }
 
-test("argument parser 2", "string,array", "argparse")
+test("argument parser", "string,array", "argparse")
 {
-	//getopt examples, https://www.gnu.org/software/libc/manual/html_node/Example-of-Getopt.html
+	// If Arlib in any way disagrees with GNU getopt, Arlib is wrong.
+	// Currently, this one can't differentiate blank arguments from missing.
+	// This should be fixed as soon as I figure out how to differentiate blank values from missing.
+	
+	testcall(test_one("a",   "",        "--bool"));
+	testcall(test_one("A",   "",        "--str=value"));
+	testcall(test_one("i",   "",        "--int=42"));
+	testcall(test_one("a", "arg/--arg", "--bool", "arg", "--", "--arg"));
+	testcall(test_one("A",   "",        "--str", "value"));
+	testcall(test_one("ab",  "",        "--bool", "--bool2"));
+	testcall(test_one("ab",  "-",       "--bool", "-", "--bool2"));
+	testcall(test_one("a",   "--arg",   "--bool", "--", "--arg"));
+	testcall(test_one("",    "",        "--"));
+	testcall(test_one("",    "--",      "--", "--"));
+	testcall(test_one("abA", "",        "-abAvalue"));
+	testcall(test_one("abA", "",        "-abA", "value"));
+	testcall(test_one("ab",  "arg",     "-ab", "arg"));
+	testcall(test_one("A",   "",        "-A", "value"));
+	testcall(test_one("C",   "",        "-C", "-value"));
+	testcall(test_one("C",   "",        "-C-value"));
+	testcall(test_one("o",   "",        "-O"));
+	testcall(test_one("O",   "",        "-Ovalue"));
+	testcall(test_one("o",   "value",   "-O", "value"));
+	testcall(test_one("o",   "",        "--optstr"));
+	testcall(test_one("O",   "",        "--optstr=value"));
+	testcall(test_one("o",   "value",   "--optstr", "value"));
+	testcall(test_error("--nonexistent"));
+	testcall(test_error("--=error"));
+	testcall(test_error("-x")); // nonexistent
+	testcall(test_error("--bool", "--bool")); // more than once
+	testcall(test_error("--str")); // missing argument
+	testcall(test_error("--bool=error")); // argument not allowed
+	testcall(test_error("--int=error")); // can't parse
+	testcall(test_error("eee")); // extras not allowed here
+	
+	//missing-required, not tested by the above
+	try
+	{
+		argparse args;
+		args.onerror([](cstring){ throw 42; });
+		string foo;
+		args.add("foo", &foo).required();
+		const char * const argvp[] = { "x", NULL };
+		args.parse(argvp);
+		assert_unreachable();
+	}
+	catch(int) {}
+	
+	//examples extracted from https://www.gnu.org/software/libc/manual/html_node/Example-of-Getopt.html
 	//0/1 as bool because the example does so
+	//redundant with the above, but why not
 	
 	test_getopt(0, 0, NULL,  NULL);
 	test_getopt(1, 1, NULL,  NULL,     "-a", "-b");
@@ -318,28 +368,3 @@ test("argument parser 2", "string,array", "argparse")
 	test_getopt(1, 0, NULL,  "-",      "-a", "-");
 }
 #endif
-
-void arlib_init(argparse& args, char** argv)
-{
-#ifdef __unix__
-#ifndef ARLIB_OPT
-	rlimit lim;
-	lim.rlim_cur = (RUNNING_ON_VALGRIND ? 1 : 64*1024*1024);
-	lim.rlim_max = RLIM_INFINITY;
-	setrlimit(RLIMIT_CORE, &lim);
-#endif
-#endif
-	
-	srand(time(NULL));
-#ifndef ARGUI_NONE
-	arlib_init_gui(args, argv);
-#else
-	args.parse(argv);
-#endif
-}
-
-void arlib_init(nullptr_t, char** argv)
-{
-	argparse dummy;
-	arlib_init(dummy, argv);
-}

@@ -1,5 +1,4 @@
 #include "file.h"
-#include "os.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -162,7 +161,7 @@ namespace {
 			return size.QuadPart;
 		}
 		
-		size_t read(arrayvieww<byte> target, size_t start)
+		size_t pread(arrayvieww<byte> target, size_t start)
 		{
 			seek(start);
 			DWORD actual;
@@ -176,7 +175,7 @@ namespace {
 			return (SetEndOfFile(this->handle));
 		}
 		
-		bool write(arrayview<byte> data, size_t start)
+		bool pwrite(arrayview<byte> data, size_t start)
 		{
 			seek(start);
 			DWORD actual;
@@ -233,31 +232,51 @@ namespace {
 	};
 }
 
+static bool path_corrupt(cstring path)
+{
+	if (path[0] == '\0') return true;
+	if (path[0] == '/') return true;
+	if (path[1] == ':' && path[2] != '/') return true;
+	return false;
+}
+
 #define FILE_SHARE_ALL (FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE)
 file::impl* file::open_impl_fs(cstring filename, mode m)
 {
+	if (path_corrupt(filename)) return nullptr;
+	
 	DWORD dispositions[] = { OPEN_EXISTING, OPEN_ALWAYS, OPEN_EXISTING, CREATE_ALWAYS, CREATE_NEW };
 	DWORD access = (m==m_read ? GENERIC_READ : GENERIC_READ|GENERIC_WRITE);
-	HANDLE file = CreateFile(filename, access, FILE_SHARE_ALL, NULL, dispositions[m], FILE_ATTRIBUTE_NORMAL, NULL);
+	HANDLE file = CreateFile(filename.c_str(), access, FILE_SHARE_ALL, NULL, dispositions[m], FILE_ATTRIBUTE_NORMAL, NULL);
 	if (file == INVALID_HANDLE_VALUE) return NULL;
 	return new file_fs(file);
 }
 
+bool file::mkdir_fs(cstring filename)
+{
+	if (path_corrupt(filename)) return false;
+	if (CreateDirectory(filename.c_str(), nullptr)) return true;
+	else return (GetLastError() == ERROR_ALREADY_EXISTS);
+}
+
 bool file::unlink_fs(cstring filename)
 {
-	if (DeleteFile(filename)) return true;
+	if (path_corrupt(filename)) return false;
+	if (DeleteFile(filename.c_str())) return true;
 	else return (GetLastError() == ERROR_FILE_NOT_FOUND);
 }
 
-//#ifdef ARGUI_NONE
-file::impl* file::open_impl(cstring filename, mode m)
+array<string> file::listdir(cstring path)
 {
-	return open_impl_fs(filename, m);
+	WIN32_FIND_DATA f;
+	HANDLE dir = FindFirstFile(path.c_str(), &f);
+	if (!dir) return nullptr;
+	
+	array<string> ret;
+	do {
+		// TODO
+	} while (FindNextFile(dir, &f));
+	FindClose(dir);
+	return ret;
 }
-
-bool file::unlink(cstring filename)
-{
-	return unlink_fs(filename);
-}
-//#endif
 #endif

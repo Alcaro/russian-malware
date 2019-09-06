@@ -73,7 +73,6 @@ static mutex dylib_lock;
 
 static HANDLE dylib_init(const char * filename, bool uniq)
 {
-	deinit();
 	synchronized(dylib_lock)
 	{
 		HANDLE handle;
@@ -98,9 +97,23 @@ static HANDLE dylib_init(const char * filename, bool uniq)
 	}
 }
 
-bool dylib::init(const char * filename, bool * owned)
+bool dylib::init(const char * filename)
 {
-	//not needed
+	deinit();
+	handle = dylib_init(filename, false);
+	return handle;
+}
+
+bool dylib::init_uniq(const char * filename)
+{
+	deinit();
+	handle = dylib_init(filename, true);
+	return handle;
+}
+
+bool dylib::init_uniq_force(const char * filename)
+{
+	return init_uniq(filename);
 }
 
 void* dylib::sym_ptr(const char * name)
@@ -135,21 +148,25 @@ bool dylib::sym_multi(funcptr* out, const char * names)
 
 
 #ifdef _WIN32
-void debug_or_ignore()
+bool debug_or_ignore()
 {
-	if (IsDebuggerPresent()) DebugBreak();
+	if (!IsDebuggerPresent())
+		return false;
+	DebugBreak();
+	return true;
 }
 
-void debug_or_exit()
+bool debug_or_exit()
 {
 	if (IsDebuggerPresent()) DebugBreak();
 	ExitProcess(1);
 }
 
-void debug_or_abort()
+bool debug_or_abort()
 {
 	DebugBreak();
 	FatalExit(1);
+	__builtin_unreachable();
 }
 #endif
 
@@ -158,11 +175,6 @@ void debug_or_abort()
 #include <signal.h>
 #include <unistd.h>
 #include <fcntl.h>
-
-//defined by test.h - not completely appropriate, but it is test related
-#ifndef HAVE_VALGRIND
-#define VALGRIND_PRINTF_BACKTRACE(...) ;
-#endif
 
 //method from https://src.chromium.org/svn/trunk/src/base/debug/debugger_posix.cc
 static bool has_debugger()
@@ -247,6 +259,24 @@ uint64_t time_us_ne()
 	QueryPerformanceCounter(&timer_now);
 	return 1000000*timer_now.QuadPart/timer_freq.QuadPart;
 }
+uint64_t time_ms_ne()
+{
+	return time_us_ne() / 1000;
+}
+
+uint64_t time_us()
+{
+	//this one has an accuracy of 10ms by default
+	ULARGE_INTEGER time;
+	GetSystemTimeAsFileTime((LPFILETIME)&time);
+	// this one is in intervals of 100 nanoseconds, for some insane reason. We want microseconds.
+	// also epoch is jan 1 1601, subtract that
+	return time.QuadPart/10 - 11644473600000000ULL;
+}
+uint64_t time_ms()
+{
+	return time_us() / 1000;
+}
 #else
 #include <time.h>
 
@@ -290,7 +320,7 @@ uint64_t time_ms_ne()
 }
 #endif
 
-#if 0
+#ifdef _WIN32
 //similar to mktime, but UTC timezone
 //from http://stackoverflow.com/a/11324281
 time_t timegm(struct tm * t)
@@ -338,7 +368,11 @@ test("time", "", "time")
 	uint64_t time_une_fu = time_us_ne();
 	assert_range(time_une_fu, time_une_fm-1100,    time_une_fm+1500);
 	
+#ifdef _WIN32
+	Sleep(50);
+#else
 	usleep(50000);
+#endif
 	
 	uint64_t time2_u_ft = (uint64_t)time(NULL)*1000000;
 	uint64_t time2_u_fm = time_ms()*1000;

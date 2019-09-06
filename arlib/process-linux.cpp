@@ -247,6 +247,8 @@ bool process::closefrom(int lowfd)
 			off += dent->d_reclen;
 			
 			int fd = atoi_simple(dent->d_name);
+			if (fd < 0 && strcmp(dent->d_name, ".")!=0 && strcmp(dent->d_name, "..")!=0)
+				abort();
 			if (fd>=0 && fd!=dfd && fd>=lowfd)
 			{
 #ifdef ARLIB_TEST_ARLIB

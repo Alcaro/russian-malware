@@ -82,16 +82,17 @@ public:
 		string out = "\"";
 		for (size_t i=0;i<s.length();i++)
 		{
-			char c = s[i];
+			uint8_t c = s[i];
 			if(0);
-			else if (c=='\n') out+="\\n";
-			else if (c=='\r') out+="\\r";
+			else if (c=='\n') out += "\\n";
+			else if (c=='\r') out += "\\r";
 			else if (c=='\t') out += "\\t";
 			else if (c=='\b') out += "\\b";
 			else if (c=='\f') out += "\\f";
-			else if (c=='"') out += "\\\"";
+			else if (c=='\"') out += "\\\"";
 			else if (c=='\\') out += "\\\\";
-			else out += c;
+			else if (c < 32 || c == 0x7F) out += "\\u"+tostringhex<4>(c);
+			else out += (char)c;
 		}
 		return out+"\"";
 	}
@@ -108,7 +109,7 @@ public:
 	void map_key(cstring s) { comma(); m_data += strwrap(s); m_data += ":"; m_comma = false; }
 	void map_exit() { m_data += "}"; m_comma = true; }
 	
-	string finish() { return m_data; }
+	string finish() { return std::move(m_data); }
 };
 
 

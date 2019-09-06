@@ -360,7 +360,7 @@ public:
 		else return std::move(def);
 	}
 	template<typename Tk2> // sizeof && because not using Tk2 is a hard error, not a SFINAE
-	typename std::enable_if<sizeof(Tk2) && std::is_same<Tvalue, string>::value, cstring>::type
+	typename std::enable_if<sizeof(Tk2) && std::is_same_v<Tvalue, string>, cstring>::type
 	get_or(const Tk2& key, const char * def) const
 	{
 		node* ret = items.get_or_null(key);

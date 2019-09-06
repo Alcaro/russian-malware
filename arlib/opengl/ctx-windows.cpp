@@ -431,6 +431,7 @@ public:
 			this->D3D_device->StretchRect(this->D3D_GLtarget, NULL, this->D3D_backbuf, NULL, D3DTEXF_NONE);
 			this->D3D_device->PresentEx(NULL, NULL, NULL, NULL, (vsync ? 0 : D3DPRESENT_FORCEIMMEDIATE|D3DPRESENT_DONOTWAIT));
 			
+#error figure out why PresentEx is called twice
 			HRESULT err = this->D3D_device->PresentEx(NULL, NULL, NULL, NULL, D3DPRESENT_FORCEIMMEDIATE);
 			if (err == D3DERR_DEVICELOST || err == D3DERR_DEVICEHUNG)
 			{
@@ -446,7 +447,6 @@ public:
 					debug_or_abort();
 				}
 				AllocRenderTarget();
-				return;
 			}
 			
 			wgl.DXLockObjectsNV(D3D_sharehandle, 1, &this->GL_htexture);

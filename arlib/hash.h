@@ -2,12 +2,12 @@
 #include "global.h"
 
 template<typename T>
-typename std::enable_if<std::is_integral<T>::value, size_t>::type hash(T val)
+typename std::enable_if<std::is_integral_v<T>, size_t>::type hash(T val)
 {
 	return val;
 }
 template<typename T>
-typename std::enable_if<std::is_class<T>::value, size_t>::type hash(const T& val)
+typename std::enable_if<std::is_class_v<T>, size_t>::type hash(const T& val)
 {
 	return val.hash();
 }

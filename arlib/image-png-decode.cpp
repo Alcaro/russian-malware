@@ -589,11 +589,12 @@ static inline void unpack_pixels(uint32_t width, uint32_t height, uint32_t* pixe
 //      invalid per spec, but unknown ancillary chunks must be skipped, and 'skip' can be argued to include skipping checksum calculation
 //[-] PLTE chunk length not divisible by 3
 //[-] PLTE with 0 colors
+//[-] PLTE with 257 colors
 //[-] PLTE on grayscale
 //[-] multiple PLTEs in paletted image
 //[-] paletted image where some pixels use colors not in the PLTE (4bpp, 9-entry PLTE, but color 12 is used)
 //[-] critical chunks in wrong order
-//[+] overlong PLTE - <=16-color PLTE but 8 bits per pixel
+//[+] overlong encoding of palette data - <=16-color PLTE but 8 bits per pixel
 //[+] PLTE in RGB - a recommendation for how to render in low-color contexts, should be ignored by high-color renderers
 //[-?] misplaced PLTE in RGB; ignoring PLTE in RGB means this won't be detected
 //[-?] multiple PLTEs in RGB
@@ -621,7 +622,8 @@ static inline void unpack_pixels(uint32_t width, uint32_t height, uint32_t* pixe
 //[-] actual ordering shenanigans, as opposed to just splitting the IDATs
 //[-] truncated compressed data in IDATs
 //[-] various invalid DEFLATE data, like trying to read outside the sliding window
-//[-] a chunk of size (uint32_t)-1
+//[-] a chunk of size (uint32_t)-42 (not -1 since that's a common sentinel)
+//[-] a chunk of size 0x7FFFFF42 (not gonna make the actual file 2GB)
 //[+] a size-0 IDAT chunk (completely missing IDAT is tested)
 //[-] IDATs decompressing to too much or too little data
 //[-?] garbage bytes after IEND
@@ -633,13 +635,14 @@ static inline void unpack_pixels(uint32_t width, uint32_t height, uint32_t* pixe
 //[-] nonzero IEND size
 //[-] IEND checksum error
 //[-] unexpected EOFs
-//finally, the reference images are bad; they're not bulk downloadable, and they're GIF, rather than PNGs without fancy features
+//finally, the reference images are bad; they're not bulk downloadable, and they're GIF, rather than PNG without fancy features
 //instead, I ran all of them through 'pngout -c6 -f0 -d8 -s4 -y -force'
 //I also ran the invalid x*.png, and pngout-unsupported *16.png, through 'truncate -s0' instead
-//all png test suites I could find are just PngSuite (possibly renamed)
+//most png decoders are tested only with PngSuite
 //
-//I will create these, and submit for inclusion in PngSuite, once I have a png encoder to manipulate,
+//I will create these once I have a png encoder to manipulate,
 // except bitwidth 16, interlaced (rare and unsupported), and invalid DEFLATE (need a deflater to manipulate).
+//I will not submit them for inclusion in PngSuite, since it hasn't changed for many years and likely never will.
 
 test("png", "array,imagebase,file", "png")
 {
