@@ -16,8 +16,8 @@ void WebSocket::connect(cstring target, arrayview<string> headers)
 	if (!HTTP::parseUrl(target, false, loc)) { cb_error(); return; }
 	
 	int defport;
-	if (loc.proto == "ws") defport = 80;
-	else if (loc.proto == "wss") defport = 443;
+	if (loc.scheme == "ws") defport = 80;
+	else if (loc.scheme == "wss") defport = 443;
 	else { cb_error(); return; }
 	
 	sock = cb_mksock(defport==443, loc.domain, loc.port ? loc.port : defport, loop);
@@ -49,22 +49,18 @@ void WebSocket::activity()
 	int nbyte = sock->recv(bytes);
 	if (nbyte < 0)
 	{
-if(L_DEBUG)puts("SOCKDEAD");
 		cancel();
 		return;
 	}
 	msg += arrayview<byte>(bytes, nbyte);
 	
-if(L_DEBUG)puts("TMP:"+tostringhex(msg));
 	while (inHandshake)
 	{
-if(L_DEBUG)puts("INSHK");
 		size_t lf = msg.find('\n');
 		if (lf == (size_t)-1) return;
 		
 		bool crlf = (lf > 0 && msg[lf-1]=='\r');
 		cstring line = msg.slice(0, lf-crlf);
-if(L_DEBUG)puts("LINE:["+line+"]");
 		if (!gotFirstLine)
 		{
 			if (!line.startswith("HTTP/1.1 101 ")) { cancel(); return; }
@@ -115,7 +111,6 @@ again:
 	}
 	
 	int type = (msg[0] & 0x0F);
-if(L_DEBUG)puts("RETURN:"+tostringhex(msg.slice(0,headsize))+" "+tostringhex(out));
 	if (type == t_ping) send(msg, t_pong);
 	
 	if (type == t_text)
@@ -162,7 +157,6 @@ void WebSocket::send(arrayview<byte> message, int type)
 		header.u64b(message.size());
 	}
 	header.u32b(0); // mask key
-if(L_DEBUG)puts("SEND:"+tostringhex(header.peek())+" "+tostringhex(message));
 	if (inHandshake)
 	{
 		tosend.push(header.finish(), message);
@@ -188,13 +182,13 @@ test("WebSocket", "tcp,ssl,bytepipe", "websocket")
 	
 	function<string()> recvstr = bind_lambda([&]()->string { str = ""; loop->enter(); string ret = str; return ret; });
 	
-	loop->set_timer_once(10000, cb_error);
+	uintptr_t timer = loop->raw_set_timer_once(10000, cb_error);
 	
-	//this one is annoyingly slow, but I haven't found any alternatives
-	//except wss://websocketstest.com/service, which just kicks me immediately
 	WebSocket ws(loop);
 	ws.callback(cb_str, cb_error);
 	
+	//this one is annoyingly slow, but I haven't found any alternatives
+	//the only other one that claims to be a websocket echo is wss://websocketstest.com/service, but it just kicks me immediately
 	ws.connect("wss://echo.websocket.org");
 	ws.send("hello");
 	assert_eq(recvstr(), "hello");
@@ -205,10 +199,11 @@ test("WebSocket", "tcp,ssl,bytepipe", "websocket")
 	assert_eq(recvstr(), "hello");
 	assert_eq(recvstr(), "hello");
 	
-#define msg128 "128bytes128bytes128bytes128bytes128bytes128bytes128bytes128bytes" \
-               "128bytes128bytes128bytes128bytes128bytes128bytes128bytes128bytes"
+	cstring msg128 = "128bytes128bytes128bytes128bytes128bytes128bytes128bytes128bytes"
+	                 "128bytes128bytes128bytes128bytes128bytes128bytes128bytes128bytes";
 	ws.send(msg128);
 	assert_eq(recvstr(), msg128);
+	loop->raw_timer_remove(timer);
 }
 #endif
 #endif

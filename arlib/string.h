@@ -236,7 +236,7 @@ public:
 	//backwards-counting - splits at the rightmost opportunity, "a b c d".rsplit<1>(" ") is ["a b c", "d"]
 	//word boundary - isspace()
 	//inclusive - the boundary string is included in the output, "a\nb\n".spliti("\n") is ["a\n", "b\n"]
-	//all subsets of splitting flags are supported
+	//all subsets of splitting options are supported
 	
 	array<cstring> csplit(cstring sep, size_t limit) const;
 	template<size_t limit = SIZE_MAX>

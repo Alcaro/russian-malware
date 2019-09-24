@@ -353,7 +353,7 @@ int main(int argc, char* argv[])
 			}
 			if (!found)
 			{
-				puts("error: dependency on nonexistent feature");
+				puts("error: dependency on nonexistent feature "+required[i]);
 				err_print(outer);
 				abort();
 			}
@@ -379,6 +379,7 @@ int main(int argc, char* argv[])
 			}
 		}
 	}
+	g_testlist = alltests; // so valgrind doesn't report leaks
 #else
 	arlib_init(NULL, argv);
 	testlist* alltests = g_testlist;
@@ -427,6 +428,7 @@ int main(int argc, char* argv[])
 				uint64_t end_time = time_us_ne();
 				uint64_t time_us = end_time - start_time;
 				uint64_t time_lim = (all_tests ? 5000*1000 : 500*1000);
+				runloop::global()->assert_empty();
 				if (time_us > time_lim)
 				{
 					printf("too slow: max %uus, got %uus\n", (unsigned)time_lim, (unsigned)time_us);
@@ -441,14 +443,7 @@ int main(int argc, char* argv[])
 			cur_test = next;
 		}
 		
-		printf(ESC_ERASE_LINE "Passed %d, failed %d", count[err_ok], count[err_fail]);
-		if (count[err_tooslow]) printf(", too-slow %d", count[err_tooslow]);
-		if (count[err_skip]) printf(", skipped %d", count[err_skip]);
-		if (count[err_inconclusive]) printf(", inconclusive %d", count[err_inconclusive]);
-		if (count[err_expfail]) printf(", expected-fail %d", count[err_expfail]);
-		if (n_filtered_tests) printf(", filtered %d", n_filtered_tests);
-		puts("");
-		
+		printf(ESC_ERASE_LINE);
 		for (size_t i=1;i<ARRAY_SIZE(max_latencies_us);i++)
 		{
 			uint64_t max_latency_us = (RUNNING_ON_VALGRIND ? 100 : 3) * 1000;
@@ -462,6 +457,14 @@ int main(int argc, char* argv[])
 				       max_latencies_us[i].line);
 			}
 		}
+		
+		printf("Passed %d, failed %d", count[err_ok], count[err_fail]);
+		if (count[err_tooslow]) printf(", too-slow %d", count[err_tooslow]);
+		if (count[err_skip]) printf(", skipped %d", count[err_skip]);
+		if (count[err_inconclusive]) printf(", inconclusive %d", count[err_inconclusive]);
+		if (count[err_expfail]) printf(", expected-fail %d", count[err_expfail]);
+		if (n_filtered_tests) printf(", filtered %d", n_filtered_tests);
+		puts("");
 		
 #ifdef HAVE_VALGRIND
 		if (run_twice)
@@ -489,7 +492,7 @@ void free_test(void* ptr) { _test_free(); free(ptr); }
 
 #ifdef ARLIB_TEST_ARLIB
 static int testnum = 0;
-//funny order to ensure their initializers run in a funny order
+//install them in a weird order, to ensure the sorter works
 test("tests themselves (1/8)", "", "test1")
 {
 	assert_eq(testnum, 0);

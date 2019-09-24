@@ -5,8 +5,6 @@
 #include <sys/syscall.h>
 #ifdef __NR_execveat // force disable on old kernels
 
-//TODO: perhaps SECCOMP_RET_USER_NOTIF https://lwn.net/Articles/776035/#userspace (needs kernel 5.0, 2019-01-??) would be useful?
-
 #include <sys/user.h>
 #include <sys/wait.h>
 #include <sys/types.h>
@@ -15,9 +13,7 @@
 #include <linux/memfd.h> // documented as sys/memfd.h, but that doesn't exist
 
 //#include <linux/ioprio.h> // ioprio_set - header doesn't exist for me, copying the content
-//these defines are in a file that claims to be GPL, but the userspace ABI is not GPL and it's
-// impossible to use ioprio_set without them, so I believe that license tag is incorrect, and/or
-// the 'only one possible definition' defense applies
+//I believe they count as userspace ABI, i.e. this is fine
 
 #define IOPRIO_CLASS_SHIFT	(13)
 #define IOPRIO_PRIO_MASK	((1UL << IOPRIO_CLASS_SHIFT) - 1)
@@ -198,7 +194,7 @@ pid_t sandproc::launch_impl(const char * program, array<const char*> argv, array
 	if (program != argv[0])
 		return -1;
 	
-	argv.prepend("[arlib-sandbox]"); // ld-linux thinks it's argv[0] and discards the real one
+	argv.insert(0, "[arlib-sandbox]"); // ld-linux thinks it's argv[0] and discards the real one
 	
 	//fcntl is banned by seccomp, so this goes early
 	//putting it before clone() allows sharing it between sandbox children
@@ -231,7 +227,7 @@ pid_t sandproc::launch_impl(const char * program, array<const char*> argv, array
 	//  calling thread and its entire address space, possibly including the states of mutexes and
 	//  other resources. Consequently, to avoid errors, the child process may only execute
 	//  async-signal-safe operations until such time as one of the exec functions is called.
-	//This applies to clone() too. In particular, malloc must be avoided.
+	//This applies to clone() too. In particular, malloc must be avoided. Syscalls and stack is fine.
 	
 	//we're the child
 	

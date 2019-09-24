@@ -78,11 +78,11 @@ class bmlserializer {
 	template<typename T> friend string bmlserialize(T& item);
 	
 	template<typename T>
-	typename std::enable_if<
-		!std::is_same<
+	typename std::enable_if_t<
+		!std::is_same_v<
 			decltype(std::declval<T>().serialize(std::declval<bmlserializer&>())),
-			void* // can't find a std::can_evaluate, so check if it doesn't yield <some arbitrary type it doesn't return>
-		>::value>::type
+			void* // can't find a std::can_evaluate, so ensure that it doesn't yield <some arbitrary type it doesn't return>
+		>>
 	add_node(cstring name, T& item, int ov_resolut1) // ov_resolut1 is always 1, to enforce the desired overload resolution
 	{
 		w.enter(bmlwriter::escape(name), "");
@@ -91,22 +91,22 @@ class bmlserializer {
 	}
 	
 	template<typename T>
-	typename std::enable_if<
-		!std::is_same<
+	typename std::enable_if_t<
+		!std::is_same_v<
 			typename T::serialize_as,
 			void*
-		>::value>::type
+		>>
 	add_node(cstring name, T& item, int ov_resolut1)
 	{
 		w.node(bmlwriter::escape(name), tostring((typename T::serialize_as)item));
 	}
 	
 	template<typename T>
-	typename std::enable_if<
-		std::is_same<
+	typename std::enable_if_t<
+		std::is_same_v<
 			decltype(tostring(std::declval<T>())),
 			string
-		>::value>::type
+		>>
 	add_node(cstring name, T& item, float ov_resolut1)
 	{
 		w.node(bmlwriter::escape(name), tostring(item));
@@ -190,11 +190,11 @@ class bmldeserializer {
 	template<typename T> friend void bmldeserialize_to(cstring bml, T& to);
 	
 	template<typename T>
-	typename std::enable_if<
-		!std::is_same<
+	typename std::enable_if_t<
+		!std::is_same_v<
 			decltype(std::declval<T>().serialize(std::declval<bmlserializer&>())),
 			void*
-		>::value>::type
+		>>
 	read_item(T& out, int ov_resolut1)
 	{
 		while (pdepth >= thisdepth)
@@ -216,11 +216,11 @@ class bmldeserializer {
 	}
 	
 	template<typename T>
-	typename std::enable_if<
-		!std::is_same<
+	typename std::enable_if_t<
+		!std::is_same_v<
 			typename T::serialize_as,
 			void*
-		>::value>::type
+		>>
 	read_item(T& out, int ov_resolut1)
 	{
 		typename T::serialize_as tmp;
@@ -229,11 +229,11 @@ class bmldeserializer {
 	}
 	
 	template<typename T>
-	typename std::enable_if<
-		!std::is_same<
+	typename std::enable_if_t<
+		!std::is_same_v<
 			decltype(try_fromstring(std::declval<cstring>(), std::declval<T&>())),
 			void*
-		>::value>::type
+		>>
 	read_item(T& out, float ov_resolut1)
 	{
 		try_fromstring(thisval, out);
@@ -383,11 +383,11 @@ class jsonserializer {
 	template<typename T> friend string jsonserialize(const T& item);
 	
 	template<typename T>
-	typename std::enable_if<
-		!std::is_same<
+	typename std::enable_if_t<
+		!std::is_same_v<
 			decltype(std::declval<T>().serialize(std::declval<jsonserializer&>())),
 			void*
-		>::value>::type
+		>>
 	add_node(T& inner, int ov_resolut1)
 	{
 		w.map_enter();
@@ -396,22 +396,22 @@ class jsonserializer {
 	}
 	
 	template<typename T>
-	typename std::enable_if<
-		!std::is_same<
+	typename std::enable_if_t<
+		!std::is_same_v<
 			typename T::serialize_as,
 			void*
-		>::value>::type
+		>>
 	add_node(const T& inner, int ov_resolut1)
 	{
 		add_node((typename T::serialize_as)inner, 1);
 	}
 	
 	template<typename T>
-	typename std::enable_if<
-		!std::is_same<
+	typename std::enable_if_t<
+		!std::is_same_v<
 			decltype(std::declval<T>()(std::declval<jsonserializer&>())),
 			void*
-		>::value>::type
+		>>
 	add_node(const T& inner, int ov_resolut1)
 	{
 		w.map_enter();
@@ -420,11 +420,11 @@ class jsonserializer {
 	}
 	
 	template<typename T>
-	typename std::enable_if<
-		std::is_same<
+	typename std::enable_if_t<
+		std::is_same_v<
 			decltype(tostring(std::declval<T>())),
 			string
-		>::value>::type
+		>>
 	add_node(const T& inner, float ov_resolut1)
 	{
 		add_node(tostring(inner), 1);
@@ -625,11 +625,11 @@ class jsondeserializer {
 	}
 	
 	template<typename T>
-	typename std::enable_if<
-		std::is_same<
+	typename std::enable_if_t<
+		std::is_same_v<
 			decltype(std::declval<T>().serialize(std::declval<jsonserializer&>())),
 			void
-		>::value>::type
+		>>
 	read_item(T& out, int ov_resolut1)
 	{
 		if (ev.action == jsonparser::enter_map)
@@ -658,11 +658,11 @@ class jsondeserializer {
 	}
 	
 	template<typename T>
-	typename std::enable_if<
-		!std::is_same<
+	typename std::enable_if_t<
+		!std::is_same_v<
 			typename T::serialize_as,
 			void*
-		>::value>::type
+		>>
 	read_item(T& out, int ov_resolut1)
 	{
 		typename T::serialize_as tmp{};
@@ -671,11 +671,11 @@ class jsondeserializer {
 	}
 	
 	template<typename T>
-	typename std::enable_if<
-		!std::is_same<
+	typename std::enable_if_t<
+		!std::is_same_v<
 			decltype(std::declval<T&>() = std::declval<cstring>()),
 			void*
-		>::value>::type
+		>>
 	read_item(T& out, float ov_resolut1)
 	{
 		if (ev.action == jsonparser::str) out = ev.str;
@@ -684,11 +684,11 @@ class jsondeserializer {
 	}
 	
 	template<typename T>
-	typename std::enable_if<
-		std::is_same<
+	typename std::enable_if_t<
+		std::is_same_v<
 			decltype(std::declval<T>()(std::declval<jsondeserializer&>())),
 			void
-		>::value>::type
+		>>
 	read_item(const T& inner, int ov_resolut1)
 	{
 		if (ev.action == jsonparser::enter_map)
@@ -787,7 +787,7 @@ public:
 	}
 	
 	template<typename T>
-	typename std::enable_if<std::is_integral<T>::value>::type
+	typename std::enable_if_t<std::is_integral_v<T>>
 	hex(cstring name, T& out)
 	{
 		while (ev.action == jsonparser::map_key && ev.str == name)

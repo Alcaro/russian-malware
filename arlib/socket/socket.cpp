@@ -321,20 +321,18 @@ public:
 	autoptr<socket> child;
 	
 	bytepipe tosend;
-	uintptr_t idle_id = 0;
+	DECL_TIMER(idle, socketbuf);
 	function<void()> cb_read;
 	function<void()> cb_write;
 	
 	/*private*/ void cancel()
 	{
 		child = NULL;
-		set_loop();
+		idle.reset();
 	}
 	
 	/*private*/ void call_cb_immed()
 	{
-		idle_id = loop->set_idle(idle_id, bind_this(&socketbuf::call_cb_immed));
-		
 		if (cb_read) cb_read();
 		if (cb_write) cb_write();
 		
@@ -348,11 +346,11 @@ public:
 		
 		if (cb_write || (cb_read && !child))
 		{
-			if (!idle_id) idle_id = loop->set_idle(idle_id, bind_this(&socketbuf::call_cb_immed));
+			idle.set_idle(bind_this(&socketbuf::call_cb_immed));
 		}
 		else
 		{
-			if (idle_id) idle_id = loop->remove(idle_id);
+			idle.reset();
 		}
 	}
 	/*private*/ bool trysend(bool in_runloop)
@@ -394,11 +392,6 @@ public:
 		this->cb_read = cb_read;
 		this->cb_write = cb_write;
 		set_loop();
-	}
-	
-	~socketbuf()
-	{
-		if (idle_id) loop->remove(idle_id);
 	}
 };
 
@@ -510,64 +503,3 @@ socket* socketlisten::accept()
 
 socketlisten::~socketlisten() { if (loop) loop->set_fd(fd, NULL, NULL); close(this->fd); }
 #endif
-
-//what did I need this for?
-//#ifdef __unix__
-//namespace {
-//class socket_pipe : public socket {
-//public:
-//	socket_pipe(int read, int write, runloop* loop) : loop(loop), fd_read(read), fd_write(write) {}
-//	
-//	runloop* loop;
-//	
-//	int fd_read;
-//	int fd_write;
-//	
-//	function<void()> cb_read;
-//	function<void()> cb_write;
-//	
-//	int recv(arrayvieww<byte> data)
-//	{
-//		return fixret(::read(this->fd_read, (char*)data.ptr(), data.size()));
-//	}
-//	
-//	int send(arrayview<byte> data)
-//	{
-//		return fixret(::write(this->fd_write, (char*)data.ptr(), data.size()));
-//	}
-//	
-//	/*private*/ void on_readable(uintptr_t) { cb_read(); }
-//	/*private*/ void on_writable(uintptr_t) { cb_write(); }
-//	void callback(function<void()> cb_read, function<void()> cb_write)
-//	{
-//		this->cb_read = cb_read;
-//		this->cb_write = cb_write;
-//		
-//		if (fd_read >= 0) loop->set_fd(fd_read, cb_read ? bind_this(&socket_pipe::on_readable) : NULL, NULL);
-//		if (fd_write >= 0) loop->set_fd(fd_write, NULL, cb_write ? bind_this(&socket_pipe::on_writable) : NULL);
-//	}
-//	
-//	~socket_pipe()
-//	{
-//		if (fd_read >= 0)
-//		{
-//			loop->set_fd(fd_read, NULL, NULL);
-//			close(fd_read);
-//		}
-//		if (fd_write >= 0)
-//		{
-//			loop->set_fd(fd_write, NULL, NULL);
-//			close(fd_write);
-//		}
-//	}
-//};
-//} // close namespace
-//
-//socket* socket::create_from_pipe(int read, int write, runloop* loop)
-//{
-//	return new socket_pipe(read, write, loop);
-//}
-//
-//#include"../test.h"
-//test("","","") { test_expfail("figure out how to react to failure in socket_pipe::send"); }
-//#endif

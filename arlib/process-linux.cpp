@@ -51,7 +51,8 @@
 //  parent writes a byte and closes only once the PID is added to the list
 //
 //
-//conclusion: signal handlers suck
+//conclusion: signal handlers suck and should be deleted as soon as possible
+//  i.e. kernel 5.3 (september 2019), so I can use pidfd instead
 //
 //see also
 //https://www.macieira.org/blog/2012/07/forkfd-part-1-launching-processes-on-unix/
@@ -199,17 +200,26 @@ namespace sigchld {
 		on_readable(pipe[0]);
 	}
 }
+#ifdef ARLIB_TESTRUNNER
+int process::sigchld_fd_test_runner_only()
+{
+	synchronized(sigchld::mut)
+	{
+		return sigchld::pipe[0];
+	}
+}
+#endif
 
 
 //atoi is locale-aware, not gonna trust that to not call malloc or otherwise be stupid
 static int atoi_simple(const char * text)
 {
-	int ret = 0; // ignore overflows, fds don't go higher than a couple thousand before the kernel gets angry at you
+	int ret = 0; // ignore overflows, fds don't go higher than a few thousand before the kernel gets angry at you
 	while (*text)
 	{
-		if (*text<'0' || *text>'9') return -1;
+		if (*text < '0' || *text > '9') return -1;
 		ret *= 10;
-		ret += *text-'0';
+		ret += *text - '0';
 		text++;
 	}
 	return ret;
@@ -442,6 +452,14 @@ bool process::_on_sigchld_offloop()
 	int status;
 	if (waitpid(this->pid, &status, WNOHANG) < 0) return false;
 	
+#ifdef __x86_64__
+	if (WIFEXITED(status)) status = WEXITSTATUS(status);
+	//else keep it as is; an exit status is 16 bits, and high byte is either exit() arg or a signal number
+	//this means status is < 256 only if given signal zero, which isn't a thing
+#else
+#error check /usr/include/this_architecture/bits/waitstatus.h
+#endif
+	
 	if (onexit_cb)
 	{
 		onexit_cb->ref();
@@ -542,6 +560,8 @@ void process::input::terminate()
 {
 	if (pipe[1] != -1)
 	{
+		if (this->monitoring)
+			loop->set_fd(pipe[1], nullptr);
 		::close(pipe[1]);
 		pipe[1] = -1;
 	}

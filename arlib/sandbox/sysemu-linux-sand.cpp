@@ -22,7 +22,15 @@
 
 //__asm__(".intel_syntax");
 
-//gcc recognizes various function names and reads attributes (such as extern) from the headers, force it not to
+#define memset my_memset
+#define memcpy my_memcpy
+#define memcmp my_memcmp
+extern "C" { // have to do weird stuff to trick Clang
+void memset(void* ptr, int value, size_t num);
+void memcpy(void * dest, const void * src, size_t n);
+int memcmp(const void * ptr1, const void * ptr2, size_t n);
+}
+
 namespace mysand { namespace {
 #undef errno
 
@@ -48,30 +56,6 @@ public:
 };
 
 
-//have to redefine the entire libc, fun
-//(there's some copying between this and preload.cpp)
-static inline void memset(void* ptr, int value, size_t num)
-{
-	//compiler probably optimizes this
-	uint8_t* ptr_ = (uint8_t*)ptr;
-	for (size_t i=0;i<num;i++) ptr_[i] = value;
-}
-static inline void memcpy(void * dest, const void * src, size_t n)
-{
-	uint8_t* dest_ = (uint8_t*)dest;
-	uint8_t* src_ = (uint8_t*)src;
-	for (size_t i=0;i<n;i++) dest_[i] = src_[i];
-}
-static inline int memcmp(const void * ptr1, const void * ptr2, size_t n)
-{
-	uint8_t* ptr1_ = (uint8_t*)ptr1;
-	uint8_t* ptr2_ = (uint8_t*)ptr2;
-	for (size_t i=0;i<n;i++)
-	{
-		if (ptr1_[i] != ptr2_[i]) return ptr1_[i]-ptr2_[i];
-	}
-	return 0;
-}
 static inline void strcpy(char * dest, const char * src)
 {
 	while (*src) *dest++ = *src++;
@@ -491,7 +475,7 @@ static inline int getrusage(int who, struct rusage * usage)
 static inline int uname(struct utsname * buf)
 {
 	//same as Ubuntu 16.04.0 live CD (despite 16.04 not being able to run the sandbox, CLONE_NEWCGROUP requires kernel 4.6)
-	//nodename is considered private information, and child doesn't really need the rest either, just emulate the entire thing
+	//nodename is considered private information, and child doesn't really need the rest either. just hardcode something random
 	strcpy(buf->sysname, "Linux");
 	strcpy(buf->nodename, "ubuntu");
 	strcpy(buf->release, "4.4.0-21-generic");

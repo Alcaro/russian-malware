@@ -59,6 +59,17 @@ class random_t : public random_pcg {
 	};
 public:
 	
+	random_t()
+	{
+		uint64_t seed;
+		getentropy(&seed, sizeof(seed));
+		this->seed(seed);
+	}
+	random_t(uint64_t seed)
+	{
+		this->seed(seed);
+	}
+	
 	randresult operator()() { return randresult(*this); }
 	uint32_t rand_mod(uint32_t limit)
 	{

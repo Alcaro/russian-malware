@@ -1,5 +1,8 @@
 #include "runloop.h"
 #include "set.h"
+#ifdef ARLIB_TESTRUNNER
+#include "process.h"
+#endif
 #include <time.h>
 #include "test.h" // for the runloop-is-empty check
 
@@ -17,20 +20,23 @@ public:
 	int epoll_fd;
 	bool exited = false;
 	
-#ifdef ARLIB_TEST
-	bool can_exit = false;
-#endif
-	
 	struct fd_cbs {
+#ifdef ARLIB_TESTRUNNER
+		char* valgrind_dummy; // an uninitialized malloc(1), used to print stack trace of the guilty allocation
+#endif
 		function<void(uintptr_t)> cb_read;
 		function<void(uintptr_t)> cb_write;
 	};
 	map<int,fd_cbs> fdinfo;
 	
 	struct timer_cb {
+#ifdef ARLIB_TESTRUNNER
+		char* valgrind_dummy;
+#endif
 		unsigned id; // -1 if marked for removal
 		unsigned ms;
 		bool repeat;
+		bool finished = false;
 		struct timespec next;
 		function<void()> cb;
 	};
@@ -80,9 +86,13 @@ public:
 		epoll_fd = epoll_create1(EPOLL_CLOEXEC);
 	}
 	
-	uintptr_t set_fd(uintptr_t fd, function<void(uintptr_t)> cb_read, function<void(uintptr_t)> cb_write) override
+	void set_fd(uintptr_t fd, function<void(uintptr_t)> cb_read, function<void(uintptr_t)> cb_write) override
 	{
 		fd_cbs& cb = fdinfo.get_create(fd);
+#ifdef ARLIB_TESTRUNNER
+		if (!cb.valgrind_dummy)
+			cb.valgrind_dummy = malloc(1);
+#endif
 		cb.cb_read  = cb_read;
 		cb.cb_write = cb_write;
 		
@@ -97,13 +107,15 @@ public:
 		else
 		{
 			epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, NULL);
+#ifdef ARLIB_TESTRUNNER
+			free(cb.valgrind_dummy);
+#endif
 			fdinfo.remove(fd);
 		}
-		return fd;
 	}
 	
 	
-	uintptr_t set_timer_rel(unsigned ms, bool repeat, function<void()> callback) override
+	uintptr_t raw_set_timer_rel(unsigned ms, bool repeat, function<void()> callback) override
 	{
 		unsigned timer_id = 1;
 		for (size_t i=0;i<timerinfo.size();i++)
@@ -116,44 +128,32 @@ public:
 		}
 		
 		timer_cb& timer = timerinfo.append();
+#ifdef ARLIB_TESTRUNNER
+		timer.valgrind_dummy = malloc(1);
+#endif
 		timer.repeat = repeat;
 		timer.id = timer_id;
 		timer.ms = ms;
 		timer.cb = callback;
 		timespec_now(&timer.next);
 		timespec_add(&timer.next, ms);
-		return -(intptr_t)timer_id;
+		return timer_id;
 	}
 	
 	
-	uintptr_t remove(uintptr_t id) override
+	void raw_timer_remove(uintptr_t id) override
 	{
-		if (id == 0) return 0;
+		if (id == 0) return;
 		
-		intptr_t id_s = id;
-		if (id_s >= 0)
+		for (size_t i=0;i<timerinfo.size();i++)
 		{
-			if (!fdinfo.contains(id_s)) abort();
-			
-			int fd = id_s;
-			epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, NULL);
-			fdinfo.remove(fd);
-		}
-		else
-		{
-			unsigned t_id = -id_s;
-			for (size_t i=0;i<timerinfo.size();i++)
+			if (timerinfo[i].id == id)
 			{
-				if (timerinfo[i].id == t_id)
-				{
-					timerinfo[i].id = -1;
-					return 0;
-				}
+				timerinfo[i].id = -1;
+				return;
 			}
-			abort(); // happens if that timer doesn't exist
 		}
-		
-		return 0;
+		abort(); // happens if that timer doesn't exist
 	}
 	
 	
@@ -173,12 +173,17 @@ public:
 			
 			if (timer.id == (unsigned)-1)
 			{
+#ifdef ARLIB_TESTRUNNER
+				free(timer.valgrind_dummy);
+#endif
 				timerinfo.remove(i);
 				
 				//funny code to avoid (size_t)-1 being greater than timerinfo.size()
 				if (i == timerinfo.size()) break;
 				goto again;
 			}
+			
+			if (timer.finished) continue;
 			
 			int next_ms = timespec_sub(&timer.next, &now);
 			if (next_ms <= 0)
@@ -190,7 +195,7 @@ public:
 				
 				timer.cb(); // WARNING: May invalidate 'timer'. timerinfo[i] remains valid.
 				next = 0; // ensure it returns quickly, since it did something
-				if (!timerinfo[i].repeat) timerinfo[i].id = -1;
+				if (!timerinfo[i].repeat) timerinfo[i].finished = true;
 			}
 			
 			if (next_ms < next) next = next_ms;
@@ -201,7 +206,7 @@ public:
 		
 		if (wait && fdinfo.size() == 0 && next == -1)
 		{
-#ifdef ARLIB_TEST
+#ifdef ARLIB_TESTRUNNER
 			assert(!"runloop is empty and will block forever");
 #else
 			abort();
@@ -245,22 +250,12 @@ public:
 	
 	void enter() override
 	{
-#ifdef ARLIB_TEST
-		can_exit = true;
-#endif
 		exited = false;
 		while (!exited) step(true);
-#ifdef ARLIB_TEST
-		can_exit = false;
-#endif
 	}
 	
 	void exit() override
 	{
-#ifdef ARLIB_TEST
-		assert(can_exit);
-		//assert(!exited);
-#endif
 		exited = true;
 	}
 	
@@ -269,22 +264,58 @@ public:
 #ifdef ARLIB_THREAD
 		if (submit_fds[0] >= 0)
 		{
-			//enable if I add a check that runloop is empty before destruction
-			//for now, not needed
-			//this->set_fd(submit_fds[0], NULL, NULL);
+			this->set_fd(submit_fds[0], NULL, NULL);
 			close(submit_fds[0]);
 			close(submit_fds[1]);
 		}
 #endif
+#ifdef ARLIB_TESTRUNNER
+		assert_empty();
+#endif
 		close(epoll_fd);
 	}
+	
+#ifdef ARLIB_TESTRUNNER
+	void assert_empty() override
+	{
+		bool is_empty = true;
+	again:
+		for (auto& pair : fdinfo)
+		{
+			int fd = pair.key;
+			if (fd != process::sigchld_fd_test_runner_only())
+			{
+				if (RUNNING_ON_VALGRIND)
+					free(pair.value.valgrind_dummy); // intentional double free, to make valgrind print a stack trace of the malloc
+				else
+					printf("ERROR: fd %d left in runloop\n", pair.key);
+				is_empty = false;
+			}
+			set_fd(pair.key, nullptr, nullptr);
+			goto again;
+		}
+		while (timerinfo.size())
+		{
+			if (timerinfo[0].id != (unsigned)-1)
+			{
+				if (RUNNING_ON_VALGRIND)
+					free(timerinfo[0].valgrind_dummy); // intentional double free
+				else
+					printf("ERROR: timer left in runloop\n");
+			}
+			free(timerinfo[0].valgrind_dummy);
+			timerinfo.remove(0);
+		}
+		assert(is_empty);
+	}
+#endif
 };
 }
 
 runloop* runloop::create()
 {
 	runloop* ret = new runloop_linux();
-#ifdef ARLIB_TEST
+#ifdef ARLIB_TESTRUNNER
 	ret = runloop_wrap_blocktest(ret);
 #endif
 	return ret;
@@ -293,11 +324,11 @@ runloop* runloop::create()
 
 
 
-uintptr_t runloop::set_timer_abs(time_t when, function<void()> callback)
+uintptr_t runloop::raw_set_timer_abs(time_t when, function<void()> callback)
 {
 	time_t now = time(NULL);
 	unsigned ms = (now < when ? (when-now)*1000 : 0);
-	return set_timer_rel(ms, false, callback);
+	return raw_set_timer_rel(ms, false, callback);
 }
 
 #ifdef ARGUI_NONE
@@ -315,9 +346,10 @@ runloop* runloop::global()
 #include "os.h"
 #include "thread.h"
 
-#ifdef ARLIB_TEST
+#ifdef ARLIB_TESTRUNNER
 class runloop_blocktest : public runloop {
 	runloop* loop;
+	bool can_exit = false;
 	
 	uint64_t us = 0;
 	uint64_t loopdetect = 0;
@@ -351,40 +383,39 @@ class runloop_blocktest : public runloop {
 	}
 	
 #ifndef _WIN32
-	uintptr_t set_fd(uintptr_t fd, function<void(uintptr_t)> cb_read, function<void(uintptr_t)> cb_write) override
+	void set_fd(uintptr_t fd, function<void(uintptr_t)> cb_read, function<void(uintptr_t)> cb_write) override
 	{
 		function<void(uintptr_t)> cb_read_w;
 		function<void(uintptr_t)> cb_write_w;
 		if (cb_read)  cb_read_w  = bind_lambda([this, cb_read ](uintptr_t fd){ this->do_cb(cb_read,  fd); });
 		if (cb_write) cb_write_w = bind_lambda([this, cb_write](uintptr_t fd){ this->do_cb(cb_write, fd); });
-		return loop->set_fd(fd, std::move(cb_read_w), std::move(cb_write_w));
+		loop->set_fd(fd, std::move(cb_read_w), std::move(cb_write_w));
 	}
 #endif
 	
-	uintptr_t set_timer_rel(unsigned ms, bool repeat, function<void()> callback) override
+	uintptr_t raw_set_timer_rel(unsigned ms, bool repeat, function<void()> callback) override
 	{
 		function<void()> callback_w = bind_lambda([](){});
 		if (callback) callback_w = bind_lambda([this, callback]() { this->do_cb(callback); });
-		if (repeat) return loop->set_timer_loop(ms, callback_w);
-		else return loop->set_timer_once(ms, callback_w);
+		if (repeat) return loop->raw_set_timer_repeat(ms, callback_w);
+		else return loop->raw_set_timer_once(ms, callback_w);
 	}
-	uintptr_t set_idle(function<void()> callback) override
+	uintptr_t raw_set_idle(function<void()> callback) override
 	{
 		function<void()> callback_w = bind_lambda([](){});
 		if (callback) callback_w = bind_lambda([this, callback]() { this->do_cb(callback); });
-		return loop->set_idle(callback_w);
+		return loop->raw_set_idle(callback_w);
 	}
-	uintptr_t remove(uintptr_t id) override { return loop->remove(id); }
-	void enter() override { end(); loop->enter(); begin(); }
+	void raw_timer_remove(uintptr_t id) override { loop->raw_timer_remove(id); }
 	
 #ifdef ARLIB_THREAD
 	void prepare_submit() override { loop->prepare_submit(); }
 	void submit(function<void()>&& cb) override { loop->submit(std::move(cb)); }
 #endif
 	
-	void exit() override { loop->exit(); }
+	void enter() override { can_exit = true; end(); loop->enter(); begin(); can_exit = false; }
+	void exit() override { assert(can_exit); loop->exit(); }
 	void step(bool wait) override { end(); loop->step(wait); begin(); }
-	
 	
 public:
 	runloop_blocktest(runloop* inner) : loop(inner)
@@ -401,6 +432,11 @@ public:
 	{
 		us = time_us_ne();
 		loopdetect = 0;
+	}
+	
+	void assert_empty() override
+	{
+		loop->assert_empty();
 	}
 };
 
@@ -423,25 +459,26 @@ static void test_runloop(bool is_global)
 	runloop* loop = (is_global ? runloop::global() : runloop::create());
 	
 	//must be before the other one, loop->enter() must be called to ensure it doesn't actually run
-	loop->remove(loop->set_timer_once(50, bind_lambda([]() { assert_unreachable(); })));
+	loop->raw_timer_remove(loop->raw_set_timer_once(50, bind_lambda([]() { assert_unreachable(); })));
 	
 	//don't put this scoped, id is used later
-	uintptr_t id = loop->set_timer_loop(20, bind_lambda([&]()
+	uintptr_t id = loop->raw_set_timer_repeat(20, bind_lambda([&]()
 		{
 			assert_neq_ret(id, 0, true);
-			uintptr_t id_copy = id; // the 'id' reference gets freed by loop->remove(), keep a copy
+			uintptr_t id_copy = id; // the 'id' reference gets freed by loop->remove(), reset it before that and keep a copy
 			id = 0;
-			loop->remove(id_copy);
+			loop->raw_timer_remove(id_copy);
 		}));
 	assert_neq(id, 0); // no thinking -1 is the highest ID so 0 should be used
 	
 	{
 		int64_t start = time_ms_ne();
 		int64_t end = start;
-		loop->set_timer_once(100, bind_lambda([&]() { end = time_ms_ne(); loop->exit(); }));
+		uint64_t id2 = loop->raw_set_timer_once(100, bind_lambda([&]() { end = time_ms_ne(); loop->exit(); }));
 		loop->enter();
 		
 		assert_range(end-start, 75,200);
+		loop->raw_timer_remove(id2);
 	}
 	
 	assert_eq(id, 0);
@@ -452,7 +489,7 @@ static void test_runloop(bool is_global)
 		uint64_t start_ms = time_ms_ne();
 		function<void()> threadproc = bind_lambda([loop, start_ms]()
 			{
-				while (start_ms+100 > time_ms_ne()) {}
+				while (start_ms+100 > time_ms_ne()) usleep(1000);
 				loop->submit(bind_lambda([loop]()
 					{
 						loop->exit();
@@ -475,8 +512,34 @@ test("global runloop", "function,array,set,time", "runloop")
 {
 	test_runloop(true);
 }
+class loop_tester {
+public:
+	autoptr<runloop> loop;
+	DECL_TIMER(t1, loop_tester);
+	DECL_TIMER(t2, loop_tester);
+};
+class loop_tester2 {
+public:
+	runloop* p_loop;
+	runloop* loop() { return p_loop; }
+	DECL_TIMER(t3, loop_tester2);
+	DECL_TIMER(t4, loop_tester2);
+};
 test("private runloop", "function,array,set,time", "runloop")
 {
 	test_runloop(false);
+	
+	loop_tester holder;
+	loop_tester2 holder2;
+	holder.loop = runloop::create();
+	holder2.p_loop = holder.loop;
+	
+	int n = 0;
+	holder.t1.set_repeat(20, [&](){ n++; });
+	holder.t2.set_once(50, [&](){ holder.loop->exit(); });
+	holder2.t3.set_repeat(10, [&](){ n+=10; holder2.t3.reset(); });
+	holder2.t4.set_repeat(30, [&](){ n+=100; });
+	holder.loop->enter();
+	assert_eq(n, 112);
 }
 test("epoll","","") { test_expfail("replace epoll with normal poll, epoll doesn't help at our small scale"); }

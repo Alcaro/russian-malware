@@ -67,7 +67,7 @@ void HTML::entity_decode(string& out, cstring& in, bool isattr)
 				    (in[entlen_cons]=='=' ||     // and the next input character is either a U+003D EQUALS SIGN character (=) 
 				      isalnum(in[entlen_cons]))) // or an ASCII alphanumeric,
 				{                                // then, for historical reasons,
-					goto fail;                     // flush code points consumed as a character reference and switch to the return state
+					goto fail;                   // flush code points consumed as a character reference and switch to the return state
 				}
 			}
 		}

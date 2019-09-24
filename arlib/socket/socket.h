@@ -44,12 +44,6 @@ public:
 	//Like the above, but does not validate the certificate. Generally a bad idea. Does not exist under all SSL backends.
 	static socket* wrap_ssl_raw_noverify(socket* inner, runloop* loop);
 	
-#ifdef __unix__
-	//Acts like a socket. fds can be -1, meaning that end will never report activity. Having both be -1 is allowed but pointless.
-	//Takes ownership of the fds.
-	static socket* create_from_pipe(int read, int write, runloop* loop);
-#endif
-	
 	
 	enum {
 		e_lazy_dev = -1, // Whoever implemented this socket handler was lazy. Treat it as e_broken or an unknown error.

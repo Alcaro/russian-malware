@@ -128,7 +128,7 @@ class set : public linqbase<set<T>> {
 		{
 			grow();
 			pos = find_pos_insert(item); // recalculate this, grow() may have moved it
-			//do not move grow() earlier, it invalidates references and get_create(item_that_exists) is not allowed to do that
+			//do not move grow() earlier; it invalidates references, get_create(item_that_exists) is not allowed to do that
 			
 			new(&m_data[pos]) T(item);
 			m_valid[pos] = true;
@@ -264,7 +264,7 @@ public:
 	//messing with the set during iteration half-invalidates all iterators
 	//a half-invalid iterator may return values you've already seen and may skip values, but will not crash or loop forever
 	//exception: you may not dereference a half-invalid iterator, use operator++ first
-	//as such, 'for (T i : my_set) { my_set.remove(i); }' is safe (though may not remove everything)
+	//'for (T i : my_set) { my_set.remove(i); }' is safe, though it may not necessarily remove everything
 	iterator begin() const { return iterator(this, 0); }
 	iterator end() const { return iterator(this, -1); }
 
@@ -360,7 +360,7 @@ public:
 		else return std::move(def);
 	}
 	template<typename Tk2> // sizeof && because not using Tk2 is a hard error, not a SFINAE
-	typename std::enable_if<sizeof(Tk2) && std::is_same_v<Tvalue, string>, cstring>::type
+	std::enable_if_t<sizeof(Tk2) && std::is_same_v<Tvalue, string>, cstring>
 	get_or(const Tk2& key, const char * def) const
 	{
 		node* ret = items.get_or_null(key);

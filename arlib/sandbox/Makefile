@@ -2,14 +2,6 @@ ifneq ($(OS),linux)
   $(error sandbox is only supported on Linux)
 endif
 
-ifeq ($(CC_FAMILY),clang)
-# Clang 6.0.0 emits 'call memset@PLT' all over (or 'call memset' without -fpic, but that has its own issues).
-# There is no PLT in the emulator, and no flag to not emit memset. -fno-builtin-memset exists, but doesn't help.
-# As such, Clang is currently unusable for the purpose of building the sandbox emulator.
-# Broker/launcher are untested, probably fine.
-$(error Clang cannot be used to build the sandbox)
-endif
-
 SOURCES_ARLIB += arlib/sandbox/*.cpp
 DEFINES += ARLIB_SANDBOX
 
@@ -29,16 +21,16 @@ PRELOADER_CFLAGS += -fvisibility=hidden
 #glibc seems built without stack protector anyways, and the low amount of stack used by this thing is easy to audit by hand
 PRELOADER_CFLAGS += -fno-stack-protector -fno-exceptions -fno-rtti -fno-jump-tables
 ifeq ($(CC_FAMILY),gcc)
-PRELOADER_CFLAGS += -fno-sync-libcalls
+  PRELOADER_CFLAGS += -fno-sync-libcalls
 endif
 
 #AT&T assembly is ugly
 #yes, there's only ~7 lines of asm in this thing, AT&T is still ugly
 PRELOADER_CFLAGS += -masm=intel
 ifeq ($(CC_FAMILY),clang)
-#Clang's integrated assembler doesn't support .intel_syntax prefix
-#if that's fixed, Clang will also need a __asm__(".intel_syntax") early in the C++
-#(under an ifdef, gcc doesn't like that)
+#TODO: reenable integrated-as once Clang's integrated assembler supports mov %eax,42 (rather than just mov eax,42)
+#as of Clang 6.0.0, it does not
+#(Clang will also need a __asm__(".intel_syntax") early in the C++ - under an ifdef, gcc doesn't like that)
 PRELOADER_CFLAGS += -fno-integrated-as
 endif
 
@@ -75,6 +67,7 @@ obj/sand-preload-$(OBJNAME).elf: $(PRELOADER_OBJS) | obj
 	$(Q)$(CXX) -D SANDBOX_INTERNAL $(PRELOADER_LFLAGS) $(PRELOADER_OBJS) -o $@
 #ensure failure if this thing isn't 100% static
 #requires .DELETE_ON_ERROR, which is set in Arlib's main makefile
-	$(Q)objdump -R $@ | grep -A500 -E 'DYNAMIC RELOCATION RECORDS$$' || true
-	$(Q)objdump -R $@ | grep -qF 'DYNAMIC RELOCATION RECORDS (none)'
+	$(Q)objdump -R $@ 2>&1 | grep -A500 -E 'DYNAMIC RELOCATION RECORDS$$' || true
+	$(Q)objdump -R $@ 2>&1 | grep -qF 'DYNAMIC RELOCATION RECORDS (none)' || \
+	    objdump -R $@ 2>&1 | grep -qF 'not a dynamic object'
 $(call OBJMANGLE,ARLIB,arlib/sandbox/preload-linux-sand.cpp): arlib/sandbox/preload-linux-sand.cpp obj/sand-preload-$(OBJNAME).elf | obj

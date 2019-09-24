@@ -45,7 +45,7 @@ public:
 	~DNS()
 	{
 		for (auto& pair : queries)
-			loop->remove(pair.value.timeout_id);
+			loop->raw_timer_remove(pair.value.timeout_id);
 	}
 	
 private:

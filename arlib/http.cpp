@@ -1,7 +1,5 @@
 #ifdef ARLIB_SOCKET
 #include "http.h"
-#include "test.h"
-#include "stringconv.h"
 
 bool HTTP::parseUrl(cstring url, bool relative, location& out)
 {
@@ -11,7 +9,7 @@ bool HTTP::parseUrl(cstring url, bool relative, location& out)
 	while (islower(url[pos])) pos++;
 	if (url[pos]==':')
 	{
-		out.proto = url.substr(0, pos);
+		out.scheme = url.substr(0, pos);
 		url = url.substr(pos+1, ~0);
 	}
 	else if (!relative) return false;
@@ -60,10 +58,11 @@ void HTTP::send(req q, function<void(rsp)> callback)
 {
 	rsp_i& i = requests.append();
 	i.callback = callback;
+	i.n_tries_left = ((q.flags & req::f_no_retry) ? 1 : 3);
 	rsp& r = i.r;
 	r.q = std::move(q);
 	
-	if (!lasthost.proto)
+	if (!lasthost.scheme)
 	{
 		if (!parseUrl(r.q.url, false, this->lasthost)) return resolve_err_v(requests.size()-1, rsp::e_bad_url);
 	}
@@ -71,13 +70,15 @@ void HTTP::send(req q, function<void(rsp)> callback)
 	{
 		location loc;
 		if (!parseUrl(r.q.url, false, loc)) return resolve_err_v(requests.size()-1, rsp::e_bad_url);
-		if (loc.proto != lasthost.proto || loc.domain != lasthost.domain || loc.port != lasthost.port)
+		if (loc.scheme != lasthost.scheme || loc.domain != lasthost.domain || loc.port != lasthost.port)
 		{
 			return resolve_err_v(requests.size()-1, rsp::e_different_url);
 		}
 		lasthost.path = loc.path;
 	}
 	
+	if (requests.size() == 1)
+		reset_limits();
 	activity(); // to create socket and compile request
 }
 
@@ -104,7 +105,7 @@ again:
 	if (!sock) return;
 	
 	rsp_i& ri = requests[next_send];
-	const rsp& r = ri.r;
+	rsp& r = ri.r;
 	if (r.status == rsp::e_canceled)
 	{
 		requests.remove(next_send);
@@ -114,7 +115,18 @@ again:
 	
 	cstring method = q.method;
 	if (!method) method = (q.body ? "POST" : "GET");
-	if (method != "GET" && next_send != 0) return;
+	if (method != "GET" && next_send != 0)
+		return;
+	
+	if (ri.n_tries_left == 1 && next_send == 0)
+		return;
+	
+	if (ri.n_tries_left-- <= 0)
+	{
+		if (r.status >= 0) r.status = rsp::e_broken;
+		RETURN_IF_CALLBACK_DESTRUCTS(resolve(next_send));
+		goto again;
+	}
 	
 	location loc;
 	parseUrl(q.url, false, loc); //known to succeed, it was tested in send()
@@ -136,8 +148,8 @@ again:
 	}
 	
 	if (!httpHost) tosend.push("Host: ", loc.domain, "\r\n");
-	if (method!="GET" && !httpContentLength) tosend.push("Content-Length: ", tostring(q.body.size()), "\r\n");
-	if (method!="GET" && !httpContentType)
+	if (method != "GET" && !httpContentLength) tosend.push("Content-Length: ", tostring(q.body.size()), "\r\n");
+	if (method != "GET" && !httpContentType)
 	{
 		if (q.body && (q.body[0] == '[' || q.body[0] == '{'))
 			tosend.push("Content-Type: application/json\r\n");
@@ -151,12 +163,9 @@ again:
 	tosend.push(q.body);
 	
 	bool ok = true;
-	if (ok && (q.flags & req::f_no_retry) && ri.sent_once) ok = false;
 	if (ok && sock->send(tosend.pull_buf( )) < 0) ok = false;
 	if (ok && sock->send(tosend.pull_next()) < 0) ok = false;
 	if (!ok) sock = NULL;
-	
-	ri.sent_once = true;
 	
 	next_send++;
 }
@@ -181,7 +190,7 @@ void HTTP::do_timeout()
 		requests[0].r.status = rsp::e_timeout;
 	
 	sock_cancel();
-	this->timeout_id = 0;
+	timeout.reset();
 	
 	activity(); // can delete 'this', don't do anything fancy afterwards
 }
@@ -191,7 +200,7 @@ void HTTP::reset_limits()
 	this->bytes_in_req = 0;
 	if (requests.size() != 0)
 	{
-		this->timeout_id = loop->set_timer_once(this->timeout_id, this->requests[0].r.q.limit_ms, bind_this(&HTTP::do_timeout));
+		timeout.set_once(this->requests[0].r.q.limit_ms, bind_this(&HTTP::do_timeout));
 	}
 }
 
@@ -201,6 +210,7 @@ void HTTP::activity()
 newsock:
 	if (requests.size() == 0)
 	{
+	discard_sock:
 		if (!sock) return;
 		
 		uint8_t ignore[1];
@@ -214,8 +224,8 @@ newsock:
 		{
 			//lasthost.proto/domain/port never changes between requests
 			int defport;
-			if (lasthost.proto == "http") defport = 80;
-			else if (lasthost.proto == "https") defport = 443;
+			if (lasthost.scheme == "http") defport = 80;
+			else if (lasthost.scheme == "https") defport = 443;
 			else { RETURN_IF_CALLBACK_DESTRUCTS(resolve_err_v(0, rsp::e_bad_url)); goto newsock; }
 			sock = cb_mksock(defport==443, lasthost.domain, lasthost.port ? lasthost.port : defport, loop);
 		}
@@ -228,14 +238,16 @@ newsock:
 		reset_limits();
 	}
 	
-	try_compile_req();
 	if (!sock) goto newsock;
+	try_compile_req();
 	
 	array<byte> newrecv;
 	if (sock->recv(newrecv) < 0) { sock = NULL; goto newsock; }
 	this->bytes_in_req += newrecv.size();
 	
 again:
+	if (requests.size() == 0)
+		goto discard_sock;
 	rsp& r = requests[0].r;
 	
 	if (r.status == rsp::e_timeout || this->bytes_in_req > r.q.limit_bytes)
@@ -381,24 +393,22 @@ req_finish:
 	goto again;
 }
 
-HTTP::~HTTP()
-{
-	loop->remove(this->timeout_id);
-}
+#include "test.h"
+#include "os.h"
 
-static void test_url(cstring url, cstring url2, cstring proto, cstring domain, int port, cstring path)
+static void test_url(cstring url, cstring url2, cstring scheme, cstring domain, int port, cstring path)
 {
 	HTTP::location loc;
 	assert(HTTP::parseUrl(url, false, loc));
 	if (url2) assert(HTTP::parseUrl(url2, true, loc));
-	assert_eq(loc.proto, proto);
+	assert_eq(loc.scheme, scheme);
 	assert_eq(loc.domain, domain);
 	assert_eq(loc.port, port);
 	assert_eq(loc.path, path);
 }
-static void test_url(cstring url, cstring proto, cstring domain, int port, cstring path)
+static void test_url(cstring url, cstring scheme, cstring domain, int port, cstring path)
 {
-	test_url(url, "", proto, domain, port, path);
+	test_url(url, "", scheme, domain, port, path);
 }
 static void test_url_fail(cstring url, cstring url2)
 {
@@ -416,9 +426,11 @@ test("URL parser", "", "http")
 	testcall(test_url("http://example.com/foo/bar.html?baz", "?quux",         "http", "example.com", 0, "/foo/bar.html?quux"));
 	testcall(test_url("http://example.com:80/",                               "http", "example.com", 80, "/"));
 	testcall(test_url("http://example.com:80/", "http://example.com:8080/",   "http", "example.com", 8080, "/"));
-	testcall(test_url_fail("http://example.com:80/", "")); // if changing this, also change assert in HTTP::try_compile_req()
+	testcall(test_url_fail("http://example.com:80/", ""));
+	testcall(test_url("http://a.com/foo/bar.html?baz#quux",  "#corge",                "http", "a.com", 0, "/foo/bar.html?baz#corge"));
 	testcall(test_url("http://a.com/foo/bar.html?baz",       "#corge",                "http", "a.com", 0, "/foo/bar.html?baz#corge"));
 	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "http://b.com/foo.html", "http", "b.com", 0, "/foo.html#corge"));
+	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "//b.com/bar/foo.html",  "http", "b.com", 0, "/bar/foo.html#corge"));
 	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "/bar/foo.html",         "http", "a.com", 0, "/bar/foo.html#corge"));
 	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "foo.html",              "http", "a.com", 0, "/foo/foo.html#corge"));
 	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "?quux",                 "http", "a.com", 0, "/foo/bar.html?quux#corge"));
@@ -427,6 +439,7 @@ test("URL parser", "", "http")
 	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "foo.html#grault",       "http", "a.com", 0, "/foo/foo.html#grault"));
 	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "?quux#grault",          "http", "a.com", 0, "/foo/bar.html?quux#grault"));
 	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "#grault",               "http", "a.com", 0, "/foo/bar.html?baz#grault"));
+	testcall(test_url("http://a.com:8080/",                  "//b.com/",              "http", "b.com", 0, "/"));
 }
 
 test("HTTP", "tcp,ssl", "http")
@@ -434,30 +447,41 @@ test("HTTP", "tcp,ssl", "http")
 	test_skip("too slow");
 	
 	autoptr<runloop> loop = runloop::create();
+	//runloop* loop = runloop::global();
 	HTTP::rsp r;
 	//ugly, but the alternative is nesting lambdas forever or busywait. and I need a way to break it anyways
 	function<void(HTTP::rsp)> break_runloop = bind_lambda([&](HTTP::rsp inner_r) { r = std::move(inner_r); loop->exit(); });
 	
-#define URL "http://media.smwcentral.net/Alcaro/test.txt"
-#define URL2 "http://media.smwcentral.net/Alcaro/test2.txt"
-#define URL3 "http://media.smwcentral.net/Alcaro/test3.txt"
-#define URL4 "http://media.smwcentral.net/Alcaro/test4.txt"
+	//TODO: some of these tests are redundant and slow; find and purge, or parallelize
+	
+#define URL "https://floating.muncher.se/arlib/test.txt"
+#define URL2 "https://floating.muncher.se/arlib/test2.txt"
+#define URL3 "https://floating.muncher.se/arlib/test3.txt"
+#define URL4 "https://floating.muncher.se/arlib/test4.txt"
 #define CONTENTS "hello world"
 #define CONTENTS2 "hello world 2"
 #define CONTENTS3 "hello world 3"
 #define CONTENTS4 "hello world 4"
 //#define T puts(tostring(__LINE__));
+//#define T printf("%d %lu\n",__LINE__, tx.ms_reset());
+//timer tx;
 //#define T if (__LINE__ >= 590)
 #ifndef T
 #define T /* */
 #endif
 	T {
+		// most tests are https, not many sites offer http anymore
 		HTTP h(loop);
 		
-		h.send(HTTP::req(URL), break_runloop);
+		h.send(HTTP::req("http://floating.muncher.se/"), break_runloop);
 		loop->enter();
-		assert_eq(r.status, 200);
-		assert_eq(r.text(), CONTENTS);
+		assert_eq(r.status, 301);
+		assert_eq(r.text(),
+			"<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\n"
+			"<html><head>\n<title>301 Moved Permanently</title>\n</head><body>\n"
+			"<h1>Moved Permanently</h1>\n<p>The document has moved <a href=\"https://floating.muncher.se/\">here</a>.</p>\n"
+			"<hr>\n<address>Apache/2.4.38 (Debian) Server at floating.muncher.se Port 80</address>\n</body></html>\n");
+		assert_eq(r.header("Location"), "https://floating.muncher.se/");
 	}
 	
 	T {
@@ -467,29 +491,8 @@ test("HTTP", "tcp,ssl", "http")
 		loop->enter();
 		assert_eq(r.status, 200);
 		assert_eq(r.text(), CONTENTS);
-		
-		h.send(HTTP::req(URL), break_runloop);
-		loop->enter();
-		assert_eq(r.status, 200);
-		assert_eq(r.text(), CONTENTS);
 	}
 	
-	T {
-		HTTP h(loop);
-		
-		T h.send(HTTP::req(URL), break_runloop);
-		T h.send(HTTP::req(URL), break_runloop);
-		
-		T loop->enter();
-		assert_eq(r.status, 200);
-		T assert_eq(r.text(), CONTENTS);
-		
-		T loop->enter();
-		assert_eq(r.status, 200);
-		T assert_eq(r.text(), CONTENTS);
-	}
-	
-	//ensure it doesn't mix up the URLs it's supposed to request
 	T {
 		HTTP h(loop);
 		
@@ -525,9 +528,8 @@ test("HTTP", "tcp,ssl", "http")
 		h.send(HTTP::req(URL),  break_runloop_testc);
 		h.send(HTTP::req(URL2), break_runloop_testc2);
 		h.send(HTTP::req(URL3), break_runloop_testc3);
-		h.send(HTTP::req(URL4), break_runloop_testc4);
-		
 		loop->enter();
+		h.send(HTTP::req(URL4), break_runloop_testc4);
 		loop->enter();
 		loop->enter();
 		loop->enter();
@@ -535,12 +537,16 @@ test("HTTP", "tcp,ssl", "http")
 	
 	T {
 		HTTP::req rq;
-		rq.url = "http://media.smwcentral.net/Alcaro/test.php";
-		rq.headers.append("Host: media.smwcentral.net");
+		rq.url = "https://floating.muncher.se/arlib/test.php";
+		// <?php
+		// header("Content-Type: application/json");
+		// echo json_encode(["post" => file_get_contents("php://input")]);
+		rq.headers.append("Host: floating.muncher.se");
 		rq.body.append('x');
 		
 		HTTP h(loop);
 		h.send(rq, break_runloop);
+		rq.body.append('y');
 		h.send(rq, break_runloop);
 		
 		loop->enter();
@@ -549,7 +555,7 @@ test("HTTP", "tcp,ssl", "http")
 		
 		loop->enter();
 		assert_eq(r.status, 200);
-		assert_eq(r.text(), "{\"post\":\"x\"}");
+		assert_eq(r.text(), "{\"post\":\"xy\"}");
 	}
 	
 	T {
@@ -600,20 +606,17 @@ test("HTTP", "tcp,ssl", "http")
 	}
 	
 	T {
-		//throw in https for no reason
 		HTTP h(loop);
-		h.send(HTTP::req("https://www.smwcentral.net/?p=404"), break_runloop);
+		h.send(HTTP::req("https://floating.muncher.se/"), break_runloop);
 		
 		loop->enter();
-		assert_eq(r.status, 404);
+		assert_eq(r.status, 200);
 		assert_gt(r.body.size(), 8000);
 		assert_eq(r.body[0], '<');
-		assert_eq(r.body[r.body.size()-1], '>');
-	}
-	
-	T {
-		HTTP h(loop);
-		HTTP::req rq("http://www.smwcentral.net/?p=404");
+		assert_eq(r.body[r.body.size()-2], '>');
+		assert_eq(r.body[r.body.size()-1], '\n');
+		
+		HTTP::req rq("https://floating.muncher.se/");
 		rq.limit_bytes = 8000;
 		h.send(rq, break_runloop);
 		
@@ -626,35 +629,76 @@ test("HTTP", "tcp,ssl", "http")
 	
 	T {
 		HTTP h(loop);
-		h.send(HTTP::req("https://www.smwcentral.net/ajax.php?a=getmap&m=yiram"), break_runloop);
+		h.send(HTTP::req("https://floating.muncher.se/arlib/large.php"), break_runloop);
+		// <?php
+		// for ($i=0;$i<10000;$i++) echo $i;
 		
 		loop->enter();
 		assert_eq(r.status, 200);
 		assert_eq(r.header("Transfer-Encoding"), "chunked");
 		assert_gte(r.body.size(), 2000);
-		assert_eq(r.body[0], '[');
-		assert_eq(r.body[r.body.size()-1], ']');
+		assert_eq(r.body[0], '0');
+		assert_eq(r.body[r.body.size()-1], '9');
 	}
 	
 	T {
+		HTTP::form f;
+		f.value("foo", "bar");
+		f.value("bar", "baz");
+		f.file("baz", "a.txt", cstring("hello world").bytes());
+		f.file("quux", "b.txt", cstring("test test 123").bytes());
+		
+		HTTP::req rq;
+		rq.url = "https://floating.muncher.se/arlib/files.php";
+		// <?php
+		// header("Content-Type: text/plain");
+		// foreach ($_POST as $k => $v) echo "$k = $v\n";
+		// foreach ($_FILES as $k => $v)
+		//     echo "$k = ${v["name"]} (", file_get_contents($v["tmp_name"]), ")\n";
+		f.attach(rq);
+		
 		HTTP h(loop);
-		HTTP::req rq("http://floating.muncher.se:99/");
-		rq.limit_ms = 200;
 		h.send(rq, break_runloop);
 		
 		loop->enter();
-		assert_eq(r.status, HTTP::rsp::e_timeout);
+		assert_eq(r.status, 200);
+		assert_eq(r.text(), "foo = bar\nbar = baz\nbaz = a.txt (hello world)\nquux = b.txt (test test 123)\n");
 	}
 	
 	T {
-		//do the above with https
+		uint8_t blob[100000];
+		for (size_t i=0;i<sizeof(blob);i++) blob[i] = 'a' + (i&15);
+		runloop_blocktest_recycle(loop);
+		
+		HTTP::req rq;
+		rq.url = "https://floating.muncher.se/arlib/test.php";
+		rq.body = blob;
+		rq.limit_ms = 2000 + sizeof(blob)/250;
+		rq.limit_bytes = sizeof(blob)+32768;
+		
 		HTTP h(loop);
-		HTTP::req rq("https://floating.muncher.se:99/");
-		rq.limit_ms = 200;
 		h.send(rq, break_runloop);
 		
 		loop->enter();
+		assert_eq(r.status, 200);
+		assert_eq(r.body.size(), strlen("{\"post\":\"\"}")+sizeof(blob));
+		assert_eq(r.text(), "{\"post\":\""+cstring(blob)+"\"}");
+		
+		timer t;
+		rq.limit_ms = 20;
+		h.send(rq, break_runloop);
+		
+		loop->enter();
+		assert_lt(t.ms(), 500);
 		assert_eq(r.status, HTTP::rsp::e_timeout);
+		
+		//ensure it repairs itself after a timeout
+		h.send(HTTP::req(URL), break_runloop);
+		loop->enter();
+		assert_eq(r.status, 200);
+		assert_eq(r.text(), CONTENTS);
 	}
+	
+	T {}
 }
 #endif

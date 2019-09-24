@@ -23,18 +23,39 @@
 
 //__asm__(".intel_syntax");
 
-//gcc recognizes various function names and reads attributes (such as extern) from the headers, force it not to
-namespace mysand { namespace {
+#ifdef __clang__
+// Clang really insists on having a memset
+// have to do weird stuff to ensure it doesn't try to pick memset from glibc, or get confused about which to use
+__asm__(R"(
+.hidden memset
+.globl memset
+memset:
+  jmp my_memset
+)");
+#endif
 
 //have to redefine the entire libc, fun
-//(there's some copying between this and sysemu.cpp)
-static inline void memset(void* ptr, int value, size_t num)
+//gcc recognizes various function names and reads attributes (such as extern) from the headers, force it not to
+#define memset my_memset
+#define memcpy my_memcpy
+#define memcmp my_memcmp
+extern "C" {
+void memset(void* ptr, int value, size_t num);
+void memset(void* ptr, int value, size_t num)
 {
 	//compiler probably optimizes this
 	uint8_t* ptr_ = (uint8_t*)ptr;
 	for (size_t i=0;i<num;i++) ptr_[i] = value;
 }
-static inline int memcmp(const void * ptr1, const void * ptr2, size_t n)
+void memcpy(void * dest, const void * src, size_t n);
+void memcpy(void * dest, const void * src, size_t n)
+{
+	uint8_t* dest_ = (uint8_t*)dest;
+	uint8_t* src_ = (uint8_t*)src;
+	for (size_t i=0;i<n;i++) dest_[i] = src_[i];
+}
+int memcmp(const void * ptr1, const void * ptr2, size_t n);
+int memcmp(const void * ptr1, const void * ptr2, size_t n)
 {
 	uint8_t* ptr1_ = (uint8_t*)ptr1;
 	uint8_t* ptr2_ = (uint8_t*)ptr2;
@@ -44,6 +65,11 @@ static inline int memcmp(const void * ptr1, const void * ptr2, size_t n)
 	}
 	return 0;
 }
+}
+
+
+//gcc recognizes various function names and reads attributes (such as extern) from the headers, force it not to
+namespace mysand { namespace {
 
 static inline int open(const char * pathname, int flags, mode_t mode = 0)
 {

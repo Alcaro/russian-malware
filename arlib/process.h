@@ -221,4 +221,9 @@ public:
 	virtual
 #endif
 	~process();
+	
+#ifdef ARLIB_TESTRUNNER
+	//This fd is allowed to remain in runloops even when they destruct.
+	static int sigchld_fd_test_runner_only();
+#endif
 };

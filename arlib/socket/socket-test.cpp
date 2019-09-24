@@ -13,8 +13,7 @@ static void socket_test_httpfail(socket* sock, bool xfail, runloop* loop)
 	
 	assert(sock);
 	
-	bool timeout = false;
-	loop->set_timer_once(8000, bind_lambda([&]() { assert_unreachable(); loop->exit(); }));
+	uintptr_t timer = loop->raw_set_timer_once(8000, bind_lambda([&]() { assert_unreachable(); loop->exit(); }));
 	
 	cstring http_get =
 		"GET / HTTP/1.1\r\n"
@@ -74,7 +73,7 @@ static void socket_test_httpfail(socket* sock, bool xfail, runloop* loop)
 	loop->enter();
 	if (!xfail) assert_eq(string(arrayview<byte>(buf)), "HTTP/1.1");
 	
-	assert(!timeout);
+	loop->raw_timer_remove(timer);
 }
 
 void socket_test_http(socket* sock, runloop* loop) { socket_test_httpfail(sock, false, loop); }
@@ -118,14 +117,13 @@ test("TCP client, disconnecting server", "runloop,dns", "tcp")
 	
 	autoptr<runloop> loop = runloop::create();
 	
-	loop->set_timer_once(60000, bind_lambda([&]() { loop->exit(); assert_unreachable(); }));
+	uintptr_t timer = loop->raw_set_timer_once(60000, bind_lambda([&]() { loop->exit(); assert_unreachable(); }));
 	
 	uint64_t start_ms = time_ms_ne();
 	
 	//need to provoke Shitty Server into actually dropping the connections
 	autoptr<socket> sock2;
-	//this never gets removed until the runloop is destroyed, but runloop is short-lived so that's okay
-	loop->set_timer_loop(5000, bind_lambda([&]() { sock2 = socket::create("floating.muncher.se", 9, loop); }));
+	uintptr_t timer2 = loop->raw_set_timer_repeat(5000, bind_lambda([&]() { sock2 = socket::create("floating.muncher.se", 9, loop); }));
 	
 	autoptr<socket> sock = socket::create("floating.muncher.se", 9, loop);
 	assert(sock);
@@ -146,6 +144,8 @@ test("TCP client, disconnecting server", "runloop,dns", "tcp")
 	
 	//make sure it didn't fail because Shitty Server is down
 	assert_gt(time_ms_ne()-start_ms, 29000);
+	loop->raw_timer_remove(timer);
+	loop->raw_timer_remove(timer2);
 }
 
 test("SSL client, bad root", "tcp", "ssl") { clienttest("superfish.badssl.com", 443, true, true); }

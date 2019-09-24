@@ -21,7 +21,7 @@ void DNS::init(cstring resolver, int port, runloop* loop)
 	this->sock = socket::create_udp(resolver, port, loop);
 	sock->callback(bind_this(&DNS::sock_cb), NULL);
 	
-	for (cstring line : string(file::readall("/etc/hosts")).spliti("\n"))
+	for (string line : file::readallt("/etc/hosts").split("\n"))
 	{
 		auto classify = [](char ch) -> int {
 			if (ch == '\0' || ch == '\r' || ch == '\n' || ch == '#') return 0;
@@ -94,7 +94,7 @@ void DNS::resolve(cstring domain, unsigned timeout_ms, function<void(string doma
 	query& q = queries.get_create(trid);
 	q.callback = callback;
 	q.domain = domain;
-	q.timeout_id = loop->set_timer_once(timeout_ms, bind_lambda([this,trid]() { this->timeout(trid); }));
+	q.timeout_id = loop->raw_set_timer_once(timeout_ms, bind_lambda([this,trid]() { this->timeout(trid); }));
 }
 
 string DNS::read_name(bytestream& stream)
@@ -119,6 +119,7 @@ string DNS::read_name(bytestream& stream)
 			if (stream.remaining() < partlen) return "";
 			if (ret != "") ret += ".";
 			ret += stream.bytes(partlen);
+			if (ret.length() >= 256) return "";
 		}
 		else if ((byte & 0xC0) == 0xC0)
 		{
@@ -140,6 +141,7 @@ void DNS::timeout(uint16_t trid)
 {
 	query q = std::move(queries.get(trid));
 	queries.remove(trid);
+	loop->raw_timer_remove(q.timeout_id);
 	q.callback(std::move(q.domain), ""); // don't move higher, callback could delete the dns object
 }
 
@@ -238,7 +240,7 @@ void DNS::sock_cb()
 fail:
 	function<void(string domain, string ip)> callback = q.callback;
 	string q_domain = std::move(q.domain);
-	loop->remove(q.timeout_id);
+	loop->raw_timer_remove(q.timeout_id);
 	queries.remove(trid);
 	
 	callback(std::move(q_domain), std::move(ret)); // don't move higher, callback could delete the dns object
@@ -286,14 +288,14 @@ test("DNS", "udp,string,ipconv", "dns")
 		{
 			n_done++; if (n_done == n_total) loop->exit();
 			assert_eq(domain, "localhost");
-			// silly way to say 'can be either of those, but must be one of them', but it's the best I can find
+			// silly way to say 'can be either of those, but must be one of them'. it works
 			if (ip != "::1") assert_eq(ip, "127.0.0.1");
 		}));
 	n_total++; dns.resolve("stacked.muncher.se", bind_lambda([&](string domain, string ip) // random domain that's on a CNAME
 		{
 			n_done++; if (n_done == n_total) loop->exit();
 			assert_eq(domain, "stacked.muncher.se");
-			// that IP is dynamic, just accept anything
+			// not gonna hardcode that IP, just accept anything
 			assert_neq(ip, "");
 		}));
 	n_total++; dns.resolve("127.0.0.1", bind_lambda([&](string domain, string ip)

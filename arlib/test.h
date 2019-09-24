@@ -3,10 +3,29 @@
 #include "stringconv.h"
 #include "linq.h"
 
+//Arlib test policy:
+//- Tests are to be written alongside the implementation, to verify how comfortable that interface is.
+//- Tests are subordinate to the interface, implementation, and callers.
+//    The latter three should be as simple as possible; as much complexity as possible should be in the tests.
+//- As a corollary, tests may do weird things in order to exercise deeply-buried code paths of the implementation.
+//- All significant functionality should be tested. However, it's allowed (though not encouraged) for a module to
+//    rely on its dependents for complete testing. For example, the UDP socket module has no tests; the DNS client covers both.
+//- Tests may assume that the implementation tries to do what it should.
+//    There's no need to e.g. verify that a file object actually hits the disk. If it hardcodes what the tests expect, it's malicious.
+//    As a corollary, if it's obviously correct, there's no need to test it. Various small helpers remain untested.
+//- Mocking should generally be avoided. Prefer testing against real services. Mocks can simplify configuration and speed things up,
+//    but they're also nontrivial effort to write, can be buggy or inaccurate, can displace things that should be tested,
+//    and injecting them usually involves moving complexity from tests to implementation and/or interface.
+//    For example, the HTTP client assumes the presense of a network.
+//Rare exceptions are permitted, such as the runloop blocking test.
+
 #undef assert
 
-#ifdef ARLIB_TEST
+#ifdef ARLIB_TESTRUNNER
+void _test_runloop_latency(uint64_t us);
+#endif
 
+#ifdef ARLIB_TEST
 template<typename T>
 string tostring_dbg(const T& item) { return tostring(item); }
 template<typename T>
@@ -27,26 +46,6 @@ string tostring_dbg(const map<Tkey,Tvalue>& item)
 		+"}";
 }
 
-/*
-template<typename T> using has_to_string = decltype(declval<T&>().to_string());
-	template<typename T> using has_to_string_free = decltype(to_string(declval<T&>()));
-
-	template<typename T>
-	string convert(T const& t)
-	{
-		if constexpr(is_detected_exact_v<string, has_to_string, T>){
-			return t.to_string();
-		}else if constexpr(is_detected_exact_v<string, has_to_string_free, T>){
-			return to_string(t);
-		}else if constexpr(is_static_castable_v<T, string>){
-			return static_cast<string>(t);
-		}
-		
-		//give up no valid conversion exists, so dump the bytes and maybe that helps debug
-		return dump_bytes(t);
-	}
-*/
-
 class _testdecl {
 public:
 	_testdecl(void(*func)(), const char * filename, int line, const char * name, const char * requires, const char * provides);
@@ -58,7 +57,7 @@ void _test_nothrow(int add);
 
 void _teststack_push(int line);
 void _teststack_pop();
-int _teststack_pushstr(string text); // Returns 1, to simplify below macros.
+int _teststack_pushstr(string text); // Returns 1, to simplify the below macros.
 int _teststack_popstr(); // Returns 0.
 int _test_blockmalloc(); // Returns 1.
 int _test_unblockmalloc(); // Returns 0.
@@ -67,8 +66,6 @@ void _test_skip(cstring why);
 void _test_skip_force(cstring why);
 void _test_inconclusive(cstring why);
 void _test_expfail(cstring why);
-
-void _test_runloop_latency(uint64_t us);
 
 //undefined behavior if T is unsigned and T2 is negative
 //I'd prefer making it compare properly, but that requires way too many conditionals.

@@ -245,7 +245,7 @@ public:
 	static string sanitize_path(cstring path) { return path.replace("\\", "/"); }
 #else
 	static cstring sanitize_path(cstring path) { return path; }
-	static string sanitize_path(string path) { return std::move(path); }
+	static string sanitize_path(string path) { return path; }
 #endif
 	
 	//Returns whether the path is absolute.

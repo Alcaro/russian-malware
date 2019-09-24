@@ -4,6 +4,7 @@
 #include "array.h"
 #include "socket.h"
 #include "bytepipe.h"
+#include "stringconv.h"
 
 class HTTP : nocopy {
 public:
@@ -90,7 +91,7 @@ public:
 private:
 	struct rsp_i {
 		rsp r;
-		bool sent_once = false; // used for f_no_retry
+		int n_tries_left;
 		function<void(rsp)> callback;
 	};
 public:
@@ -99,7 +100,7 @@ public:
 	void wrap_socks(function<socket*(bool ssl, cstring domain, int port, runloop* loop)> cb) { cb_mksock = cb; }
 	
 	//Multiple requests may be sent to the same object. This will make them use HTTP Keep-Alive.
-	//The requests must be to the same protocol-domain-port tuple.
+	//The requests must be to the same protocol-domain-port tuple (note that http://example.com/ is treated as port 0, not 80).
 	//Failures are reported in the callback. Results are not guaranteed to be reported in any particular order.
 	void send(req q, function<void(rsp)> callback);
 	//If the HTTP object is currently trying to send a request with this ID, it's cancelled.
@@ -120,15 +121,15 @@ public:
 	
 	
 	struct location {
-		string proto;
+		string scheme;
 		string domain;
 		int port;
 		string path;
 	};
 	//If 'relative' is false, 'out' can be uninitialized. If true, must be fully valid. On failure, the output location is undefined.
+	//WARNING: HTTP 3xx redirects preserve #fragments unless overridden; <a href> deletes them. This one implements the HTTP 3xx rule.
+	//ALSO WARNING: If the returned port is 0, caller is responsible for filling in the default port for that scheme.
 	static bool parseUrl(cstring url, bool relative, location& out);
-	
-	~HTTP();
 	
 private:
 	void resolve(size_t id);
@@ -158,7 +159,7 @@ private:
 	autoptr<socket> sock;
 	
 	void do_timeout();
-	uintptr_t timeout_id = 0;
+	DECL_TIMER(timeout, HTTP);
 	
 	size_t bytes_in_req;
 	void reset_limits();
@@ -180,5 +181,52 @@ private:
 	httpstate state = st_boundary;
 	string fragment;
 	size_t bytesleft;
+	
+public:
+	// helper to construct multipart/form-data, for HTTP file uploads
+	// http://www.w3.org/TR/html401/interact/forms.html#h-17.13.4.2
+	// TODO: automatically switch to application/x-www-form-urlencoded if appropriate
+	class form {
+		string boundary;
+		array<byte> result;
+		
+	public:
+		form()
+		{
+			uint8_t rand[16];
+			getentropy(&rand, sizeof(rand));
+			boundary = "--ArlibFormBoundary"+tostringhex(rand); // max 70 characters allowed, not counting the two leading hyphens
+		}
+		
+		void value(cstring key, cstring value)
+		{
+			result += (boundary+"\r\n"
+			           "Content-Disposition: form-data; name=\""+key+"\"\r\n\r\n"+
+			           value+"\r\n").bytes();
+		}
+		
+		void file(cstring key, cstring filename, arrayview<byte> content)
+		{
+			result += (boundary+"\r\n"
+			           "Content-Disposition: file; name=\""+key+"\"; filename=\""+filename.replace("\"","\\\"")+"\"\r\n\r\n").bytes();
+			result += content;
+			result += cstring("\r\n").bytes();
+		}
+		void file(cstring key, cstring filename, cstring content) { file(key, filename, content.bytes()); }
+		
+		//Can only be called once.
+		array<byte> pack()
+		{
+			result += (boundary+"--").bytes();
+			return std::move(result);
+		}
+		
+		//Counts as calling pack(), so only once.
+		void attach(HTTP::req& rq)
+		{
+			rq.body = pack();
+			rq.headers.append("Content-Type: multipart/form-data; boundary="+boundary.substr(2, ~0));
+		}
+	};
 };
 #endif

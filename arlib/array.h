@@ -18,10 +18,9 @@ protected:
 	
 protected:
 	//must be functions, Clang won't like it otherwise
-	static bool trivial_cons() { return std::is_trivial<T>::value; } // constructor is memset(0)
-	static bool trivial_copy() { return std::is_trivially_copyable<T>::value; } // copy constructor is memcpy
-	//static const bool trivial_comp = std::has_unique_object_representations<T>::value;
-	static bool trivial_comp() { return std::is_integral<T>::value; } // equality comparison is memcmp
+	static bool trivial_cons() { return std::is_trivial_v<T>; } // constructor is memset(0)
+	static bool trivial_copy() { return std::is_trivially_copyable_v<T>; } // copy constructor is memcpy
+	static bool trivial_comp() { return std::has_unique_object_representations_v<T>; } // equality comparison is memcmp
 	//don't care about destructor being trivial
 	
 public:
@@ -100,8 +99,8 @@ public:
 	{
 		//reject reinterpret<string>()
 		//TODO: allow litend/etc, and T=string T2=cstring
-		static_assert(std::is_fundamental<T>::value);
-		static_assert(std::is_fundamental<T2>::value);
+		static_assert(std::is_fundamental_v<T>);
+		static_assert(std::is_fundamental_v<T2>);
 		
 		size_t newsize = this->count*sizeof(T)/sizeof(T2);
 		return arrayview<T2>((T2*)this->items, newsize);
@@ -424,9 +423,6 @@ public:
 	T& append(T&& item) { return insert(this->count, std::move(item)); }
 	T& append(const T& item) { return insert(this->count, item); }
 	T& append() { return insert(this->count); }
-	T& prepend(T&& item) { return insert(0, std::move(item)); }
-	T& prepend(const T& item) { return insert(0, item); }
-	T& prepend() { return insert(0); }
 	
 	void remove(size_t index)
 	{
@@ -585,6 +581,14 @@ inline array<T2> arrayview<T>::cast() const
 	for (const T& tmp : *this) ret.append(tmp);
 	return std::move(ret);
 }
+
+//Sized (or static) array - saves an allocation for string.split<N>. Other than that, not very useful.
+template<typename T, size_t N> class sarray {
+	T storage[N];
+public:
+	T& operator[](size_t n) { return storage[n]; }
+	//TODO: implement and use this
+};
 
 
 template<> class array<bool> {

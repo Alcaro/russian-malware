@@ -25,8 +25,6 @@ class WebSocket : nocopy {
 	
 	bool break_callback;
 	
-	bool L_DEBUG = false; // never set, other than by gdb
-	
 	function<void(cstring)> cb_str;
 	function<void(arrayview<byte>)> cb_bin;
 	function<void()> cb_error;

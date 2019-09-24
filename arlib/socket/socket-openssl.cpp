@@ -35,7 +35,7 @@ public:
 	function<void()> cb_read;
 	function<void()> cb_write;
 	
-	uintptr_t timer_id = 0;
+	DECL_TIMER(timer, socketssl_impl);
 	MAKE_DESTRUCTIBLE_FROM_CALLBACK();
 	
 #if OPENSSL_VERSION_NUMBER < 0x10002000 // < 1.0.2
@@ -88,12 +88,12 @@ public:
 	/*private*/ int fixret(int val)
 	{
 		if (val > 0) return val;
-		if (val == 0) return -1;
-		if (val < 0)
+		//if (val == 0) return -1;
+		if (val <= 0)
 		{
 			int sslerror = SSL_get_error(ssl, val);
 			if (sslerror == SSL_ERROR_WANT_READ || sslerror == SSL_ERROR_WANT_WRITE) return 0;
-			else return val;
+			else return -1;
 		}
 		return -1; // unreachable, just to shut up a warning
 	}
@@ -141,12 +141,6 @@ public:
 		set_child_cb();
 	}
 	
-	/*private*/ void update_from_timer()
-	{
-		update();
-		timer_id = 0;
-	}
-	
 	/*private*/ void set_child_cb()
 	{
 		if (sock)
@@ -174,8 +168,8 @@ public:
 			if (bytes > 0)
 			{
 				uint8_t discard[4096];
-				int discarded = BIO_read(to_sock, discard, buflen);
-				if (discarded != buflen) abort();
+				int discarded = BIO_read(to_sock, discard, bytes);
+				if (discarded != bytes) abort();
 			}
 			
 			set_child_cb();
@@ -244,13 +238,11 @@ public:
 	{
 		this->cb_read = cb_read;
 		this->cb_write = cb_write;
-		if (cb_write) timer_id = loop->set_idle(timer_id, bind_this(&socketssl_impl::update_from_timer));
+		if (cb_write) timer.set_idle(bind_this(&socketssl_impl::update));
 	}
 	
 	~socketssl_impl()
 	{
-		loop->remove(timer_id);
-		
 		if (sock)
 		{
 			SSL_shutdown(ssl);

@@ -48,9 +48,9 @@ inline string tostring(bool val) { return val ? "true" : "false"; }
 inline string tostring(const char * s) { return s; } // only exists as tostring, fromstring would be a memory leak
 
 template<typename T>
-typename std::enable_if<
+typename std::enable_if_t<
 	sizeof((string)std::declval<T>()) != 0
-	, string>::type
+	, string>
 tostring(const T& val)
 {
 	return (string)val;
@@ -92,20 +92,19 @@ bool fromstringhex(cstring s, array<byte>& val);
 
 //Same as fromstring, but can't report failure; in exchange, it also tries T::operator=(cstring).
 template<typename T>
-typename std::enable_if<
-	std::is_assignable_v<T, string>
-	>::type
+typename std::enable_if_t<
+	std::is_assignable_v<T, string>>
 try_fromstring(cstring s, T& out)
 {
 	out = s;
 }
 
 template<typename T>
-typename std::enable_if<
-	std::is_same<
+typename std::enable_if_t<
+	std::is_same_v<
 		decltype(fromstring(std::declval<cstring>(), std::declval<T&>())),
 		bool // it returning bool isn't necessary, but I couldn't find a std::can_call
-	>::value && !std::is_assignable_v<T, string>>::type // extra is_assignable test so try_fromstring(cstring,string&) isn't ambiguous
+	> && !std::is_assignable_v<T, string>> // extra is_assignable test so try_fromstring(cstring,string&) isn't ambiguous
 try_fromstring(cstring s, T& out)
 {
 	fromstring(s, out);

@@ -41,6 +41,26 @@ namespace {
 
 static array<br_x509_trust_anchor> certs;
 
+#ifdef ARLIB_TESTRUNNER
+ondeinit()
+{
+	for (const br_x509_trust_anchor& ta : certs)
+	{
+		switch (ta.pkey.key_type)
+		{
+		case BR_KEYTYPE_RSA:
+			free(ta.pkey.key.rsa.n);
+			free(ta.pkey.key.rsa.e);
+			break;
+		case BR_KEYTYPE_EC:
+			free(ta.pkey.key.ec.q);
+			break;
+		}
+		free(ta.dn.data);
+	}
+}
+#endif
+
 static void bytes_append(void* dest_ctx, const void * src, size_t len)
 {
 	(*(array<byte>*)dest_ctx) += arrayview<byte>((byte*)src, len);
@@ -441,7 +461,7 @@ socket* socket::wrap_ssl_raw(socket* inner, cstring domain, runloop* loop)
 //most of the tests are in a runloop, but initialization takes longer (9-33ms) than the runloop watchdog (3ms)
 //this is also why it provides 'tcp' rather than 'ssl';
 // if it provides 'ssl', it'd run alongside the other SSL tests and fail watchdog
-test("BearSSL init", "array,base64", "tcp")
+test("BearSSL init", "array,base64,file", "tcp")
 {
 	test_skip("kinda slow");
 	

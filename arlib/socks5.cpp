@@ -132,6 +132,7 @@ socket* socks5::connect(bool ssl, cstring domain, int port, runloop* loop)
 static void clienttest(cstring target)
 {
 	test_skip("too slow");
+	test_skip_force("ssh -D is offline");
 	
 	autoptr<runloop> loop = runloop::create();
 	struct socks5_par param = { loop, socket::create("localhost", 1080, loop), target, 80 };

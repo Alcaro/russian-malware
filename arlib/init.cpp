@@ -174,13 +174,11 @@ void argparse::parse_post()
 
 void arlib_init(argparse& args, char** argv)
 {
-#ifdef __unix__
-#ifndef ARLIB_OPT
+#if defined(__unix__) && !defined(ARLIB_OPT) && !defined(ARLIB_TESTRUNNER)
 	rlimit lim;
 	lim.rlim_cur = (RUNNING_ON_VALGRIND ? 1 : 64*1024*1024);
 	lim.rlim_max = RLIM_INFINITY;
 	setrlimit(RLIMIT_CORE, &lim);
-#endif
 #endif
 	
 	srand(time(NULL));
