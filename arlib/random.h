@@ -62,7 +62,7 @@ public:
 	random_t()
 	{
 		uint64_t seed;
-		getentropy(&seed, sizeof(seed));
+		ignore(getentropy(&seed, sizeof(seed))); // guaranteed to succeed unless kernel < 3.17 (october 2014), too big, or bad pointer
 		this->seed(seed);
 	}
 	random_t(uint64_t seed)

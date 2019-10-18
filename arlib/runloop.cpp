@@ -345,6 +345,7 @@ runloop* runloop::global()
 
 #include "os.h"
 #include "thread.h"
+#include "socket.h"
 
 #ifdef ARLIB_TESTRUNNER
 class runloop_blocktest : public runloop {
@@ -451,6 +452,7 @@ void runloop_blocktest_recycle(runloop* loop)
 }
 #endif
 
+#ifdef ARLIB_TEST
 static void test_runloop(bool is_global)
 {
 #ifdef _WIN32
@@ -543,3 +545,66 @@ test("private runloop", "function,array,set,time", "runloop")
 	assert_eq(n, 112);
 }
 test("epoll","","") { test_expfail("replace epoll with normal poll, epoll doesn't help at our small scale"); }
+
+static void test_runloop_2(bool is_global)
+{
+#ifdef _WIN32
+	test_fail("unimplemented");
+#else
+	runloop* loop = (is_global ? runloop::global() : runloop::create());
+	
+	socket* sock[2];
+	uint8_t buf[2][8];
+	size_t n_buf[2] = {0,0};
+	for (int i=0;i<2;i++)
+	{
+		sock[i] = socket::create("muncher.se", 80, loop);
+		sock[i]->callback([&, i]()
+			{
+				if (n_buf[i] < 8)
+				{
+					int bytes = sock[i]->recv(arrayvieww<byte>(buf[i]).skip(n_buf[i]));
+					n_buf[i] += bytes;
+				}
+				if (n_buf[i] >= 8)
+				{
+					uint8_t discard[4096];
+					sock[i]->recv(discard);
+				}
+				if (n_buf[0] == 8 && n_buf[1] == 8) loop->exit();
+			});
+		sock[i]->send(cstring("GET / HTTP/1.1\r\n").bytes());
+	}
+	uintptr_t t = loop->raw_set_timer_once(500, [&](){ loop->exit(); });
+	loop->enter();
+	loop->raw_timer_remove(t);
+	
+	for (int i=0;i<2;i++)
+	{
+		assert_eq(n_buf[i], 0);
+		sock[i]->send(cstring("Host: muncher.se\r\nConnection: close\r\n\r\n").bytes());
+	}
+	uintptr_t t2 = loop->raw_set_timer_once(100, [&](){ loop->raw_timer_remove(t2); t2 = 0; });
+	usleep(200*1000); // ensure everything is ready simultaneously
+	runloop_blocktest_recycle(loop);
+	t = loop->raw_set_timer_once(1000, [&](){ assert_unreachable(); });
+	loop->enter();
+	loop->raw_timer_remove(t);
+	
+	assert_eq(t2, 0);
+	assert_eq(cstring(arrayview<byte>(buf[0])), "HTTP/1.1");
+	assert_eq(cstring(arrayview<byte>(buf[1])), "HTTP/1.1");
+	
+	delete sock[0];
+	delete sock[1];
+	
+	if (!is_global) delete loop;
+#endif
+}
+test("runloop with sockets", "function,array,set,time", "runloop")
+{
+	test_skip("too slow");
+	testcall(test_runloop_2(false));
+	testcall(test_runloop_2(true));
+}
+#endif

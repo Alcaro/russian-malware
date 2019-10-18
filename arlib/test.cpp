@@ -57,6 +57,8 @@ enum err_t {
 };
 static err_t result;
 
+static bool show_verbose;
+
 static array<int> callstack;
 void _teststack_push(int line) { callstack.append(line); }
 void _teststack_pop() { callstack.resize(callstack.size()-1); }
@@ -145,8 +147,7 @@ void _test_skip(cstring why)
 	if (result!=err_ok) return;
 	if (!all_tests)
 	{
-		//yes, dead code
-		if (all_tests) puts("skipped: "+why);
+		if (show_verbose) puts("skipped: "+why);
 		test_throw(err_skip);
 	}
 }
@@ -154,7 +155,7 @@ void _test_skip(cstring why)
 void _test_skip_force(cstring why)
 {
 	if (result!=err_ok) return;
-	if (all_tests) puts("skipped: "+why);
+	if (show_verbose) puts("skipped: "+why);
 	test_throw(err_skip);
 }
 
@@ -393,7 +394,7 @@ int main(int argc, char* argv[])
 		numtests_iter = numtests_iter->next;
 	}
 	
-	bool show_verbose = (all_tests || numtests < 8);
+	show_verbose = (all_tests || numtests < 8);
 	for (int pass = 0; pass < (run_twice ? 2 : 1); pass++)
 	{
 		int count[err_ntype]={0};

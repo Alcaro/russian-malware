@@ -45,6 +45,7 @@ for fn in sorted(os.listdir("resources/")):
 		
 		if use_incbin:
 			asmname = "_ZN9resources"+str(len(varname_raw))+varname_raw+"E"
+			# sticking everything in separate sections doesn't do much when the resources' constructors autodecode them, but why not
 			asm += ".section .rodata."+asmname+',"a",@progbits\n'
 			asm += ".globl "+asmname+"\n"
 			asm += ".size "+asmname+", "+str(len(b))+"\n"

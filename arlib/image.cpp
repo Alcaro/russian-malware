@@ -100,7 +100,7 @@ static inline void image_insert_noov(image& target, int32_t x, int32_t y, const 
 
 //lower - usually target
 //upper - usually source; its alpha decides how much of the lower color is visible
-//always does the full blending operation, does not optimize based on A=FF being true 90% of the time and A=00 90% of the remainder
+//always does the full blending operation; if A=FF 90% of the time and A=00 90% of the remainder, that optimization is caller's job
 static inline uint32_t blend_8888_on_8888(uint32_t argb_lower, uint32_t argb_upper)
 {
 #ifdef __SSE2__
@@ -124,7 +124,7 @@ static inline uint32_t blend_8888_on_8888(uint32_t argb_lower, uint32_t argb_upp
 	__m128i newpack = _mm_packus_epi16(newcols, _mm_undefined_si128());
 	//contains u8: {don't care}*12, sac+tac = result alpha, sbc+tbc, sgc+tgc, src+trc
 	//the components are known to not overflow
-	__m128i newpacksum = _mm_add_epi8(newpack, _mm_srli_si128(newpack, 32/8));
+	__m128i newpacksum = _mm_add_epi8(newpack, _mm_bsrli_si128(newpack, 32/8));
 	
 	return _mm_cvtsi128_si32(newpacksum);
 #else
@@ -489,7 +489,7 @@ template<uint32_t newalpha> // 0x??000000 to overwrite the alpha channel, -1 to 
 void convert_scanline_rgb888_nrgb8888(uint32_t* out, const uint8_t* in, size_t npx)
 {
 	uint32_t* out32 = (uint32_t*)out;
-	uint32_t x = 0;
+	size_t x = 0;
 #if defined(__SSE2__)
 	// we wish to read 12 bytes at the time, but loadu_si28 does 16, so -2 to ensure we don't read out of bounds
 	// except put the -2 at the x side, (size_t)1-2 isn't less than anything

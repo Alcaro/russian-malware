@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <string.h>
 #include <utility>
+#include <type_traits>
 
 #ifdef __GNUC__
 #define LIKELY(expr)    __builtin_expect(!!(expr), true)
@@ -132,7 +133,7 @@ public:
 	
 	template<typename Tl>
 	function(Tl lambda,
-	         typename std::enable_if_t< // no is_invocable_r until c++17
+	         typename std::enable_if_t<
 	            std::is_invocable_r_v<Tr, Tl, Ta...>
 	         , dummy> ignore = dummy())
 	{
@@ -210,7 +211,7 @@ private:
 public:
 	binding decompose()
 	{
-		if (ref) abort();
+		if (ref) __builtin_trap();
 		return { !ref, func, ctx };
 	}
 	
@@ -275,7 +276,7 @@ fn_wrap(Tr(Tc::*)(Ta...) const)
 	return memb_rewrap_const<Tc, Tr, Ta...>();
 }
 
-#define bind_ptr(fn, ptr) (fn_wrap(fn).get<fn>(ptr))
+#define bind_ptr(fn, ptr) (fn_wrap(fn).template get<fn>(ptr))
 #define bind_this(fn) bind_ptr(fn, this) // reminder: bind_this(&classname::function), not bind_this(function)
 
 //while the function template can be constructed from a lambda, I want bind_lambda(...).decompose(...) to work

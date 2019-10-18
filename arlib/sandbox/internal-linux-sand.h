@@ -22,7 +22,7 @@
 //[unavailable] eBPF
 //  moving some policy from broker to BPF would be an improvement
 //  but to my knowledge, non-classic BPF is still root only (CLONE_NEWUSER isn't enough)
-//[no patch exists] anything that allows seccomp-bpf to read things behind pointers
+//[no patch exists] deep argument inspection for seccomp https://lwn.net/Articles/799557/
 //  would get rid of the last mappable page hack, and a few others
 
 //minimum kernel version policy is similar to minimum C++ version: it must work on latest Debian stable and Ubuntu LTS

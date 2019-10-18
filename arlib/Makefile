@@ -12,8 +12,22 @@
 #make clean-prof
 #make OPT=1 PROFILE=use
 
+#TODO: if a config script is needed,
+#arlib-default: arlib-default2 obj/config-$(OBJNAME).mk
+#
+#obj/config-$(OBJNAME).mk:
+#	truncate -s0 obj/config-$(OBJNAME).mk
+#	
+#	pkg-config --exists gtk+-3.0 && \
+#		echo ARGUI := gtk3 >> obj/config-$(OBJNAME).mk && \
+#		echo CFLAGS += `pkg-config --cflags gtk+-3.0` >> obj/config-$(OBJNAME).mk || \
+#		true
+# 
+#-include obj/config-$(OBJNAME).mk
+
 arlib-default: arlib-default2
 
+MAKEFLAGS := Rr
 .SUFFIXES:
 
 ifeq (,$(wildcard arlib/string.cpp))
@@ -367,6 +381,8 @@ TRUE_CFLAGS := -std=c99 $(CCXXFLAGS) $(CONF_CFLAGS) $(CFLAGS)
 # The following features would be useful; if enough of them show up, I will switch:
 #   C++2a template lambdas (for the PNG decoder)
 #   C++2a designated initializers (foo_t foo { .a = 42, .b = 123 })
+#   C++2a template string literals (for the regex parser)
+#   C++2a concepts (also for the regex parser)
 #   C++2a down with typename
 #   C++2a [[likely]]
 #   C++2a [[no_unique_address]]
@@ -374,10 +390,10 @@ TRUE_CFLAGS := -std=c99 $(CCXXFLAGS) $(CONF_CFLAGS) $(CFLAGS)
 #   C++2a consteval
 #   C++2a void foo(auto arg) (shorthand for template<typename T> void foo(T arg) - simplifies function::bind_member)
 #   [[trivially_relocatable]] http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p1144r3.html
-#   Lambdas without braces/return; function<int(int)> foo = [](int i) => i*2;
+#   Lambdas without braces/return; function<int(int)> foo = [](int i) => i*2; (useful for LINQ)
 #   Zero-overhead deterministic exceptions http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2018/p0709r0.pdf
 #   String literals as template parameters http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2017/p0424r2.pdf
-#   Compile-time reflection (that SERIALIZE macro is a little too limited)
+#   Compile-time reflection (that SERIALIZE macro is a little too limited, and the error messages are the worst I've ever seen)
 #   Single-implementation interfaces (public functions and nothing else in header, member variables hidden; useful for the GUI classes)
 #     the $class proposal would most likely permit this, as well as most or all of the reflection I want
 #   Demote or, and, bitand, etc from keyword to predefined macro (or even better, banish them to the <ciso646> they should've never left)
@@ -426,12 +442,12 @@ DOMAINS += DEFAULT NOWARN
 #--start-lib could replace this .a on gold and lld, but ld.bfd doesn't support that option
 USE_AR_OPT := 0
 ifeq ($(SELFTEST),)
-ifneq ($(OPT),0)
-USE_AR_OPT := 1
-endif
+ ifneq ($(OPT),0)
+  USE_AR_OPT := 1
+ endif
 endif
 ifeq ($(USE_AR_OPT),0)
-DOMAINS += ARLIB
+ DOMAINS += ARLIB
 endif
 
 SOURCES_DEFAULT := $(SOURCES)
@@ -439,8 +455,8 @@ wild2 = $(or $(wildcard $(word)),$(word))
 OBJS += $(foreach domain,$(sort $(DOMAINS)),$(call OBJMANGLE,$(domain),$(foreach word,$(SOURCES_$(domain)),$(wild2))))
 OBJS := $(sort $(OBJS))
 ifeq ($(USE_AR_OPT),1)
-#.a are order sensitive, do not sort or rearrange these
-OBJS += obj/$(OBJNAME)-arlib.a
+ #.a are order sensitive, do not rearrange
+ OBJS += obj/$(OBJNAME)-arlib.a
 endif
 OBJS += $(sort $(OBJS_LATE))
 

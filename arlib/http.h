@@ -194,7 +194,8 @@ public:
 		form()
 		{
 			uint8_t rand[16];
-			getentropy(&rand, sizeof(rand));
+			// guaranteed to succeed unless kernel < 3.17 (october 2014), too big, or bad pointer
+			ignore(getentropy(&rand, sizeof(rand)));
 			boundary = "--ArlibFormBoundary"+tostringhex(rand); // max 70 characters allowed, not counting the two leading hyphens
 		}
 		

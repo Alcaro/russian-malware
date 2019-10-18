@@ -34,6 +34,7 @@
 #include "os.h"
 #include "process.h"
 #include "random.h"
+#include "regex.h"
 #include "runloop.h"
 #include "safeint.h"
 #include "serialize.h"
