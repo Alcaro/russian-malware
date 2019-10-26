@@ -96,6 +96,7 @@ void arlib_init_gui(argparse& args, char** argv)
 #endif
 	gtk_disable_setlocale(); // go away, you're a library like any other and have no right to mess with libc config
 	// locale sucks, it breaks my json parser and probably 999 other things
+	// for more details, see https://github.com/mpv-player/mpv/commit/1e70e82baa9193f6f027338b0fab0f5078971fbe
 	
 	int argc = 0;
 	while (argv[argc]) argc++;

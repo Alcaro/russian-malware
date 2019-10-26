@@ -10,7 +10,7 @@ enum imagefmt {
 	
 	ifmt_rgb565, // for most of these, 'pixels' is a reinterpreted array of native-endian u16 or u32, highest bit listed first
 	ifmt_rgb888, // exception: this one; it's three u8s, red first
-	ifmt_xrgb1555, //x bits can be anything and should be ignored
+	ifmt_xrgb1555, //x bits can be anything and should be ignored (may be copied to other x slots, anything else is illegal)
 	ifmt_xrgb8888,
 	ifmt_0rgb1555, //0 bits are always 0
 	ifmt_0rgb8888,
@@ -22,7 +22,7 @@ enum imagefmt {
 	
 	//an image is considered 'degenerate' if the full power of the format isn't used
 	//for example, an argb with all a=1 is a degenerate xrgb (and a degenerate bargb), and the format can safely be set to xrgb
-	//this can be intentional if the image is a render target
+	//TODO: find a way to ensure unused formats are optimized out
 };
 
 struct font;
@@ -117,7 +117,7 @@ struct image : nocopy {
 		magic |= (4-1) << (ifmt_0rgb8888*2);
 		magic |= (2-1) << (ifmt_argb1555*2);
 		magic |= (4-1) << (ifmt_argb8888*2);
-		magic |= (2-1) << (ifmt_bargb1555*2);
+		//magic |= (2-1) << (ifmt_bargb1555*2); // alias of argb
 		magic |= (4-1) << (ifmt_bargb8888*2);
 		
 		return 1 + ((magic >> (fmt*2)) & 3);

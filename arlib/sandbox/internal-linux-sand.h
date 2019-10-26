@@ -34,6 +34,7 @@
 //pidfd is also safe, since openat() is blocked
 //however, openat(pidfd, ...) could give access to various strange things, which must be prohibited
 // RESOLVE_NO_MAGICLINKS and RESOLVE_BENEATH would most likely be sufficient
+// alternatively, check if pidfd is still a /proc entry; if not, it's safe
 
 enum broker_req_t {
 	br_nop,       // [req only] does nothing, doesn't respond (unused)

@@ -297,26 +297,26 @@ uint64_t time_us()
 {
 	struct timespec tp;
 	clock_gettime(CLOCK_REALTIME, &tp);
-	return tp.tv_sec*1000000 + div1000(tp.tv_nsec);
+	return (uint64_t)tp.tv_sec*(uint64_t)1000000 + div1000(tp.tv_nsec);
 }
 uint64_t time_ms()
 {
 	struct timespec tp;
 	clock_gettime(CLOCK_REALTIME, &tp);
-	return tp.tv_sec*1000 + div1mil(tp.tv_nsec);
+	return (uint64_t)tp.tv_sec*(uint64_t)1000 + div1mil(tp.tv_nsec);
 }
 
 uint64_t time_us_ne()
 {
 	struct timespec tp;
 	clock_gettime(CLOCK_MONOTONIC, &tp); // CLOCK_MONOTONIC_RAW makes more sense, but MONOTONIC uses vdso and skips the syscall
-	return tp.tv_sec*1000000 + div1000(tp.tv_nsec);
+	return (uint64_t)tp.tv_sec*(uint64_t)1000000 + div1000(tp.tv_nsec);
 }
 uint64_t time_ms_ne()
 {
 	struct timespec tp;
 	clock_gettime(CLOCK_MONOTONIC, &tp);
-	return tp.tv_sec*1000 + div1mil(tp.tv_nsec);
+	return (uint64_t)tp.tv_sec*(uint64_t)1000 + div1mil(tp.tv_nsec);
 }
 #endif
 
