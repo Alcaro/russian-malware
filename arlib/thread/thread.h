@@ -183,7 +183,7 @@ void thread_split(unsigned int count, function<void(unsigned int id)> work);
 
 //It is permitted to define this as (e.g.) QThreadStorage<T> rather than compiler magic.
 //However, it must support operator=(T) and operator T(), so QThreadStorage is not directly usable. A wrapper may be.
-//An implementation must support all stdint.h types, all basic integral types (char, short, etc), and all pointers.
+//An implementation must support all {u,}int{8,16,32,64}_t, all basic integral types (char, short, etc), and all pointers.
 #ifdef __GNUC__
 #define THREAD_LOCAL(t) __thread t
 #endif

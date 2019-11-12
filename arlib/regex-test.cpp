@@ -34,7 +34,7 @@ static void testfn(const char * re, const char * input, Tres result, Args... arg
 }
 #define test1(exp, input, ...) testcall(testfn(exp, input, REGEX(exp).match(input), __VA_ARGS__))
 
-test("regex derp","","")
+test("regex", "string", "regex")
 {
 	//REGEX_DEBUG_STR("abc");
 	//REGEX_DEBUG_TREE("abc");
@@ -45,7 +45,7 @@ test("regex derp","","")
 	//REGEX_DEBUG_FLAT("([ab])*");
 	//REGEX_DEBUG_FLAT("((a)|(b))+");
 	
-	REGEX_DEBUG_FLAT("(?:a){5}");
+	//REGEX_DEBUG_FLAT("(?:a){5}");
 	//REGEX_DEBUG_FLAT("(?:a){0,5}");
 	
 	//REGEX_DEBUG_FLAT("(a)|(b)|(c)");
@@ -107,7 +107,11 @@ test("regex derp","","")
 	test1("((a)\\2|(b)\\3){2}", "aabb", "aabb", "bb", nullptr, "b");
 	test1("((a)\\2|(b)\\3){2}", "bbaa", "bbaa", "aa", "a", nullptr);
 	
-	assert_eq((cstring)REGEX("bc").search("abc")[0].start, "bc");
+	assert_eq((cstring)(REGEX("bc").search("abc")[0].start), "bc");
 	assert_eq(REGEX("f(oo)").replace("foofoobarfoo", "\\1"), "oooobaroo");
+	
+	assert_eq(cstring("foo bar baz").csplit(REGEX("\\b|a")).join(","), "foo, ,b,r, ,b,z");
+	assert_eq(cstring("foo bar baz").csplit<1>(REGEX(" |(?=\\n)")).join(","), "foo,bar baz");
+	assert_eq(cstring("foo\nbar baz").csplit<1>(REGEX(" |(?=\\n)")).join(","), "foo,\nbar baz");
 }
 #endif

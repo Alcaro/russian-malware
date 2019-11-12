@@ -11,15 +11,19 @@ struct threaddata_win32 {
 };
 static unsigned __stdcall threadproc(void* userdata)
 {
-	threaddata_pthread* thdat = (threaddata_pthread*)userdata;
+	threaddata_win32* thdat = (threaddata_win32*)userdata;
 	thdat->func();
 	delete thdat;
 	return 0;
 }
 void thread_create(function<void()> start)
 {
+	// https://docs.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createthread
+	//  A thread in an executable that calls the C run-time library (CRT) should use the _beginthreadex
+	//  and _endthreadex functions for thread management rather than CreateThread and ExitThread
+	// no clue what it actually does, but better obey
 abort();//TODO: test
-	threaddata_pthread* thdat = new threaddata_pthread;
+	threaddata_win32* thdat = new threaddata_win32;
 	thdat->func = start;
 	
 	HANDLE h = (HANDLE)_beginthreadex(NULL, 0, threadproc, thdat, 0, NULL);
@@ -68,13 +72,14 @@ void thread_sleep(unsigned int usec)
 
 uintptr_t thread_get_id()
 {
-	//disassembly:
-	//call   *0x406118
-	//jmp    0x76c11427 <KERNEL32!GetCurrentThreadId+7>
-	//jmp    *0x76c1085c
-	//mov    %fs:0x10,%eax
-	//mov    0x24(%eax),%eax
-	//ret
+	// disassembly:
+	//  call   *0x406118
+	//  jmp    0x76c11427 <KERNEL32!GetCurrentThreadId+7>
+	//  jmp    *0x76c1085c
+	//  mov    %fs:0x10,%eax
+	//  mov    0x24(%eax),%eax
+	//  ret
+	// it's fast enough
 	return GetCurrentThreadId();
 }
 #endif

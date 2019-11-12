@@ -1,18 +1,18 @@
 #pragma once
 //usage: int fd = syscall<__NR_open>("foo", O_RDONLY);
 //WARNING: uses the raw kernel interface!
-//If the manpage splits an argument in high/low, then you'd better follow suit.
+//If the manpage splits an argument in high/low, you'd better follow suit.
 //If the argument order changes between platforms, you must follow that.
 //If the syscall is completely different from the wrapper (hi clone()), you must use syscall semantics.
 //In particular, there is no errno in this environment. Instead, that's handled by returning -ENOENT.
 
 #ifdef __x86_64__
 #define CLOBBER "memory", "cc", "rcx", "r11" // https://en.wikibooks.org/wiki/X86_Assembly/Interfacing_with_Linux#syscall
-#define REG_SYSNO "rax"
-#define REG_ARG1 "rdi"
-#define REG_ARG2 "rsi"
-#define REG_ARG3 "rdx"
-#define REG_ARG4 "r10"
+#define REG_SYSNO "rax" // Linux nolibc https://github.com/torvalds/linux/blob/1c4e395cf7ded47f/tools/include/nolibc/nolibc.h#L403
+#define REG_ARG1 "rdi" // claims r10, r8 and r9 are clobbered too, but wikibooks doesn't
+#define REG_ARG2 "rsi" // and nolibc syscall6 doesn't clobber r9, but syscall5 and below do
+#define REG_ARG3 "rdx" // testing reveals no clobbering of those registers either
+#define REG_ARG4 "r10" // I'll assume it's nolibc being overcautious, despite being in the kernel tree
 #define REG_ARG5 "r8"
 #define REG_ARG6 "r9"
 #define SYSCALL_INSTR "syscall"
