@@ -59,6 +59,14 @@ test("array", "", "array")
 		array<int> y = { 0,1,2,5,6,7,8,9 };
 		assert_eq(x, y);
 	}
+	
+	{
+		array<int> x = { 1, 2, 3, 4, 5 };
+		x.swap(1,3);
+		assert_eq(tostring_dbg(x), "1,4,3,2,5");
+		x.swap(3,1);
+		assert_eq(tostring_dbg(x), "1,2,3,4,5");
+	}
 }
 
 

@@ -35,7 +35,7 @@ public:
 	event next(); // Returned cstrings are valid until next function call (or destructor) on this object.
 	
 private:
-	string m_orig_data; // keep a reference if we're passed in the only copy of a string object
+	string m_orig_data; // m_data points into here
 	cstring m_data;
 	cstring m_thisline;
 	array<bool> m_indent_step;

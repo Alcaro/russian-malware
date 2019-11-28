@@ -10,7 +10,7 @@ inline string tostring(cstring s) { return s; }
 //printf has PRIi32, but the native ones are defined in terms of int/long
 inline string tostring(  signed char val)     { char ret[32]; sprintf(ret, "%d",   val); return ret; } // the C++ standard says
 inline string tostring(unsigned char val)     { char ret[32]; sprintf(ret, "%u",   val); return ret; } // (un)signed char/short are
-//signless char isn't integral, so not here
+//signless char isn't integral, so not here. If anything, it should be returned as character.
 inline string tostring(  signed short val)    { char ret[32]; sprintf(ret, "%d",   val); return ret; } // promoted to (un)signed int
 inline string tostring(unsigned short val)    { char ret[32]; sprintf(ret, "%u",   val); return ret; } // in ellipsis
 inline string tostring(  signed int val)      { char ret[32]; sprintf(ret, "%d",   val); return ret; }

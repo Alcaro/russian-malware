@@ -48,7 +48,7 @@ static const char * find_entity(cstring text)
 
 void HTML::entity_decode(string& out, cstring& in, bool isattr)
 {
-	//this follows the HTML5 spec <https://html.spec.whatwg.org/#character-reference-state>
+	//this follows the HTML5 spec https://html.spec.whatwg.org/#character-reference-state
 	//12.2.5.72 Character reference state
 	if (isalnum(in[1]))
 	{
@@ -107,18 +107,15 @@ void HTML::entity_decode(string& out, cstring& in, bool isattr)
 		if (ccode >= 0xD800 && ccode <= 0xDFFF) ccode = 0xFFFD;
 		if (ccode >= 0x80 && ccode <= 0x9F)
 		{
-#define X 0xFFFD
 static const uint16_t windows1252[32]={
-	//00 to 7F map to themselves
-	0x20AC, X,      0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021,
-	0x02C6, 0x2030, 0x0160, 0x2039, 0x0152, X,      0x017D, X,     
-	X,      0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014,
-	0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, X,      0x017E, 0x0178,
+	//00 to 7F map to themselves, as do 81, 8D, 8F, 90 and 9D
+	0x20AC, 0x81,   0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021,
+	0x02C6, 0x2030, 0x0160, 0x2039, 0x0152, 0x8D,   0x017D, 0x8F,  
+	0x90,   0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014,
+	0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0x9D,   0x017E, 0x0178,
 	//A0 to FF map to themselves
 };
-#undef X
-			uint32_t newcp = windows1252[ccode-0x80]; // yes, this is in the spec
-			if (newcp != 0xFFFD) ccode = newcp;
+			ccode = windows1252[ccode-0x80]; // yes, this is in the spec
 		}
 		out += string::codepoint(ccode);
 		return;

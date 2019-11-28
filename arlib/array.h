@@ -21,7 +21,7 @@ protected:
 	static bool trivial_cons() { return std::is_trivial_v<T>; } // constructor is memset(0)
 	static bool trivial_copy() { return std::is_trivially_copyable_v<T>; } // copy constructor is memcpy
 	static bool trivial_comp() { return std::has_unique_object_representations_v<T>; } // equality comparison is memcmp
-	//don't care about destructor being trivial
+	static bool trivial_dtor() { return std::is_trivially_destructible_v<T>; } // destructor does nothing
 	
 public:
 	const T& operator[](size_t n) const { return items[n]; }
@@ -213,7 +213,7 @@ public:
 		
 		char tmp[sizeof(T)];
 		memcpy(tmp, this->items+a, sizeof(T));
-		memmove(this->items+b+1, this->items+b, sizeof(T)*(a-b));
+		memcpy(this->items+a, this->items+b, sizeof(T));
 		memcpy(this->items+b, tmp, sizeof(T));
 	}
 	
@@ -551,7 +551,10 @@ public:
 	
 	~array()
 	{
-		for (size_t i=0;i<this->count;i++) this->items[i].~T();
+		if (!this->trivial_dtor()) // not destructing a million uint8s speeds up debug builds
+		{
+			for (size_t i=0;i<this->count;i++) this->items[i].~T();
+		}
 		free(this->items);
 	}
 	
