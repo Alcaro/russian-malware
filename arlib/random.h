@@ -1,4 +1,7 @@
 #include "global.h"
+#ifdef __linux__
+#include <unistd.h>
+#endif
 
 // this is PCG-XSH-RR with 64-bit state and 32-bit output, adapted from wikipedia
 // https://en.wikipedia.org/wiki/Permuted_congruential_generator
@@ -35,7 +38,6 @@ public:
 
 //recommended use:
 //random_t rand;
-//rand.seed(time(NULL));
 //return rand()%42;
 class random_t : public random_pcg {
 	class randresult {
@@ -65,7 +67,7 @@ public:
 		ignore(getentropy(&seed, sizeof(seed))); // guaranteed to succeed unless kernel < 3.17 (october 2014), too big, or bad pointer
 		this->seed(seed);
 	}
-	random_t(uint64_t seed)
+	random_t(uint64_t seed) // Not recommended unless you need predictable output.
 	{
 		this->seed(seed);
 	}

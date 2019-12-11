@@ -132,7 +132,7 @@ test("process", "array,string,runloop", "process")
 		process::output* err = p.set_stderr(process::output::create_buffer());
 		
 		out->callback(bind_lambda([&]() { assert_unreachable(); }));
-		err->callback(bind_lambda([&]() { assert_neq(err->read(), ""); loop->exit(); }));
+		err->callback(bind_lambda([&]() { assert_ne(err->read(), ""); loop->exit(); }));
 		
 		assert(p.launch(CAT_FILE, "nonexist.ent"));
 		
@@ -247,7 +247,7 @@ test("sandbox", "process", "sandbox")
 		loop->enter();
 		
 		assert(has_access_fail);
-		assert_neq(status, 0);
+		assert_ne(status, 0);
 	}
 	
 	{

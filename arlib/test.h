@@ -92,9 +92,9 @@ void _assert_eq(const T&  actual,   const char * actual_exp,
 }
 
 template<typename T, typename T2>
-void _assert_neq(const T&  actual,   const char * actual_exp,
-                 const T2& expected, const char * expected_exp,
-                 int line)
+void _assert_ne(const T&  actual,   const char * actual_exp,
+                const T2& expected, const char * expected_exp,
+                int line)
 {
 	if (!!_test_eq(actual, expected)) // a!=b implemented as !(a==b)
 	{
@@ -181,8 +181,8 @@ void _assert_range(const T&  actual, const char * actual_exp,
 	} while(0)
 #define assert_eq_ret(actual,expected,ret) _assert_fn_ret(_assert_eq,actual,expected,ret)
 #define assert_eq(actual,expected) assert_eq_ret(actual,expected,)
-#define assert_neq_ret(actual,expected,ret) _assert_fn_ret(_assert_neq,actual,expected,ret)
-#define assert_neq(actual,expected) assert_neq_ret(actual,expected,)
+#define assert_ne_ret(actual,expected,ret) _assert_fn_ret(_assert_ne,actual,expected,ret)
+#define assert_ne(actual,expected) assert_ne_ret(actual,expected,)
 #define assert_lt_ret(actual,expected,ret) _assert_fn_ret(_assert_lt,actual,expected,ret)
 #define assert_lt(actual,expected) assert_lt_ret(actual,expected,)
 #define assert_lte_ret(actual,expected,ret) _assert_fn_ret(_assert_lte,actual,expected,ret)
@@ -196,8 +196,8 @@ void _assert_range(const T&  actual, const char * actual_exp,
 	} while(0)
 #define assert_range(actual,min,max) assert_range_ret(actual,min,max,)
 #define assert_unreachable() do { _testfail("\nassert_unreachable() wasn't unreachable", __LINE__); } while(0)
-#define test_nomalloc for (int _testi=_test_blockmalloc(); _testi; _testi=_test_unblockmalloc())
-#define testctx(x) for (int _testi=_teststack_pushstr(x); _testi; _testi=_teststack_popstr())
+#define test_nomalloc using_fn(_test_blockmalloc(), _test_unblockmalloc())
+#define testctx(x) using_fn(_teststack_pushstr(x), _teststack_popstr())
 #define testcall(x) do { _teststack_push(__LINE__); x; _teststack_pop(); } while(0)
 #define test_skip(x) do { _test_skip(x); } while(0)
 #define test_skip_force(x) do { _test_skip_force(x); } while(0)
@@ -217,8 +217,8 @@ int not_quite_main(int argc, char** argv);
 #define assert_msg(x, msg) ((void)(x),(void)(msg))
 #define assert_eq_ret(x,y,r) ((void)((x)==(y)))
 #define assert_eq(x,y) ((void)((x)==(y)))
-#define assert_neq_ret(x,y,r) ((void)((x)==(y)))
-#define assert_neq(x,y) ((void)((x)==(y)))
+#define assert_ne_ret(x,y,r) ((void)((x)==(y)))
+#define assert_ne(x,y) ((void)((x)==(y)))
 #define assert_lt_ret(x,y,r) ((void)((x)<(y)))
 #define assert_lt(x,y) ((void)((x)<(y)))
 #define assert_lte_ret(x,y,r) ((void)((x)<(y)))
@@ -251,6 +251,8 @@ void socket_test_fail(socket* sock, runloop* loop);
 
 #if __has_include(<valgrind/memcheck.h>)
 # include <valgrind/memcheck.h>
+#elif defined(__linux__)
+# include "deps/valgrind/memcheck.h"
 #else
 # define RUNNING_ON_VALGRIND false
 # define VALGRIND_PRINTF_BACKTRACE(...) abort()

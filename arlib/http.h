@@ -5,6 +5,9 @@
 #include "socket.h"
 #include "bytepipe.h"
 #include "stringconv.h"
+#ifdef __linux__
+#include <unistd.h>
+#endif
 
 class HTTP : nocopy {
 public:
@@ -225,7 +228,7 @@ public:
 		//Counts as calling pack(), so only once.
 		void attach(HTTP::req& rq)
 		{
-			rq.body = pack();
+			rq.body = std::move(pack());
 			rq.headers.append("Content-Type: multipart/form-data; boundary="+boundary.substr(2, ~0));
 		}
 	};

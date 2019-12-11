@@ -29,7 +29,7 @@ void assert_decompose(function<Tr(Ta...)> fn, bool allowed = true)
 	Tr(*no_func)(void*, Ta...) = nullptr;
 	auto parts = fn.try_decompose();
 	assert_eq(parts.safe, allowed);
-	assert_neq(parts.fp, no_func);
+	assert_ne(parts.fp, no_func);
 }
 }
 

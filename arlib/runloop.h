@@ -4,13 +4,15 @@
 //A runloop keeps track of a number of file descriptors, calling their handlers whenever the relevant operation is available.
 //Event handlers must handle the event. If they don't, the handler may be called again forever and block everything else.
 //Do not call enter() or step() while inside a callback. The others are safe.
-//Like most other objects, a runloop is not thread safe.
+//A runloop is less thread safe than most objects. It may only ever be use from one thread, even if access is serialized.
+//Anything placed inside a runloop (socket, process, ...) gains the same thread affinity.
 class runloop : nocopy {
 protected:
 	runloop() {}
 public:
-	//The global runloop handles GUI events, in addition to whatever fds it's told to track. Always returns the same object.
+	//The global runloop handles GUI events, in addition to whatever fds it's told to track.
 	//The global runloop belongs to the main thread. Don't delete it, or call this function from any other thread.
+	//This function always returns the same object.
 	static runloop* global();
 	
 	//For non-primary threads. Using multiple runloops per thread is generally a bad idea.
@@ -33,7 +35,7 @@ public:
 	//To remove it, pass NULL for both callbacks.
 	virtual void set_fd(uintptr_t fd, function<void(uintptr_t)> cb_read, function<void(uintptr_t)> cb_write = NULL) = 0;
 #else
-	//TODO: figure out sockets and gui events on windows (other fds aren't needed)
+	//TODO: figure out sockets and gui events on windows (do I need any other fds?)
 	//virtual uintptr_t set_socket(socket* sock, function<void()> cb_read, function<void()> cb_write) = 0;
 #endif
 	
@@ -47,7 +49,7 @@ public:
 	//prepare_submit() must be called on the owning thread before submit() is allowed.
 	//There is no way to 'unprepare' submit(), other than deleting the runloop.
 	//It is safe to call prepare_submit() multiple times, even concurrently with submit(),
-	// as long as the first one has finished before the first submit() starts.
+	// as long as the first one has finished before the first submit() or second prepare_submit() starts.
 	virtual void prepare_submit() = 0;
 #endif
 	
@@ -68,7 +70,6 @@ public:
 	
 	//Delete everything using the runloop (sockets, HTTP or anything else using sockets, etc) before deleting the loop itself,
 	// or said contents will use-after-free.
-	// The runloop itself doesn't need to be empty (contents will be removed without being called), though
 	//You can't remove GUI stuff from the global runloop, so you can't delete it.
 	// Not even on process exit; cleanup on process exit is a waste of time, anyways.
 	virtual ~runloop() = 0;
@@ -114,6 +115,7 @@ public:
 		
 		void reset()
 		{
+			// don't optimize to set(uintptr_t id) { reset(); this->id = id; }, deleting then adding improves memory use patterns
 			if (id)
 				loop()->raw_timer_remove(id);
 			id = 0;

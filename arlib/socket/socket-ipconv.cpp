@@ -1,7 +1,21 @@
 #ifdef ARLIB_SOCKET
+#ifdef __unix__
+#include <arpa/inet.h>
+#define USE_INET_NTOP // should be disabled for testing
+#endif
+
 #include "socket.h"
 #include "../stringconv.h"
 
+#ifdef USE_INET_NTOP
+string socket::ip_to_string(arrayview<byte> ip)
+{
+	char ret[INET6_ADDRSTRLEN];
+	int af = (ip.size() == 4 ? AF_INET : ip.size() == 16 ? AF_INET6 : AF_UNSPEC);
+//if (af == AF_INET6) return ""; // TODO: enable
+	return inet_ntop(af, ip.ptr(), ret, INET6_ADDRSTRLEN);
+}
+#else
 string socket::ip_to_string(arrayview<byte> ip)
 {
 	if (ip.size() == 4)
@@ -60,9 +74,11 @@ https://tools.ietf.org/html/rfc5952
    The characters "a", "b", "c", "d", "e", and "f" in an IPv6 address
    MUST be represented in lowercase.
 
+which IPs should be rendered as v4? ::ffff:0.0.0.0/96 only probably
 */
 	return "";
 }
+#endif
 
 
 array<byte> socket::string_to_ip(cstring str)
@@ -73,12 +89,25 @@ array<byte> socket::string_to_ip(cstring str)
 
 int socket::string_to_ip(arrayvieww<byte> out, cstring str)
 {
-	if (out.size() < 16) return 16;
+	if (out.size() < 16) abort();
 	if (string_to_ip4(out, str)) return 4;
 	if (string_to_ip6(out, str)) return 16;
 	return 0;
 }
 
+#ifdef USE_INET_NTOP
+bool socket::string_to_ip4(arrayvieww<byte> out, cstring str)
+{
+	if (str.contains_nul()) return false;
+	return inet_pton(AF_INET, str.c_str(), out.ptr());
+}
+bool socket::string_to_ip6(arrayvieww<byte> out, cstring str)
+{
+	if (str.contains_nul()) return false;
+return false; // TODO: enable
+	return inet_pton(AF_INET6, str.c_str(), out.ptr());
+}
+#else
 bool socket::string_to_ip4(arrayvieww<byte> out, cstring str)
 {
 	const char* inp = (char*)str.bytes().ptr();
@@ -105,19 +134,40 @@ bool socket::string_to_ip4(arrayvieww<byte> out, cstring str)
 	}
 }
 
-bool socket::string_to_ip6(arrayvieww<byte> out, cstring str) { return false; }
+//TODO: implement
+bool socket::string_to_ip6(arrayvieww<byte> out, cstring str)
+{
+	return false;
+}
+#endif
 
 #include "../test.h"
 test("IP conversion", "array,string", "ipconv")
 {
+#define assert_bad(addr) \
+		assert_eq(tostringhex(socket::string_to_ip(addr)), ""); \
+		assert_eq(tostringhex(socket::string_to_ip("::" addr)), "");
 	assert_eq(tostringhex(socket::string_to_ip("127.0.0.1")), "7F000001");
-	assert_eq(tostringhex(socket::string_to_ip("127.0.0.")), "");
-	assert_eq(tostringhex(socket::string_to_ip("0127.0.0.1")), "");
-	assert_eq(tostringhex(socket::string_to_ip("127.00.0.1")), "");
-	assert_eq(tostringhex(socket::string_to_ip("127.256.0.1")), "");
-	assert_eq(tostringhex(socket::string_to_ip(".0.0.1")), "");
-	assert_eq(tostringhex(socket::string_to_ip("127.0.0")), "");
+	assert_bad("127.0.0.1q");
+	assert_bad("127.0.0.1 ");
+	assert_bad("127.0.0.");
+	assert_bad("0127.0.0.1");
+	assert_bad("127.00.0.1");
+	assert_bad("0x7f.0.0.1");
+	assert_bad("127.256.0.1");
+	assert_bad(".0.0.1");
+	assert_bad("127.0.0");
+	assert_bad("1");
+	assert_bad("16777217");
+	assert_eq(tostringhex(socket::string_to_ip(arrayview<byte>((byte*)"1.1.1.1\0", 8))), "");
+	assert_eq(tostringhex(socket::string_to_ip(arrayview<byte>((byte*)"::1.1.1.1\0", 10))), "");
 	
 	assert_eq(socket::ip_to_string(socket::string_to_ip("127.0.0.1")), "127.0.0.1");
+	
+	return;
+	
+	assert_eq(socket::ip_to_string(socket::string_to_ip("::ffff:127.0.0.1")), "::ffff:127.0.0.1");
+	assert_eq(socket::ip_to_string(socket::string_to_ip("::fffe:127.0.0.1")), "::fffe:7f00:0001");
+	assert_eq(socket::ip_to_string(socket::string_to_ip("::127.0.0.1")), "::7f00:0001");
 }
 #endif

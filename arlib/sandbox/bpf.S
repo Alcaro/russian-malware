@@ -149,7 +149,7 @@ jmp ENOTTY_S
 execveat:
 #int execveat(int dirfd, const char * pathname, char * const * argv, char * const * envp, int flags)
 #accept from sysemu, intercept from others
-#sysemu is detected by pathname == 0x00007fff'ffffefff (the last mappable byte) (also normal programs use execve)
+#sysemu is detected by pathname == 0x00007fff'ffffefff (the last mappable byte) (also normal programs use execve instead)
 
 ld [arg2h]
 jne #0x00007fff, emulate

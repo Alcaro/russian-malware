@@ -181,6 +181,7 @@ static bool install_seccomp()
 }
 
 
+// no glibc wrapper
 static int execveat(int dirfd, const char * pathname, char * const argv[], char * const envp[], int flags)
 {
 	return syscall(__NR_execveat, dirfd, pathname, argv, envp, flags);

@@ -8,7 +8,7 @@
 //This can be worked around with ptrace to make that specific syscall return a pre-opened fd, but that's way too much effort.
 //Instead, we will be the loader. Of course we don't want to actually load the program, that's even harder than ptrace,
 // so we'll just load the real loader, after setting up a SIGSYS handler (see sysemu.cpp) to let open() act normally.
-//We won't do much error checking. We know everything will succeed, and if it doesn't, there's no way to recover.
+//We'll skip most error checking. Everything will succeed on a sane system, and if it doesn't, there's no way to recover.
 
 //#define _GNU_SOURCE // default (mandatory) in c++
 #include <unistd.h>
@@ -20,6 +20,8 @@
 #include <elf.h>
 
 #include "syscall.h"
+
+#define KNOWN_INIT(x) = x
 
 //__asm__(".intel_syntax");
 
@@ -39,7 +41,7 @@ memset:
 #define memset my_memset
 #define memcpy my_memcpy
 #define memcmp my_memcmp
-extern "C" {
+extern "C" { // extern "C" so I won't need to jmp to a mangled name
 void memset(void* ptr, int value, size_t num);
 void memset(void* ptr, int value, size_t num)
 {
@@ -68,7 +70,7 @@ int memcmp(const void * ptr1, const void * ptr2, size_t n)
 }
 
 
-//gcc recognizes various function names and reads attributes (such as extern) from the headers, force it not to
+//for functions other than memset/cpy/cmp, slapping it in a namespace is enough to get rid of gcc's attributes
 namespace mysand { namespace {
 
 static inline int open(const char * pathname, int flags, mode_t mode = 0)
@@ -105,7 +107,7 @@ static inline int munmap(void* addr, size_t length)
 static inline Elf64_Ehdr* map_binary(int fd, uint8_t*& base, uint8_t* hbuf, size_t buflen)
 {
 	//uselib() would be the easy way out, but it doesn't tell where it's mapped, and it may be compiled out of the kernel
-	//maybe uselib() only ever worked for a.out, never ELF
+	//no clue how (or if) it ever worked
 	read(fd, hbuf, buflen);
 	
 	Elf64_Ehdr* ehdr = (Elf64_Ehdr*)hbuf;
@@ -121,20 +123,20 @@ static inline Elf64_Ehdr* map_binary(int fd, uint8_t*& base, uint8_t* hbuf, size
 	{
 		if (phdr[i].p_type != PT_LOAD) continue;
 		
-		size_t thissize = ALIGN_UP(phdr[i].p_vaddr + phdr[i].p_memsz);
-		if (thissize > memsize) memsize = thissize;
+		size_t thisend = ALIGN_UP(phdr[i].p_vaddr + phdr[i].p_memsz);
+		if (thisend > memsize) memsize = thisend;
 	}
 	
 	//find somewhere it fits (this unfortunately under-aligns it - could fix it if needed, but it seems to work in practice)
 	base = (uint8_t*)mmap(NULL, memsize, PROT_NONE, MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE, -1, 0);
 	if (base == MAP_FAILED) return NULL;
-	munmap(base, memsize); // in a multithreaded process, this would be a race condition, but we're single threaded
+	munmap(base, memsize); // in a multithreaded process, this would be a race condition, but nothing else has spawned threads yet
 	                       // we can map on top of the target, but that leaves pointless PROT_NONE holes
 	                       // they can be removed manually, but this is easier
 	
 	for (int i=0;i<ehdr->e_phnum;i++)
 	{
-		//not sure if other segment types are needed, but kernel doesn't use them
+		//kernel ignores other segment types, so let's follow suit
 		if (phdr[i].p_type != PT_LOAD) continue;
 		
 		int prot = 0;
@@ -215,8 +217,7 @@ extern "C" funcptr bootstrap_start(void** stack)
 	int fd = open("/lib64/ld-linux-x86-64.so.2", O_RDONLY);
 	if (fd < 0) preload_error("couldn't open dynamic linker");
 	uint8_t hbuf[832]; // FILEBUF_SIZE from glibc elf/dl-load.c
-	uint8_t* ld_base;  // ld-linux has 7 segments, 832 bytes fits 13 (plus ELF header)
-	ld_base = NULL; // shut up false positive warning
+	uint8_t* ld_base KNOWN_INIT(nullptr); // ld-linux has 7 segments, 832 bytes fits 13 (plus ELF header)
 	Elf64_Ehdr* ld_ehdr = map_binary(fd, ld_base, hbuf, sizeof(hbuf));
 	close(fd);
 	if (!ld_ehdr) preload_error("couldn't initialize dynamic linker");
@@ -234,7 +235,7 @@ extern "C" funcptr bootstrap_start(void** stack)
 //therefore, the bootloader's first step must be written in asssembly
 __asm__(R"(
 # asm works great with raw strings, surprised I haven't seen it elsewhere
-# guess c++ and asm is a rare combination
+# I guess c++ and asm is a rare combination
 .globl _start
 _start:
 mov %rdi, %rsp

@@ -117,6 +117,7 @@ bool file::mkdir(cstring filename)
 #define READONLY_FILE_HEAD "\x7F""ELF"
 #define WRITABLE_FILE "/tmp/arlib-selftest.txt"
 #define CREATABLE_DIR "/tmp/arlib-selftest/"
+#include <unistd.h>
 #endif
 
 test("file reading", "array", "file")

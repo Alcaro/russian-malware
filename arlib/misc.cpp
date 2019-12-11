@@ -58,3 +58,25 @@ test("test_nomalloc", "", "")
 	test_skip("unfixable expected-failure");
 	if (RUNNING_ON_VALGRIND) test_expfail("Valgrind doesn't catch new within test_nomalloc, rerun with gdb or standalone");
 }
+
+static int x;
+static int y()
+{
+	using_fn(x=1, x=2)
+	{
+		assert_eq(x, 1);
+		return 42;
+	}
+}
+test("using_fn", "", "")
+{
+	x = 0;
+	using_fn(x=1, x=2)
+	{
+		assert_eq(x, 1);
+	}
+	assert_eq(x, 2);
+	x = 0;
+	assert_eq(y(), 42);
+	assert_eq(x, 2);
+}

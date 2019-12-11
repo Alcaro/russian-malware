@@ -95,7 +95,7 @@ public:
 	// Network byte order.
 	static string ip_to_string(arrayview<byte> bytes);
 	static array<byte> string_to_ip(cstring str);
-	// The buffer must be at least 16 bytes. Returns bytes actually used (4 or 16).
+	// The buffer must be at least 16 bytes. Returns bytes actually used (4 or 16, or 0 for error).
 	static int string_to_ip(arrayvieww<byte> out, cstring str);
 	static bool string_to_ip4(arrayvieww<byte> out, cstring str);
 	static bool string_to_ip6(arrayvieww<byte> out, cstring str);

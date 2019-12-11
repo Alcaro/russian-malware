@@ -466,12 +466,12 @@ static void test_runloop(bool is_global)
 	//don't put this scoped, id is used later
 	uintptr_t id = loop->raw_set_timer_repeat(20, bind_lambda([&]()
 		{
-			assert_neq_ret(id, 0, true);
+			assert_ne_ret(id, 0, true);
 			uintptr_t id_copy = id; // the 'id' reference gets freed by loop->remove(), reset it before that and keep a copy
 			id = 0;
 			loop->raw_timer_remove(id_copy);
 		}));
-	assert_neq(id, 0); // no thinking -1 is the highest ID so 0 should be used
+	assert_ne(id, 0); // no thinking -1 is the highest ID so 0 should be used
 	
 	{
 		int64_t start = time_ms_ne();

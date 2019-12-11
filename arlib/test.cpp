@@ -132,7 +132,7 @@ void _testfail(cstring why, int line)
 void _testcmpfail(cstring name, int line, cstring expected, cstring actual)
 {
 	result = err_fail;
-	if (expected.contains("\n") || actual.contains("\n") || name.length()+expected.length()+actual.length()>240)
+	if (expected.contains("\n") || actual.contains("\n") || name.length()+expected.length()+actual.length() > 240)
 	{
 		_testfail("\nFailed assertion "+name+stack(line)+"\nexpected:\n"+expected+"\nactual:\n"+actual);
 	}

@@ -11,7 +11,7 @@
 		out = 0; \
 		if (!s || isspace(s[0])) return false; \
 		if ((t)-1 > (t)0 && s[0]=='-') return false; \
-		string tmp_s = s; /* copy in case 's' isn't terminated */ \
+		auto tmp_s = s.c_str(); \
 		const char * tmp_cp = tmp_s; \
 		char * tmp_cpo; \
 		if (sizeof(t) == sizeof(frt)) errno = 0; \
@@ -23,9 +23,8 @@
 		return true; \
 	}
 
-//specification: if the input is a hex number, return something strtoul accepts
-//otherwise, return something that strtoul rejects
-//this means replace 0x with x, if present
+// if the input does not start with 0x, return it unchanged
+// otherwise, return a substring of input that strtoul rejects, for example pointer to the x (pointer to the nul would work too)
 static const char * drop0x(const char * in)
 {
 	if (in[0]=='0' && (in[1]=='x' || in[1]=='X')) return in+1;
@@ -37,7 +36,7 @@ static const char * drop0x(const char * in)
 	bool fromstringhex(cstring s, t& out) \
 	{ \
 		out = 0; \
-		string tmp_s = s; \
+		auto tmp_s = s.c_str(); \
 		const char * tmp_cp = tmp_s; \
 		if (!*tmp_cp || isspace(*tmp_cp) || *tmp_cp == '-') return false; \
 		char * tmp_cpo; \
@@ -61,41 +60,46 @@ FROMFUNCHEX(unsigned long,  unsigned long, strtoul)
 FROMFUNC(     signed long long,   signed long long, strtoll)
 FROMFUNCHEX(unsigned long long, unsigned long long, strtoull)
 
-bool fromstring(cstring s, double& out)
+static bool fromstring_float(cstring s, double& out, double(*strtod_l)(const char*,char**))
 {
-	out = 0;
 	auto tmp_s = s.c_str();
 	const char * tmp_cp = tmp_s;
 	if (*tmp_cp != '-' && !isdigit(*tmp_cp)) return false;
 	char * tmp_cpo;
-	double ret = strtod(drop0x(tmp_cp), &tmp_cpo);
+	out = strtod_l(drop0x(tmp_cp), &tmp_cpo);
 	if (tmp_cpo != tmp_cp + s.length()) return false;
 	if (!isdigit(tmp_cpo[-1])) return false;
-	if (ret==HUGE_VAL || ret==-HUGE_VAL) return false;
+	if (out == HUGE_VAL || out == -HUGE_VAL) return false;
+	return true;
+}
+
+bool fromstring(cstring s, double& out)
+{
+	out = 0;
+	double ret;
+	if (!fromstring_float(s, ret, strtod)) return false;
 	out = ret;
 	return true;
 }
 
-//strtof exists in C99, but let's not use that
 bool fromstring(cstring s, float& out)
 {
 	out = 0;
-	double tmp;
-	if (!fromstring(s, tmp)) return false;
-	if (tmp < -FLT_MAX || tmp > FLT_MAX) return false;
-	out = tmp;
+	double ret;
+	if (!fromstring_float(s, ret, [](const char * str, char** str_end)->double { return strtof(str, str_end); })) return false;
+	out = ret;
 	return true;
 }
 
 bool fromstring(cstring s, bool& out)
 {
-	if (s=="false" || s=="0")
+	if (s == "false" || s == "0")
 	{
 		out = false;
 		return true;
 	}
 	
-	if (s=="true" || s=="1")
+	if (s == "true" || s == "1")
 	{
 		out = true;
 		return true;
@@ -165,7 +169,7 @@ test("string conversion", "", "string")
 	testcall(testunhex<unsigned short    >("AAAA", 0xAAAA)); // AAAAAAAAAAAHHHHH MOTHERLAND http://www.albinoblacksheep.com/flash/end
 	testcall(testunhex<unsigned int      >("aaaaaaaa", 0xaaaaaaaa));
 	testcall(testunhex<unsigned int      >("AAAAAAAA", 0xAAAAAAAA));
-	testcall(testunhex<unsigned long     >("aaaaaaaa", 0xaaaaaaaa)); // this is sometimes 64bit, but good enough
+	testcall(testunhex<unsigned long     >("aaaaaaaa", 0xaaaaaaaa)); // long is sometimes 64bit, but good enough
 	testcall(testunhex<unsigned long     >("AAAAAAAA", 0xAAAAAAAA));
 	testcall(testunhex<unsigned long long>("aaaaaaaaaaaaaaaa", 0xaaaaaaaaaaaaaaaa));
 	testcall(testunhex<unsigned long long>("AAAAAAAAAAAAAAAA", 0xAAAAAAAAAAAAAAAA));
@@ -221,9 +225,7 @@ test("string conversion", "", "string")
 	
 	assert(!fromstring("2,5", f)); // this is not the decimal separator, has never been and will never be
 	
-	string s;
-	s += '7';
-	s += '\0';
+	string s = "42" + string::nul();
 	assert(!fromstring(s, u32)); // no nul allowed
 	assert(!fromstring(s, f));
 	assert(!fromstringhex(s, u32));
@@ -243,6 +245,18 @@ test("string conversion", "", "string")
 	assert(!fromstring("1e-", f));
 	assert(!fromstring("1.", f));
 	assert(!fromstring(".1", f));
+	
+	try_fromstring("123", i32); // just to ensure they compile
+	try_fromstring("123", s);
+	
+	// 0.0000000000000000000000000703853100000000000000000000000000000000 <- input
+	// 0.0000000000000000000000000703853069185120912085918801714030697411 <- float closest to the input
+	// 0.0000000000000000000000000703853100000000022281692450609677778769 <- double closest to the input
+	// 0.0000000000000000000000000703853130814879132477466099505324860128 <- float closest to the above double
+	assert(fromstring("7.038531e-26", f));
+	assert_ne(f, (float)7.038531e-26);
+	assert_eq(f, 7.038531e-26f);
+	static_assert(7.038531e-26f != (float)7.038531e-26); // test the compiler too
 	
 	// ensure overflow fails
 	assert(!fromstring("256", u8));
@@ -268,9 +282,17 @@ test("string conversion", "", "string")
 	assert(!fromstring("9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999"
 	                   "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999"
 	                   "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999", d));
-	
-	assert_eq(tostring(1.0f), "1");
-	
-	try_fromstring("123", i32);
-	try_fromstring("123", s);
+	assert(fromstring("0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+	                    "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+	                    "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+	                    "0000000000000000000000049406564584124654417656879286822137236505980261432476442558568250067550727020"
+	                    "8751865299836361635992379796564695445717730926656710355939796398774796010781878126300713190311404527"
+	                    "8458171678489821036887186360569987307230500063874091535649843873124733972731696151400317153853980741"
+	                    "2623856559117102665855668676818703956031062493194527159149245532930545654440112748012970999954193198"
+	                    "9409080416563324524757147869014726780159355238611550134803526493472019379026810710749170333222684475"
+	                    "3335720832431936092382893458368060106011506169809753078342277318329247904982524730776375927247874656"
+	                    "0847782037344696995336470179726777175851256605511991315048911014510378627381672509558373897335989936"
+	                    "64809941164205702637090279242767544565229087538682506419718265533447265625", d));
+	assert_ne(d, 0); // smallest possible subnormal float
+	assert_eq(d/2, 0); // halving it rounds to zero
 }

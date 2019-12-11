@@ -586,6 +586,7 @@ test("JSON serialization", "json", "serialize")
 		item.t = true;
 		item.f = false;
 		assert_eq(jsonserialize(item), "{\"foo\":[12,34,56,78],\"t\":true,\"f\":false}");
+		assert_eq(jsonserialize<1>(item), "{\n \"foo\": [\n  12,\n  34,\n  56,\n  78],\n \"t\": true,\n \"f\": false}");
 	}
 	
 	{

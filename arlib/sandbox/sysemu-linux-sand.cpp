@@ -25,7 +25,7 @@
 #define memset my_memset
 #define memcpy my_memcpy
 #define memcmp my_memcmp
-extern "C" { // have to do weird stuff to trick Clang
+extern "C" {
 void memset(void* ptr, int value, size_t num);
 void memcpy(void * dest, const void * src, size_t n);
 int memcmp(const void * ptr1, const void * ptr2, size_t n);
