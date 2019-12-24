@@ -466,7 +466,7 @@ static void test_runloop(bool is_global)
 	//don't put this scoped, id is used later
 	uintptr_t id = loop->raw_set_timer_repeat(20, bind_lambda([&]()
 		{
-			assert_ne_ret(id, 0, true);
+			assert_ne(id, 0);
 			uintptr_t id_copy = id; // the 'id' reference gets freed by loop->remove(), reset it before that and keep a copy
 			id = 0;
 			loop->raw_timer_remove(id_copy);
@@ -497,7 +497,7 @@ static void test_runloop(bool is_global)
 						loop->exit();
 					}));
 			});
-		thread_create(threadproc);
+		thread_create(std::move(threadproc));
 		loop->enter();
 		uint64_t end_ms = time_ms_ne();
 		assert_range(end_ms-start_ms, 75,200);

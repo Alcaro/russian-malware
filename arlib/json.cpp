@@ -771,6 +771,8 @@ test("JSON container", "string,array,set", "json")
 		JSON("["); // these pass if they do not yield infinite loops
 		JSON("[{}");
 		JSON("[[]");
+		JSON("[{},");
+		JSON("[[],");
 		JSON("{");
 		JSON("{\"x\"");
 		JSON("{\"x\":");

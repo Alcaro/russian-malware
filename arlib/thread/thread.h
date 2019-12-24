@@ -7,7 +7,7 @@
 //It is safe (though may yield a performance penalty) to malloc() something in one thread and free() it in another.
 //A thread is rather heavy; for short-running jobs, use thread_create_short or thread_split.
 enum priority_t { pri_default = 0, pri_high, pri_low, pri_idle };
-void thread_create(function<void()> start, priority_t pri = pri_default);
+void thread_create(function<void()>&& start, priority_t pri = pri_default);
 
 //Returns the number of threads to create to utilize the system resources optimally.
 unsigned int thread_num_cores();
@@ -177,7 +177,7 @@ static inline size_t thread_get_id() { return GetCurrentThreadId(); }
 //This one creates 'count' threads, calls work() in each of them with 'id' from 0 to 'count'-1, and
 // returns once each thread has returned.
 //Unlike thread_create, thread_split is expected to be called often, for short-running tasks. The threads may be reused.
-//It is safe to use the values 0 and 1. However, you should avoid going above thread_ideal_count().
+//It is safe to use the values 0 and 1. However, you should avoid going above thread_num_cores().
 void thread_split(unsigned int count, function<void(unsigned int id)> work);
 
 
@@ -220,7 +220,7 @@ public:
 };
 #define RUN_ONCE(fn) do { static bool first=true; if (first) fn(); first=false; } while(0)
 #define RUN_ONCE_FN(name) static void name##_core(); static void name() { RUN_ONCE(name##_core); } static void name##_core()
-#define synchronized(mutex)
+#define synchronized(mutex) if (true)
 static inline size_t thread_get_id() { return 0; }
 static inline unsigned int thread_num_cores() { return 1; }
 static inline void thread_create(function<void()> start) { abort(); }

@@ -41,7 +41,7 @@ template<int n> inline string tostring(unsigned long val)    { char ret[32]; spr
 template<int n> inline string tostringhex(unsigned long val) { char ret[32]; sprintf(ret, "%.*lX", n, val); return ret; }
 
 string tostring(double val);
-inline string tostring(float val) { return tostring((double)val); }
+string tostring(float val);
 inline string tostring(bool val) { return val ? "true" : "false"; }
 //inline string tostring(char val); // not sure if this one makes sense
 

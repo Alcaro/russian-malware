@@ -1,4 +1,122 @@
 #include "array.h"
+
+void array<bool>::set_slice(size_t start, size_t num, const array<bool>& other, size_t other_start)
+{
+	if (&other == this)
+	{
+		//TODO: optimize
+		array<bool> copy = other;
+		set_slice(start, num, copy, other_start);
+		return;
+	}
+	//TODO: optimize
+	for (size_t i=0;i<num;i++)
+	{
+		set(start+i, other.get(other_start+i));
+	}
+}
+
+void array<bool>::clear_unused(size_t nbytes)
+{
+	size_t low = this->nbits;
+	size_t high = nbytes*8;
+	
+	if (low == high) return; // don't wipe bits()[8] if they're both 64
+	
+	uint8_t& byte = bits()[low/8];
+	byte &=~ (0xFF<<(low&7));
+	low = (low+7)&~7;
+	
+	memset(bits()+low/8, 0, (high-low)/8);
+}
+
+void array<bool>::resize(size_t len)
+{
+	size_t prevlen = this->nbits;
+	this->nbits = len;
+	
+	switch ((prevlen > n_inline)<<1 | (len > n_inline))
+	{
+	case 0: // small->small
+		if (len < prevlen) clear_unused(sizeof(this->bits_inline));
+		break;
+	case 1: // small->big
+		{
+			size_t newbytes = alloc_size(len);
+			uint8_t* newbits = malloc(newbytes);
+			memcpy(newbits, this->bits_inline, sizeof(this->bits_inline));
+			memset(newbits+sizeof(this->bits_inline), 0, newbytes-sizeof(this->bits_inline));
+			bits_outline = newbits;
+		}
+		break;
+	case 2: // big->small
+		{
+			uint8_t* freethis = this->bits_outline;
+			memcpy(this->bits_inline, this->bits_outline, sizeof(this->bits_inline));
+			free(freethis);
+			clear_unused(sizeof(this->bits_inline));
+		}
+		break;
+	case 3: // big->big
+		{
+			size_t prevbytes = alloc_size(prevlen);
+			size_t newbytes = alloc_size(len);
+			if (newbytes > prevbytes)
+			{
+				bits_outline = realloc(this->bits_outline, newbytes);
+				clear_unused(newbytes);
+			}
+			if (len < prevlen)
+			{
+				clear_unused(newbytes);
+			}
+		}
+		break;
+	}
+	
+//printf("%lu->%lu t=%d", prevlen, len, ((prevlen > n_inline)<<1 | (len > n_inline)));
+//size_t bytes;
+//if (len > n_inline) bytes = alloc_size(len);
+//else bytes = sizeof(bits_inline);
+//for (size_t i=0;i<bitround(bytes);i++)
+//{
+//printf(" %.2X", bits()[i]);
+//}
+//puts("");
+//bool fail=false;
+//if (len>prevlen)
+//{
+//for (size_t n=prevlen;n<len;n++)
+//{
+//	if (get(n))
+//	{
+//		printf("%lu->%lu: unexpected at %lu\n", prevlen, len, n);
+//		fail=true;
+//	}
+//}
+//}
+//if(fail)abort();
+}
+
+array<bool> array<bool>::slice(size_t first, size_t count) const
+{
+	if ((first&7) == 0)
+	{
+		array<bool> ret;
+		ret.resize(count);
+		memcpy(ret.bits(), this->bits() + first/8, (count+7)/8);
+		return ret;
+	}
+	else
+	{
+		//TODO: optimize
+		array<bool> ret;
+		ret.resize(count);
+		for (size_t i=0;i<count;i++) ret.set(i, this->get(first+i));
+		return ret;
+	}
+}
+
 #include "test.h"
 
 #ifdef ARLIB_TEST

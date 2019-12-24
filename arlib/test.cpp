@@ -125,21 +125,19 @@ static void _testfail(cstring why)
 
 void _testfail(cstring why, int line)
 {
-	result = err_fail;
 	_testfail(why+stack(line));
 }
 
 void _testcmpfail(cstring name, int line, cstring expected, cstring actual)
 {
-	result = err_fail;
-	if (expected.contains("\n") || actual.contains("\n") || name.length()+expected.length()+actual.length() > 240)
+	//if (expected.contains("\n") || actual.contains("\n") || name.length()+expected.length()+actual.length() > 240)
 	{
-		_testfail("\nFailed assertion "+name+stack(line)+"\nexpected:\n"+expected+"\nactual:\n"+actual);
+		_testfail("\nFailed assertion "+name+stack(line)+"\nexpected: "+expected+"\nactual:   "+actual);
 	}
-	else
-	{
-		_testfail("\nFailed assertion "+name+stack(line)+": expected "+expected+", got "+actual);
-	}
+	//else
+	//{
+	//	_testfail("\nFailed assertion "+name+stack(line)+": expected "+expected+", got "+actual);
+	//}
 }
 
 void _test_skip(cstring why)
@@ -312,7 +310,7 @@ static testlist* list_reverse(testlist* list)
 int main(int argc, char* argv[])
 {
 	setvbuf(stdout, NULL, _IONBF, 0);
-	puts("Initializing Arlib...");
+	printf("Initializing Arlib...");
 	bool run_twice = false;
 	
 #ifdef __linux__
@@ -332,7 +330,7 @@ int main(int argc, char* argv[])
 	args.add("filter", &filter);
 	arlib_init(args, argv);
 	
-	puts("Sorting tests...");
+	printf(ESC_ERASE_LINE "Sorting tests...");
 	g_testlist = list_reverse(g_testlist); // with gcc's initializer run order, this makes them better ordered
 	
 	testlist* alltests = sort_tests(g_testlist);
@@ -393,6 +391,7 @@ int main(int argc, char* argv[])
 		numtests++;
 		numtests_iter = numtests_iter->next;
 	}
+	printf(ESC_ERASE_LINE);
 	
 	show_verbose = (all_tests || numtests < 8);
 	for (int pass = 0; pass < (run_twice ? 2 : 1); pass++)

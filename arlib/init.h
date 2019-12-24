@@ -24,7 +24,7 @@ class argparse {
 	public:
 		virtual ~arg_base() {}
 		
-		friend void arlib_init_gui(argparse& args, char** argv);
+		friend void _arlib_init_gui(argparse& args, char** argv);
 	};
 	
 	template<typename T>
@@ -239,7 +239,7 @@ private:
 public:
 	void parse(const char * const * argv);
 	
-	friend void arlib_init_gui(argparse& args, char** argv);
+	friend void _arlib_init_gui(argparse& args, char** argv);
 };
 
 //This must be the first Arlib function called in main(), other than argparse setup. Be careful with static initializers too.
@@ -252,4 +252,4 @@ void arlib_init(nullptr_t, char** argv);
 
 
 //Called by arlib_init(). Don't use it yourself.
-void arlib_init_gui(argparse& args, char** argv);
+void _arlib_init_gui(argparse& args, char** argv);

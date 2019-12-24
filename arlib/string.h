@@ -125,12 +125,12 @@ private:
 	cstring(arrayview<uint8_t> bytes, bool has_nul) { init_from_nocopy(bytes, has_nul); }
 public:
 	cstring() { init_empty(); }
-	cstring(const cstring& other) { init_from_nocopy(other); }
+	cstring(const cstring& other) = default;
 	cstring(const char * str) { init_from_nocopy(str); }
 	cstring(arrayview<uint8_t> bytes) { init_from_nocopy(bytes); }
 	cstring(arrayview<char> chars) { init_from_nocopy(chars.reinterpret<uint8_t>()); }
 	cstring(nullptr_t) { init_empty(); }
-	cstring& operator=(const cstring& other) { init_from_nocopy(other); return *this; }
+	cstring& operator=(const cstring& other) = default;
 	cstring& operator=(const char * str) { init_from_nocopy(str); return *this; }
 	cstring& operator=(nullptr_t) { init_empty(); return *this; }
 	

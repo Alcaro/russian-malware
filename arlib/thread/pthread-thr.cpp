@@ -24,7 +24,7 @@ static void * threadproc(void * userdata)
 	return NULL;
 }
 
-static void thread_create_inner(function<void()> start, pthread_attr_t* attr)
+static void thread_create_inner(function<void()>&& start, pthread_attr_t* attr)
 {
 	threaddata_linux thdat { std::move(start), 0 };
 	pthread_t thread;
@@ -47,7 +47,7 @@ static void * threadproc(void * userdata)
 	return NULL;
 }
 
-static void thread_create_inner(function<void()> start, pthread_attr_t* attr)
+static void thread_create_inner(function<void()>&& start, pthread_attr_t* attr)
 {
 	threaddata_pthread* thdat = malloc(sizeof(threaddata_pthread));
 	memset(thdat, 0, sizeof(*thdat));
@@ -59,7 +59,7 @@ static void thread_create_inner(function<void()> start, pthread_attr_t* attr)
 }
 #endif
 
-void thread_create(function<void()> start, priority_t pri)
+void thread_create(function<void()>&& start, priority_t pri)
 {
 	pthread_attr_t attr;
 	if (pthread_attr_init(&attr) < 0) abort();

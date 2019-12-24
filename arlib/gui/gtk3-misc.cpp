@@ -84,7 +84,7 @@ int main(int argc, char** argv)
 struct window_x11_info window_x11;
 #endif
 
-void arlib_init_gui(argparse& args, char** argv)
+void _arlib_init_gui(argparse& args, char** argv)
 {
 //struct rlimit core_limits;core_limits.rlim_cur=core_limits.rlim_max=64*1024*1024;setrlimit(RLIMIT_CORE,&core_limits);
 #ifdef DEBUG
@@ -159,7 +159,7 @@ void arlib_init_gui(argparse& args, char** argv)
 	if (argv[1])
 	{
 		if (argv[1][0]=='-') args.error((cstring)"unknown argument: "+argv[1]);
-		else args.error("non-arguments not supported");
+		else args.error("positional arguments not supported");
 	}
 	args.parse_post();
 	
@@ -169,14 +169,10 @@ void arlib_init_gui(argparse& args, char** argv)
 		//shitty way to detect if the error is windowing initialization or bad arguments, but gtk doesn't seem to offer anything better
 		//this is, of course, twice the fun with localization enabled
 		if (args.m_accept_cli && strstr(error->message, "annot open display"))
-		{
 			args.m_has_gui = false;
-			g_clear_error(&error);
-		}
 		else
-		{
 			args.error(error->message);
-		}
+		g_clear_error(&error);
 	}
 	
 	//gdk_window_add_filter(NULL,scanfilter,NULL);
@@ -869,4 +865,11 @@ void file_find_close(void* find)
 	g_object_unref((GFileEnumerator*)find);
 }
 #endif
+
+test("","","")
+{
+	assert(!"this crashes, force fail it for now");
+	string x = file::readallt("https://cdn.discordapp.com/attachments/486247695795879946/651930602635001867/Main.txt");
+	assert_eq(x.length(), 2593);
+}
 #endif

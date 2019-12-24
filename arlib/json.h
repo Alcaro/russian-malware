@@ -35,7 +35,7 @@ public:
 	};
 	struct event {
 		int action;
-		string str; // or error message [TODO: actual error messages]
+		string str; // or error message (TODO: actual error messages)
 		double num;
 		
 		event() : action(unset) {}
@@ -47,9 +47,14 @@ public:
 	};
 	
 	//You can't stream data into this object.
-	jsonparser(cstring json) : m_data_holder(json), m_data(m_data_holder.bytes().ptr()), m_data_end(m_data+m_data_holder.length()) {}
+	jsonparser(string&& json)
+	{
+		m_data_holder = std::move(json);
+		m_data = m_data_holder.bytes().ptr();
+		m_data_end = m_data + m_data_holder.length();
+	}
 	event next();
-	bool errored() { return m_errored; }
+	bool errored() const { return m_errored; }
 	
 private:
 	string m_data_holder;
@@ -125,16 +130,12 @@ public:
 	void map_exit() { m_data += "}"; m_comma = true; m_indent_depth--; }
 	
 	// If compress(true) has been called more times than compress(false), indentation is removed.
-	// If unindented, 
+	// If unindented, does nothing.
 	void compress(bool enable)
 	{
 		if (!enable)
 		{
 			m_indent_block--;
-			if (m_indent_block == 0)
-			{
-				
-			}
 			m_indent_is_value = false;
 		}
 		else m_indent_block++;
@@ -184,7 +185,7 @@ public:
 	const map<string,JSON>& assoc() const { return chld_map; }
 	//pointless overloads to allow for (JSON& item : json.list()) without an extra const
 	arrayvieww<JSON> list() { return chld_list; }
-	map<string,JSON>& assoc() { return chld_map; }
+	map<string,JSON>& assoc() { return chld_map; } // the name 'map' is taken, have to use something else
 	
 	bool boolean() const
 	{
@@ -215,6 +216,7 @@ public:
 	bool operator!=(double right) const { return num()!=right; }
 	bool operator!=(const char * right) const { return str()!=right; }
 	bool operator!=(cstring right) const { return str()!=right; }
+	
 	bool operator!() const { return !boolean(); }
 	
 #define JSONOPS(T) \
@@ -251,7 +253,7 @@ public:
 	double& num() { ev.action = jsonparser::num; return ev.num; }
 	string& str() { ev.action = jsonparser::str; return ev.str; }
 	array<JSON>& list() { ev.action = jsonparser::enter_list; return chld_list; }
-	map<string,JSON>& assoc() { ev.action = jsonparser::enter_map; return chld_map; } // 'map' is taken
+	map<string,JSON>& assoc() { ev.action = jsonparser::enter_map; return chld_map; }
 	
 	operator double() { return num(); }
 	operator string&() { return str(); }

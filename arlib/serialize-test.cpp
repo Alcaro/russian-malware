@@ -528,7 +528,7 @@ test("JSON serialization", "json", "serialize")
 		item.h = 0xAAAAAAAA;
 		item.i = 0xAAAAAAAA; // this could have another eight As on linux, but why would I even do that
 		item.j = 0xAAAAAAAAAAAAA000; // rounded due to float precision
-		assert_eq(jsonserialize(item), "{\"f\":170,\"g\":43690,\"h\":2863311530,\"i\":2863311530,\"j\":12297829382473031680}");
+		assert_eq(jsonserialize(item), "{\"f\":170,\"g\":43690,\"h\":2863311530,\"i\":2863311530,\"j\":1.2297829382473032e+19}");
 	}
 	
 	{
