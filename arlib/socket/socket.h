@@ -11,6 +11,9 @@
 #include <string.h>
 
 //TODO: fiddle with https://github.com/ckennelly/hole-punch
+//TODO: implement backpressure; writing too much to a socket should block, or kick back to runloop
+//TODO: this architecture is fairly silly - create_ssl on domain name creates four sockets (DNS, buffer, SSL, TCP), should be reduced
+//  probably not possible without c++2a coroutines - keep it until then
 
 #define socket socket_t
 class socket : nocopy {
@@ -55,8 +58,7 @@ public:
 	};
 	
 	//WARNING: Most socket APIs treat read/write of zero bytes as EOF. Not this one! 0 is EWOULDBLOCK; EOF is an error.
-	// This reduces the number of special cases; EOF is usually treated the same way as unknown errors,
-	// and EWOULDBLOCK is usually not an error.
+	// This is how most callers treat them anyways, no need to push a bunch of special cases into the callers.
 	//send() buffers everything internally, and always uses every byte.
 	//For UDP sockets, partial reads or writes aren't possible; you always get one or zero packets.
 	virtual int recv(arrayvieww<byte> data) = 0;

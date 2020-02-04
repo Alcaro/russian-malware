@@ -44,7 +44,7 @@ public:
 	void unlock() { pthread_mutex_unlock(&mut); }
 	~mutex() { pthread_mutex_destroy(&mut); }
 	
-#elif _WIN32_WINNT >= 0x0600
+#elif _WIN32_WINNT >= _WIN32_WINNT_LONGHORN
 #if !defined(_MSC_VER) || _MSC_VER > 1600
 	SRWLOCK srwlock = SRWLOCK_INIT;
 #else
@@ -59,7 +59,7 @@ public:
 	bool try_lock() { return TryAcquireSRWLockExclusive(&srwlock); }
 	void unlock() { ReleaseSRWLockExclusive(&srwlock); }
 	
-#elif _WIN32_WINNT >= 0x0501
+#elif _WIN32_WINNT >= _WIN32_WINNT_WINXP
 	
 	CRITICAL_SECTION cs;
 	
@@ -100,7 +100,7 @@ public:
 //Can be used as a mutex, but a real mutex is faster.
 //It is possible to release a semaphore multiple times, then wait multiple times.
 //wait() is guaranteed to release the CPU after a while.
-//Can be destroyed while fully locked, or while having a few releases, though not while anyone is waiting.
+//Can be destroyed while fully locked, or while having a few releases, but not while anyone is waiting.
 class semaphore : nomove {
 #ifdef __unix__
 	sem_t sem;
@@ -122,29 +122,30 @@ public:
 
 
 class runonce : nomove {
-	typedef void (*once_fn_t)(void);
-#ifdef __unix__
-	pthread_once_t once = PTHREAD_ONCE_INIT;
+#if defined(__linux__)
+	enum { st_uninit, st_busy, st_busy_waiters, st_done };
+	int futex = st_uninit;
 public:
-	void run(once_fn_t fn) { pthread_once(&once, fn); }
-#endif
-#ifdef _WIN32
-#if _WIN32_WINNT >= 0x0600
+	void run(function<void()> fn);
+	// pthread_once would make sense on other Unix, but it only has a void(*)(), no way to pass userdata
+#elif defined(_WIN32) && _WIN32_WINNT >= _WIN32_WINNT_LONGHORN
 	INIT_ONCE once = INIT_ONCE_STATIC_INIT;
-	//strangely enough, pthread is the lowest common denominator here
 	static BOOL CALLBACK wrap(INIT_ONCE* once, void* param, void** context)
 	{
-		(*(once_fn_t*)param)();
+		(*(function<void()>*)context)();
 		return TRUE;
 	}
 public:
-	void run(once_fn_t fn)
+	void run(function<void()> fn)
 	{
-		InitOnceExecuteOnce(&once, wrap, &fn, NULL);
+		InitOnceExecuteOnce(&once, wrap, NULL, (void**)&fn);
 	}
 #else
-#error no XP support
-#endif
+	enum { st_uninit, st_busy, st_done };
+	uintptr_t m_st = st_uninit; // can be the above, or a casted pointer
+	
+public:
+	void run(function<void()> fn);
 #endif
 };
 #define RUN_ONCE(fn) do { static runonce once; once.run(fn); } while(0);
@@ -193,14 +194,25 @@ void thread_split(unsigned int count, function<void(unsigned int id)> work);
 
 
 #ifdef __linux__
-//sleeps if *uaddr == val
-int futex_wait(int* uaddr, int val, const struct timespec * timeout = NULL);
-int futex_wake(int* uaddr);
-int futex_wake_all(int* uaddr);
+//#include <limits.h>
+#include <unistd.h>
+#include <linux/futex.h>
+#include <sys/syscall.h>
 
-//convenience wrappers
-void futex_wait_while_eq(int* uaddr, int val);
-void futex_set_and_wake(int* uaddr, int val);
+//spurious wakeups are possible
+//return can tell if the wakeup is bogus, but it's just as easy to check uaddr
+static inline int futex_sleep_if_eq(int* uaddr, int val, const struct timespec * timeout = NULL)
+{
+	return syscall(__NR_futex, uaddr, FUTEX_WAIT_PRIVATE, val, timeout);
+}
+static inline int futex_wake(int* uaddr)
+{
+	return syscall(__NR_futex, uaddr, FUTEX_WAKE_PRIVATE, 1);
+}
+static inline int futex_wake_all(int* uaddr)
+{
+	return syscall(__NR_futex, uaddr, FUTEX_WAKE_PRIVATE, INT_MAX);
+}
 #endif
 
 #else
@@ -223,6 +235,5 @@ public:
 #define synchronized(mutex) if (true)
 static inline size_t thread_get_id() { return 0; }
 static inline unsigned int thread_num_cores() { return 1; }
-static inline void thread_create(function<void()> start) { abort(); }
 
 #endif

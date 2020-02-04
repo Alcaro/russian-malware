@@ -1,5 +1,5 @@
-#ifdef ARLIB_SOCKET
 #pragma once
+#ifdef ARLIB_SOCKET
 #include "socket.h"
 #include "bytepipe.h"
 

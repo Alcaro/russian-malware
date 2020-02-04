@@ -20,7 +20,7 @@
 #if (defined(__BYTE_ORDER) && defined(__LITTLE_ENDIAN) && __BYTE_ORDER == __LITTLE_ENDIAN) || defined(__LITTLE_ENDIAN__) || \
     defined(__i386__) || defined(__amd64__) || \
     defined(_M_IX86) || defined(_M_AMD64) || \
-    defined(__ARM_EABI__) || defined(__arm__)
+    defined(__ARM_EABI__) || defined(__arm__) || defined(__aarch64__)
 #define ENDIAN END_LITTLE
 #define BIGEND_SWAP1(a)               a // pointless, but for consistency
 #define BIGEND_SWAP2(a,b)             a b
@@ -48,17 +48,14 @@
 #if defined(__GNUC__)
 //This one is mostly useless (GCC detects the pattern and optimizes it).
 //However, MSVC doesn't, so I need the intrinsics. Might as well use both sets.
-static inline uint8_t  end_swap8( uint8_t  n)  { return n; }
 static inline uint16_t end_swap16(uint16_t n) { return __builtin_bswap16(n); }
 static inline uint32_t end_swap32(uint32_t n) { return __builtin_bswap32(n); }
 static inline uint64_t end_swap64(uint64_t n) { return __builtin_bswap64(n); }
 #elif defined(_MSC_VER)
-static inline uint8_t  end_swap8( uint8_t  n) { return n; }
 static inline uint16_t end_swap16(uint16_t n) { return _byteswap_ushort(n); }
 static inline uint32_t end_swap32(uint32_t n) { return _byteswap_ulong(n); }
 static inline uint64_t end_swap64(uint64_t n) { return _byteswap_uint64(n); }
 #else
-static inline uint8_t  end_swap8( uint8_t  n) { return n; }
 static inline uint16_t end_swap16(uint16_t n) { return n>>8 | n<<8; }
 static inline uint32_t end_swap32(uint32_t n)
 {
@@ -74,12 +71,10 @@ static inline uint64_t end_swap64(uint64_t n)
 	return n;
 }
 #endif
-static inline uint32_t end_swap24(uint32_t n)
-{
-	return end_swap32(n) >> 8;
-}
+static inline uint8_t  end_swap8( uint8_t  n) { return n; }
+static inline uint32_t end_swap24(uint32_t n) { return end_swap32(n) >> 8; }
 
-static inline uint8_t  end_swap(uint8_t  n) { return end_swap8( n); }
+static inline uint8_t  end_swap(uint8_t  n) { return end_swap8(n);  }
 static inline uint16_t end_swap(uint16_t n) { return end_swap16(n); }
 static inline uint32_t end_swap(uint32_t n) { return end_swap32(n); }
 static inline uint64_t end_swap(uint64_t n) { return end_swap64(n); }
@@ -182,24 +177,15 @@ template<typename T, bool little> class endian_core
 public:
 	operator T() const
 	{
-		if (little)
+		T ret=0;
+		for (size_t i=0;i<sizeof(T);i++)
 		{
-			T ret=0;
-			for (size_t i=0;i<sizeof(T);i++)
-			{
+			if (little)
 				ret = (ret<<8) | m_bytes[i];
-			}
-			return ret;
-		}
-		else
-		{
-			T ret=0;
-			for (size_t i=0;i<sizeof(T);i++)
-			{
+			else
 				ret = (ret<<8) | m_bytes[sizeof(T)-1-i];
-			}
-			return ret;
 		}
+		return ret;
 	}
 	
 	void operator=(T newval)
@@ -209,21 +195,13 @@ public:
 			val = newval;
 			return;
 		}
-		if (!little)
+		for (size_t i=0;i<sizeof(T);i++)
 		{
-			for (size_t i=0;i<sizeof(T);i++)
-			{
+			if (!little)
 				m_bytes[sizeof(T)-1-i]=(newval&0xFF);
-				newval>>=8;
-			}
-		}
-		else
-		{
-			for (size_t i=0;i<sizeof(T);i++)
-			{
+			else
 				m_bytes[i]=(newval&0xFF);
-				newval>>=8;
-			}
+			newval>>=8;
 		}
 	}
 	

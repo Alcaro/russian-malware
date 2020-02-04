@@ -10,11 +10,10 @@
 #define DYLIB_EXT ".dll"
 #define DYLIB_MAKE_NAME(name) name DYLIB_EXT
 #endif
-#ifdef __GNUC__
-#define DLLEXPORT extern "C" __attribute__((__visibility__("default")))
-#endif
-#ifdef _MSC_VER
+#if defined(_WIN32)
 #define DLLEXPORT extern "C" __declspec(dllexport)
+#elif defined(__GNUC__)
+#define DLLEXPORT extern "C" __attribute__((__visibility__("default")))
 #endif
 
 class dylib : nocopy {
@@ -31,7 +30,7 @@ public:
 	bool init_uniq(const char * filename);
 	//like init_uniq, but if the library is loaded already, it loads a new instance, if supported by the platform
 	bool init_uniq_force(const char * filename);
-	//guaranteed to return NULL if initialization fails
+	//guaranteed to return NULL if initialization failed
 	void* sym_ptr(const char * name);
 	//separate function because
 	//  "The ISO C standard does not require that pointers to functions can be cast back and forth to pointers to data."
@@ -44,19 +43,41 @@ public:
 		*(void**)(&ret) = this->sym_ptr(name);
 		return ret;
 	}
-	//TODO: do some decltype shenanigans so dylib.sym<Direct3DCreate9>("Direct3DCreate9") works
-	//ideally, dylib.sym(Direct3DCreate9) alone would work, but C++ doesn't offer any way to access the name of a variable
-	//except it does. TODO: check if #define sym_named(x) sym<decltype(x)>(#x) is good enough; macros kinda suck, but that name seems rare enough
-	template<typename T> T sym(const char * name) { return (T)sym_func(name); }
 	
 	//Fetches multiple symbols. 'names' is expected to be a NUL-separated list of names, terminated with a blank one.
 	// (This is easiest done by using multiple NUL-terminated strings, and let compiler append another NUL.)
-	//Returns whether all of them were successfully fetched. If not, failures are NULL; this may not necessarily be all of them.
+	//Returns whether all of them were successfully fetched. If not, failures are NULL. All are still attempted.
 	bool sym_multi(funcptr* out, const char * names);
 	
 	void deinit();
 	~dylib() { deinit(); }
 };
+
+#define DECL_DYLIB_MEMB(prefix, name) decltype(::prefix##name)* name;
+#define DECL_DYLIB_RESET(prefix, name) name = nullptr;
+#define DECL_DYLIB_NAME(prefix, name) #prefix #name "\0"
+#define DECL_DYLIB_PREFIX_T(name, prefix, ...) \
+	class name { \
+	public: \
+		PPFOREACH_A(DECL_DYLIB_MEMB, prefix, __VA_ARGS__); \
+		\
+		name() { PPFOREACH_A(DECL_DYLIB_RESET, prefix, __VA_ARGS__) } \
+		name(const char * filename) { init(filename); } \
+		bool init(const char * filename) \
+		{ \
+			_internal_dylib.init(filename); \
+			/* call this even on failure, to ensure members are nulled */ \
+			return _internal_dylib.sym_multi((funcptr*)this, PPFOREACH_A(DECL_DYLIB_NAME, prefix, __VA_ARGS__)); \
+		} \
+	private: \
+		dylib _internal_dylib; \
+	}
+#define DECL_DYLIB_T(name, ...) DECL_DYLIB_PREFIX_T(name, , __VA_ARGS__)
+//The intended usecase of the prefixed one is a DLL exporting multiple functions, for example isalpha, isdigit, and isalnum.
+//DECL_DYLIB_PREFIX_T(is_t, is, alpha, digit, alnum);
+//is_t is("libc.so.6");
+//if (is.alpha('a')) {}
+
 
 //If the program is run under a debugger, this triggers a breakpoint. If not, does nothing.
 //Returns whether it did something. The other three do too, but they always do something, if they return at all.
@@ -75,6 +96,7 @@ uint64_t time_us(); // this will overflow in year 586524
 //No epoch; the epoch may vary across machines or reboots. In exchange, it may be faster.
 //ms/us will have the same epoch as each other, and will remain constant unless the machine is rebooted.
 //It is unspecified whether this clock ticks while the machine is suspended or hibernated.
+//There is no second-counting time_ne().
 uint64_t time_ms_ne();
 uint64_t time_us_ne();
 

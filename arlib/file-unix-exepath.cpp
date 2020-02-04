@@ -12,7 +12,7 @@
 #include <sys/mman.h>
 #include <errno.h>
 
-//separate file so the two oninit can be optimized out separately
+//separate file so this oninit can be optimized out if unused
 
 static char* g_exepath;
 cstring file::exepath() { return g_exepath; }

@@ -2,23 +2,35 @@
 #include "global.h"
 #include "array.h"
 #include "string.h"
+#include "endian.h"
 
 enum imagefmt {
-	//WARNING: only 8888 formats are implemented, do not use the others
+	// the manipulation functions are only implemented for ?rgb8888 formats; others are for storage only
 	
-	ifmt_none, // writes and reads are ignored (reading is treated as fully transparent)
+	ifmt_none,
 	
-	ifmt_rgb565, // for most of these, 'pixels' is a reinterpreted array of native-endian u16 or u32, highest bit listed first
-	ifmt_rgb888, // exception: this one; it's three u8s, red first
-	ifmt_xrgb1555, //x bits can be anything and should be ignored (may be copied to other x slots, anything else is illegal)
+	// for these, 'pixels' is an array of u8s
+	ifmt_rgb888_by,
+	ifmt_rgba8888_by,
+	ifmt_argb8888_by,
+	ifmt_abgr8888_by,
+	ifmt_bgra8888_by,
+	
+	// for these, 'pixels' is an array of native-endian u16 or u32, highest bit listed first
 	ifmt_xrgb8888,
-	ifmt_0rgb1555, //0 bits are always 0
 	ifmt_0rgb8888,
-	ifmt_argb1555, //a=1 is opaque; the rgb values are not premultiplied, and a=0 rgb!=0 is allowed
-	ifmt_argb8888, //any non-read-only operation may change rgb values of an a=0 pixel
+	// ifmt_argb8888,
 	ifmt_bargb8888, //'boolean argb'; like argb8888, but only a=00 and a=FF are allowed, anything else is undefined behavior
 	
-	ifmt_bargb1555 = ifmt_argb1555, // there are only two possible alphas for 1555, so argb and bargb are the same
+	ifmt_rgb565,
+	ifmt_xrgb1555, //x bits can be anything and should be ignored (may be copied to other x slots, anything else is illegal)
+	ifmt_0rgb1555, //0 bits are always 0
+	ifmt_argb1555, //a=1 is opaque; the rgb values are not premultiplied, and a=0 rgb!=0 is allowed
+	// ifmt_bargb1555 = ifmt_argb1555, // there are only two possible alphas for 1555, so argb and bargb are the same
+	
+	// alias formats are down here because C enums are 'special'
+	ifmt_argb8888 = (ENDIAN == END_LITTLE ? ifmt_bgra8888_by : ifmt_argb8888_by),
+	ifmt_bargb1555 = ifmt_argb1555,
 	
 	//an image is considered 'degenerate' if the full power of the format isn't used
 	//for example, an argb with all a=1 is a degenerate xrgb (and a degenerate bargb), and the format can safely be set to xrgb
@@ -26,7 +38,10 @@ enum imagefmt {
 };
 
 struct font;
-struct image : nocopy {
+struct image {
+	image() = default;
+	NO_COPY(image);
+	
 	uint32_t width;
 	uint32_t height;
 	
@@ -109,16 +124,18 @@ struct image : nocopy {
 		//'magic' is, of course, optimized into a constant
 		uint32_t magic = 0;
 		
-		magic |= (2-1) << (ifmt_rgb565*2);
-		magic |= (3-1) << (ifmt_rgb888*2);
-		magic |= (2-1) << (ifmt_xrgb1555*2);
+		magic |= (3-1) << (ifmt_rgb888_by*2);
+		magic |= (4-1) << (ifmt_rgba8888_by*2);
+		magic |= (4-1) << (ifmt_argb8888_by*2);
+		magic |= (4-1) << (ifmt_abgr8888_by*2);
+		magic |= (4-1) << (ifmt_bgra8888_by*2);
 		magic |= (4-1) << (ifmt_xrgb8888*2);
-		magic |= (2-1) << (ifmt_0rgb1555*2);
 		magic |= (4-1) << (ifmt_0rgb8888*2);
-		magic |= (2-1) << (ifmt_argb1555*2);
-		magic |= (4-1) << (ifmt_argb8888*2);
-		//magic |= (2-1) << (ifmt_bargb1555*2); // alias of argb
 		magic |= (4-1) << (ifmt_bargb8888*2);
+		magic |= (2-1) << (ifmt_rgb565*2);
+		magic |= (2-1) << (ifmt_xrgb1555*2);
+		magic |= (2-1) << (ifmt_0rgb1555*2);
+		magic |= (2-1) << (ifmt_argb1555*2);
 		
 		return 1 + ((magic >> (fmt*2)) & 3);
 	}

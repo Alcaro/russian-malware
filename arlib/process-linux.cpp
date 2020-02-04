@@ -201,7 +201,7 @@ namespace sigchld {
 	}
 }
 #ifdef ARLIB_TESTRUNNER
-int process::sigchld_fd_test_runner_only()
+int process::_sigchld_fd_runloop_only()
 {
 	synchronized(sigchld::mut)
 	{

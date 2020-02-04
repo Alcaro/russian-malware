@@ -1,6 +1,10 @@
+#pragma once
 #include "global.h"
 #ifdef __linux__
 #include <unistd.h>
+#endif
+#if defined(_WIN32) && _WIN32_WINNT >= _WIN32_WINNT_WIN7
+#include <bcrypt.h>
 #endif
 
 // this is PCG-XSH-RR with 64-bit state and 32-bit output, adapted from wikipedia
@@ -12,7 +16,7 @@ class random_pcg : nocopy {
 	static const uint64_t increment  = 1442695040888963407;
 	
 	//optimizes to a single 'ror' instruction on x86, and similar on other archs - even the &31 disappears
-	//(in fact, it needs the &31 - without it, gcc emits one opcode per operator instead)
+	//(in fact, it needs the &31 - without it, gcc emits one opcode per operator)
 	static uint32_t ror32(uint32_t x, unsigned bits)
 	{
 		return (x>>bits) | (x<<(-bits&31));
@@ -39,6 +43,7 @@ public:
 //recommended use:
 //random_t rand;
 //return rand()%42;
+//this is not biased towards lower results, rand() returns an object with overloaded operator%
 class random_t : public random_pcg {
 	class randresult {
 		random_t& src;
@@ -61,10 +66,25 @@ class random_t : public random_pcg {
 	};
 public:
 	
+	// Max size is 256. Despite the return value, it always succeeds.
+	static bool get_seed(void* out, size_t n)
+#if defined(__linux__)
+	{
+		// cannot fail unless kernel < 3.17 (october 2014), bad pointer, or size > 256
+		return getentropy(out, n) == 0;
+	}
+#elif defined(_WIN32) && _WIN32_WINNT >= _WIN32_WINNT_WIN7
+	{
+		return BCryptGenRandom(nullptr, (uint8_t*)out, n, BCRYPT_USE_SYSTEM_PREFERRED_RNG) == 0;
+	}
+#else
+	;
+#endif
+	
 	random_t()
 	{
 		uint64_t seed;
-		ignore(getentropy(&seed, sizeof(seed))); // guaranteed to succeed unless kernel < 3.17 (october 2014), too big, or bad pointer
+		get_seed((uint8_t*)&seed, sizeof(seed));
 		this->seed(seed);
 	}
 	random_t(uint64_t seed) // Not recommended unless you need predictable output.
@@ -106,9 +126,4 @@ public:
 			return candidate%limit;
 		}
 	}
-	
-	//TODO: read /dev/urandom or whatever, then seed with that
-	//void seed()
-	//{
-	//}
 };

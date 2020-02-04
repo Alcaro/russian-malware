@@ -2,7 +2,7 @@
 
 #ifdef ARLIB_THREAD
 //This header defines several functions for atomically operating on integers or pointers.
-//You can use int32_t, uint32_t, any typedef thereof, and any pointer (enum not allowed).
+//You can use any builtin integer type, any typedef thereof, and any pointer (enum not allowed).
 //The following functions exist:
 //lock_read(T*)
 //lock_write(T*, T)
@@ -18,7 +18,7 @@
 
 //If doing cmpxchg on pointers and array indices, make sure you're not vulnerable to ABA problems.
 
-#if __GNUC__ > 0
+#ifdef __GNUC__
 #if defined(__clang__) || (__GNUC__*10+__GNUC_MINOR__ >= 47)
 //https://gcc.gnu.org/onlinedocs/gcc-4.7.0/gcc/_005f_005fatomic-Builtins.html
 #define LOCKD_LOCKS_MODEL(type, model, modelname) \
@@ -75,18 +75,6 @@
 	inline void lock_write_loose(type * val, type newval) { lock_xchg(val, newval); } \
 
 #endif
-
-#define ALLINTS(x) \
-	x(signed char) \
-	x(unsigned char) \
-	x(signed short) \
-	x(unsigned short) \
-	x(signed int) \
-	x(unsigned int) \
-	x(signed long) \
-	x(unsigned long) \
-	x(signed long long) \
-	x(unsigned long long)
 
 ALLINTS(LOCKD_LOCKS)
 LOCKD_LOCKS(void*)

@@ -1,3 +1,5 @@
+#pragma once
+
 //Arlib regexes are similar to ECMAScript regexes, with the following differences:
 //- It's C++.
 //- The regexes are parsed, validated and compiled by the C++ compiler, not at runtime.
@@ -23,6 +25,7 @@
 //  - Backwards compatibility extensions; \7 is not BEL if the 7th capture group isn't seen yet, and {a} is an error, not literal chars.
 //- If multiple options are possible, lookbehind makes no guarantees on what's captured. (I don't know what they do in ECMAScript.)
 //- Repeating a blank match will repeat it forever. ()+ will overflow the backtracking stack and explode.
+//- Lookbehind is currently not implemented. (TODO: fix - but may want to wait for better c++20 and consteval)
 //None of the C++-specific changes are present. No regex traits, no exceptions, no named character classes.
 //This is a backtracking regex engine; as such, the usual caveats about catastrophic backtracking apply.
 
@@ -976,6 +979,7 @@ struct pair {
 	const char * end = nullptr;
 #ifdef HAVE_ARLIB
 	cstring str() const { return arrayview<char>(start, end-start); }
+	operator cstring() const { return str(); }
 #endif
 };
 template<size_t N> class match_t {
@@ -1185,6 +1189,8 @@ public:
 		return out;
 	}
 	
+	// TODO: create fullmatch, if possible without shenanigans (whether to allow match end != string end is nontrivial)
+	
 	static match_t<n_capture> match(const char * start, const char * at, const char * end)
 	{
 		match_t<n_capture> cap;
@@ -1197,9 +1203,9 @@ public:
 		return match(start, start, end);
 	}
 #ifdef HAVE_ARLIB
-	// WARNING: this one must not not be used if input is a char*
-	// if input is short, the temporary cstring's inline storage expires before it returns anything
-	static match_t<n_capture> match(cstring str)
+	// must not take a temporary, that's a use-after-free
+	static match_t<n_capture> match(cstring&& str) = delete;
+	static match_t<n_capture> match(const cstring& str)
 	{
 		return match((char*)str.bytes().ptr(), (char*)str.bytes().ptr()+str.length());
 	}

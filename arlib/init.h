@@ -43,8 +43,10 @@ class argparse {
 	string m_appname;
 	refarray<arg_base> m_args;
 	function<void(cstring error)> m_onerror;
+#ifndef ARGUI_NONE
 	bool m_accept_cli = false;
 	bool m_has_gui = false;
+#endif
 	
 	//sname can be '\0' or absent if you only want long names
 	//if the long name is empty, all non-option arguments are sent here; if nothing has a long name, passing non-options is an error
@@ -206,8 +208,13 @@ public:
 		return add('\0', accept_no_value, accept_value, std::move(cb));
 	}
 	
+#ifndef ARGUI_NONE
 	void add_cli() { m_accept_cli = true; }
 	bool has_gui() { return m_has_gui; }
+#else
+	void add_cli() {}
+	bool has_gui() { return false; }
+#endif
 	
 private:
 	enum arglevel_t {

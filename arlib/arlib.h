@@ -1,9 +1,16 @@
-//TODO:
-//- window.h: remove pointers
-//- window.h: remove varargs
-//- msvc compat: add some define that, if absent, enables every feature
-
-//WARNING: Arlib comes with zero stability guarantees. It can and will change in arbitrary ways, for any reason and at any time.
+// Arlib is my utility library / std:: replacement.
+// It exists for several reasons:
+// - The C++ standard library types lack easy access to lots of useful functionality, such as
+//     splitting a string by linebreaks.
+// - std:: is full of strange features and guarantees whose existence increase the constant factor
+//     of every operation, even if unused and unnecessary.
+// - Dependency management in C++ is cumbersome at best.
+// - I care a lot about binary size and easy distribution (no DLLs) on Windows, and including the
+//     C++ standard library would often triple the program size.
+// - And, most importantly, every feature I implement is a feature I fully understand, so I can
+//     debug it, debug other instances of the same protocol or format, know which edge cases are
+//     likely to cause bugs (for example to write a test suites, or research potential security
+//     vulnerabilities), and appreciate the hidden complexity of something that seems simple.
 
 //if anyone whines about antivirus, https://arstechnica.com/information-technology/2017/01/antivirus-is-bad/
 //  and linked:

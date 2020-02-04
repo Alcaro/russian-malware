@@ -368,6 +368,7 @@ public:
 	
 	size_t pread(arrayvieww<byte> target, size_t start)
 	{
+		if (!target.size()) return 0;
 		bool ok = g_seekable_seek(this->seek, start, G_SEEK_SET, NULL, NULL);
 		if (!ok) return 0;
 		return g_input_stream_read(this->input, target.ptr(), target.size(), NULL, NULL);
@@ -378,6 +379,26 @@ public:
 		if (!ok) return false;
 		size_t actual = g_output_stream_write(this->output, data.ptr(), data.size(), NULL, NULL);
 		return (actual == data.size());
+	}
+	
+	array<byte> readall()
+	{
+		array<byte> ret;
+		bool ok = g_seekable_seek(this->seek, 0, G_SEEK_SET, NULL, NULL);
+		if (!ok) return ret; // always return ret, named return value optimization
+		
+		ret.resize(4096);
+		size_t actual = 0;
+		while (true)
+		{
+			ssize_t newbytes = g_input_stream_read(this->input, ret.ptr()+actual, ret.size()-actual, NULL, NULL);
+			if (newbytes < 0) { ret.reset(); return ret; }
+			actual += newbytes;
+			if (actual == ret.size()) ret.reserve_noinit(ret.size()*2);
+			if (newbytes == 0) break;
+		}
+		ret.resize(actual);
+		return ret;
 	}
 	
 	arrayview<byte> mmap(size_t start, size_t len) { return default_mmap(start, len); }
@@ -399,7 +420,12 @@ public:
 
 static bool path_is_glib_uri(cstring filename)
 {
-	return filename.contains("/") && !g_path_is_absolute(filename.c_str());
+	for (char c : filename.bytes())
+	{
+		if (c == ':') return true;
+		if (c == '/') return false;
+	}
+	return false;
 }
 }
 
@@ -734,7 +760,7 @@ public:
 			if ((int)pair.key == submit_fds[0]) // leave this fd in the runloop
 				continue;
 #endif
-			if ((int)pair.key == process::sigchld_fd_test_runner_only())
+			if ((int)pair.key == process::_sigchld_fd_runloop_only())
 				continue;
 			
 			if (RUNNING_ON_VALGRIND)
@@ -866,10 +892,15 @@ void file_find_close(void* find)
 }
 #endif
 
-test("","","")
+test("file::GVFS","","")
 {
-	assert(!"this crashes, force fail it for now");
-	string x = file::readallt("https://cdn.discordapp.com/attachments/486247695795879946/651930602635001867/Main.txt");
-	assert_eq(x.length(), 2593);
+	test_skip("kinda slow");
+	file f("https://floating.muncher.se/arlib/latesize.php");
+	// <?php
+	// echo "a";
+	// flush();
+	// echo "b";
+	assert_eq(f.size(), 0);
+	assert_eq(f.readallt(), "ab");
 }
 #endif

@@ -81,6 +81,7 @@
 #if defined(__x86_64__) || defined(__i386__)
 static const long pagesize = 4096;
 #else
+#warning better hardcode the page size
 static const long pagesize = sysconf(_SC_PAGESIZE);
 #endif
 
@@ -247,4 +248,39 @@ void arlib_init_file()
 //	cwd_bogus = getcwd(NULL, 0); // POSIX does not specify getcwd(NULL), it's Linux-specific
 }
 */
+
+
+
+#define MMAP_THRESHOLD 1024*1024
+file2::mmap_t file2::mmap(cstring filename)
+{
+	int fd = open(filename.c_str(), O_RDONLY|O_CLOEXEC);
+	if (fd < 0) return NULL;
+	off_t size = lseek(fd, 0, SEEK_END);
+	if (size < 0) return NULL;
+	uint8_t * data;
+	if (size <= MMAP_THRESHOLD)
+	{
+		data = malloc(size);
+		if (pread(fd, data, size, 0) != size)
+		{
+			free(data);
+			close(fd);
+			return NULL;
+		}
+	}
+	else
+	{
+		data = (uint8_t*)::mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
+		if (data == MAP_FAILED) return NULL;
+	}
+	close(fd);
+	return { data, (size_t)size };
+}
+file2::mmap_t::~mmap_t()
+{
+	if (count > MMAP_THRESHOLD) munmap(items, count);
+	else free(items);
+}
+//writable mmap may not use malloc optimization
 #endif

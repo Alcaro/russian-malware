@@ -460,7 +460,7 @@ socket* socket::wrap_ssl_raw(socket* inner, cstring domain, runloop* loop)
 //this is more to initialize this thing before the actual ssl tests than a real test
 //most of the tests are in a runloop, but initialization takes longer (9-33ms) than the runloop watchdog (3ms)
 //this is also why it provides 'tcp' rather than 'ssl';
-// if it provides 'ssl', it'd run alongside the other SSL tests and fail watchdog
+// if it provides 'ssl', it could be after other SSL tests and fail watchdog
 test("BearSSL init", "array,base64,file", "tcp")
 {
 	test_skip("kinda slow");

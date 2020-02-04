@@ -19,16 +19,22 @@
 //  it's still open/openat/sigreturn, but it's way better than open/sendto/recvfrom/openat/sendmsg/recvmsg/sigreturn
 //  can only be used for readonly open, max_write is mandatory
 //  openat2, which contains this, seems headed for kernel 5.4 - but its flags are in a struct so I can't do anything
-//[unavailable] eBPF
+//[root-only] eBPF
 //  moving some policy from broker to BPF would be an improvement
-//  but to my knowledge, non-classic BPF is still root only (CLONE_NEWUSER isn't enough)
-//[no patch exists] deep argument inspection for seccomp https://lwn.net/Articles/799557/
-//  would get rid of the last mappable page hack, and a few others
+//  but to my knowledge, non-classic BPF is still true-root only (CLONE_NEWUSER isn't enough)
+//  due to the 99999 Spectre variants, CLONE_NEWUSER or lower will likely never have access to eBPF
+//[no patch exists] make execveat accept NULL as a blank string
+//  that last mappable page hack is terrible
+//[no patch exists] deep argument inspection for seccomp-bpf https://lwn.net/Articles/799557/
+//  this would also allow purging the last mappable page hack, and a few others
+//[unmerged] Landlock; an alternative to seccomp-bpf, somewhat higher level
+//  the inability to access pointers means I have reject 100% of file access, which leads to e.g. the last mappable page hack
 
 //minimum kernel version policy is similar to minimum C++ version: it must work on latest Debian stable and Ubuntu LTS
 //however, syscalls can be runtime tested with fallbacks; any released kernel is acceptable
+//(but optional implifications don't really simplify anything, and mean one path won't be tested, so this should generally be avoided)
 //currently, the minimum kernel is 4.6 (may 2016), to use CLONE_NEWCGROUP
-//the maximum kernel feature used is also 4.6, nothing optional is used (optional simplifications don't really simplify anyways)
+//the maximum kernel feature used is also 4.6, nothing optional is used
 
 //allowing openat() is currently risk-free, if used with AT_BENEATH
 //pidfd is also safe, since openat() is blocked

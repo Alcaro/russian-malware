@@ -70,7 +70,15 @@ int _teststack_popstr() { ctxstack.resize(ctxstack.size()-1); return 0; }
 static size_t n_malloc = 0;
 static size_t n_free = 0;
 static size_t n_malloc_block = 0;
-void _test_malloc() { if (UNLIKELY(n_malloc_block)) { if (result == err_ok) test_nothrow(assert(!"can't malloc here")); } n_malloc++; }
+void _test_malloc()
+{
+	if (UNLIKELY(n_malloc_block))
+	{
+		n_malloc_block = 0; // failing usually allocates
+		if (result == err_ok) test_fail("can't malloc here");
+	}
+	n_malloc++;
+}
 void _test_free() { n_free++; }
 int _test_blockmalloc() { n_malloc_block++; return 1; }
 int _test_unblockmalloc() { n_malloc_block--; return 0; }
@@ -230,7 +238,7 @@ static testlist* sort_tests(testlist* unsorted)
 	
 	//ideally, this would pick all tests in a file simultaneously, if possible
 	//but that's annoying to implement even with full Arlib, and this thing doesn't assume Arlib is functional
-	//for now, lamehacked in main()
+	//for now, they're left separate
 	
 	while (unsorted)
 	{
@@ -423,7 +431,7 @@ int main(int argc, char* argv[])
 			try {
 				uint64_t start_time = time_us_ne();
 				cur_test->func();
-				if (pass == 2)
+				if (pass == 1)
 					assert_eq(n_malloc, n_free);
 				uint64_t end_time = time_us_ne();
 				uint64_t time_us = end_time - start_time;

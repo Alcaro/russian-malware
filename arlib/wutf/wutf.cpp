@@ -1,26 +1,5 @@
-// MIT License
-//
-// Copyright (c) 2016 Alfred Agrell
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
-//The above license applies only to the WuTF directory, not the entire Arlib.
+// SPDX-License-Identifier: MIT
+// The above license applies only to the WuTF directory, not the entire Arlib.
 
 //See wutf.h for documentation.
 
@@ -136,13 +115,13 @@ WideCharToMultiByte_Utf(UINT CodePage, DWORD dwFlags,
 static void redirect_machine(LPBYTE victim, LPBYTE replacement)
 {
 	victim[0] = 0xE9; // jmp <offset from next instruction>
-	*(LONG_PTR*)(victim+1) = replacement-victim-5;
+	*(LONG*)(victim+1) = replacement-victim-5;
 }
 
 #elif defined(_M_X64) || defined(__x86_64__)
 static void redirect_machine(LPBYTE victim, LPBYTE replacement)
 {
-	// this destroys %rax, but that register is caller-saved (and the return value).
+	// this destroys %rax, but ABI prohibits caller from using it
 	// https://msdn.microsoft.com/en-us/library/9z1stfyw.aspx
 	victim[0] = 0x48; victim[1] = 0xB8;   // mov %rax, <64 bit constant>
 	*(LPBYTE*)(victim+2) = replacement;
@@ -159,9 +138,7 @@ void WuTF_redirect_function(WuTF_funcptr victim, WuTF_funcptr replacement)
 	DWORD prot;
 	//it's usually considered bad to have W+X on the same page, but the alternative is risking
 	// removing X from VirtualProtect or NtProtectVirtualMemory, and then I can't fix it.
-	//alternatively, it could make C do W; e.
-	//it doesn't matter, anyways; we (should be) called so early no hostile input has been processed
-	// yet, and even if hostile code is running, it can just wait until I put back X.
+	//it doesn't matter, anyways; we (should be) called so early no hostile input has been processed yet
 	VirtualProtect((void*)victim, 64, PAGE_EXECUTE_READWRITE, &prot);
 	redirect_machine((LPBYTE)victim, (LPBYTE)replacement);
 	VirtualProtect((void*)victim, 64, prot, &prot);

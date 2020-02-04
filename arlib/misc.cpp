@@ -1,6 +1,10 @@
 #include "global.h"
 #include <new>
 
+#if __FLT_EVAL_METHOD__ != 0
+#warning "platform-specific floating-point rounding detected; consider adding -ffloat-store, -mfpmath=sse, or similar"
+#endif
+
 void malloc_fail(size_t size)
 {
 	if (size > 0) printf("malloc failed, size %" PRIuPTR "\n", size);
@@ -19,11 +23,13 @@ void malloc_fail(size_t size)
 //  and valgrind's malloc/delete mismatch detector is also quite valuable
 #if defined(__MINGW32__) || defined(ARLIB_TESTRUNNER)
 void* operator new(std::size_t n) _GLIBCXX_THROW(std::bad_alloc) { return malloc(n); }
-__attribute__((noinline))
-void operator delete(void* p) noexcept { free(p); }
-#if __cplusplus >= 201402
 //Valgrind 3.13 overrides operator delete(void*), but not delete(void*,size_t)
 //do not inline into free(p) until valgrind is fixed
+#ifndef __MINGW32__ // however, mingw marks it inline, which obviously can't be used with noinline
+__attribute__((noinline))
+#endif
+void operator delete(void* p) noexcept { free(p); }
+#if __cplusplus >= 201402
 void operator delete(void* p, std::size_t n) noexcept { operator delete(p); }
 #endif
 #endif

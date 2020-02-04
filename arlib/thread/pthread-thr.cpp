@@ -9,8 +9,7 @@
 
 //list of synchronization points: http://pubs.opengroup.org/onlinepubs/009695399/basedefs/xbd_chap04.html#tag_04_10
 
-#ifdef __linux__
-//pretty sure a futex wait+wake is cheaper than a cross-thread malloc/free
+#ifdef __linux__disabled // I'm pretty sure putting the parent thread to sleep is more expensive than a cross-thread malloc/free
 struct threaddata_linux {
 	function<void()> func;
 	int futex;

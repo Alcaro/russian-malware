@@ -99,6 +99,12 @@ string string::create_usurp(char * str)
 	return ret;
 }
 
+string::string(array<uint8_t>&& bytes) : cstring(noinit())
+{
+	cstring tmp(bytes);
+	memcpy(this, &tmp, sizeof(string));
+	if (!tmp.inlined()) bytes.release();
+}
 
 void string::replace_set(uint32_t pos, uint32_t len, cstring newdat)
 {
@@ -813,6 +819,7 @@ test("string", "array", "string")
 		assert_eq(a.split("aa").join("."), ".......ab");
 		assert_eq(a.split<1>("aa").join("."), ".aaaaaaaaaaaaab");
 		assert_eq(a.split<1>("x").join("."), "aaaaaaaaaaaaaaab");
+		assert_eq(a.split("b").join("."), "aaaaaaaaaaaaaaa.");
 		
 		a = "baaaaaaaaaaaaaaa";
 		assert_eq(a.rsplit<1>("aa").join("."), "baaaaaaaaaaaaa.");
@@ -930,6 +937,20 @@ test("string", "array", "string")
 	}
 	
 	{
+		array<byte> src = cstring("floating munchers").bytes();
+		string dst = src; // ensure it chooses the arrayview<uint8_t> overload
+		assert_eq(dst, "floating munchers");
+		assert_eq(src, dst.bytes());
+		dst = "";
+		test_nomalloc {
+			string tmp = std::move(src); // and this should use the 
+			dst = std::move(tmp);
+		};
+		assert_eq(dst, "floating munchers");
+		assert_eq(src.size(), 0);
+	}
+	
+	{
 		cstring a(arrayview<byte>((byte*)"\0", 1));
 		assert_eq(a.length(), 1);
 		assert_eq(a[0], '\0');
@@ -976,6 +997,7 @@ test("string", "array", "string")
 	
 	{
 		cstring strs[] = {
+		  "a!a",
 		  "aBa",
 		  "aBc",
 		  "aBcd",
@@ -996,6 +1018,7 @@ test("string", "array", "string")
 	
 	{
 		cstring strs[] = {
+		  "a!a",
 		  "aBa",
 		  "aBc",
 		  "abc",

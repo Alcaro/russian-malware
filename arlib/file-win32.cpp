@@ -235,8 +235,9 @@ namespace {
 static bool path_corrupt(cstring path)
 {
 	if (path[0] == '\0') return true;
-	if (path[0] == '/') return true;
+	if (path[0] == '/') return true; // TODO: this fails on network shares (\\?\, \\.\, and \??\ should be considered corrupt)
 	if (path[1] == ':' && path[2] != '/') return true;
+	if (path.contains("\\")) return true;
 	return false;
 }
 
@@ -268,13 +269,22 @@ bool file::unlink_fs(cstring filename)
 
 array<string> file::listdir(cstring path)
 {
+	if (path_corrupt(path)) return {};
+	
+	const char * sep = (path.endswith("/") ? "" : "/");
 	WIN32_FIND_DATA f;
-	HANDLE dir = FindFirstFile(path.c_str(), &f);
-	if (!dir) return nullptr;
+	HANDLE dir = FindFirstFile(path.c_str()+"/*", &f);
+	if (dir == INVALID_HANDLE_VALUE) return nullptr;
 	
 	array<string> ret;
 	do {
-		// TODO
+		// don't use strcmp, its constant overhead is suboptimal at best
+		if (f.cFileName[0] == '.')
+		{
+			if (f.cFileName[1] == '\0') continue;
+			if (f.cFileName[1] == '.' && f.cFileName[2] == '\0') continue;
+		}
+		ret.append(path + sep + f.cFileName + ((f.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? "/" : ""));
 	} while (FindNextFile(dir, &f));
 	FindClose(dir);
 	return ret;

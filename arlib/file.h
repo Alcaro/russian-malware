@@ -3,6 +3,48 @@
 #include "string.h"
 #include "array.h"
 
+// TODO: this class needs to be rewritten
+// commonly needed usecases, like file::readall, should not depend on unnecessary functionality, like seeking
+// (/dev/stdin is unseekable, and gvfs http seek sometimes fails)
+//
+// usecases:
+// read all, read streaming, read random
+// replace contents, replace/append streaming, rw random
+// the above six but async
+// mmap read, mmap rw
+// read all and flock()
+//
+// read all should, as now, be a single function, but implemented in the backend
+//  since typical usecase is passing return value to e.g. JSON::parse, it should return normal array<byte> or string
+// replace should also be a backend function, but it should be atomic, initially writing to filename+".aswptmp" (remember to fsync)
+//  ideally, it'd be open(O_TMPFILE)+linkat(O_REPLACE), but kernel doesn't allow that
+// mmap shouldn't be in the file object either, but take a filename and return an arrayview(w)<byte> child with a dtor
+// read-and-lock should also be a function, also returning an arrayview<byte> child with a dtor
+//  this one should also have a 'replace contents' member, still atomic (flock the new one before renaming)
+// async can be ignored for now; it's rarely useful, async local file needs threads on linux, and async gvfs requires glib runloop
+// the other four combinations belong in the file object; replace/append streaming is useful for logs
+//  they should use seek/read/size as primitives, not pread
+
+class file2 : nocopy {
+	file2() = delete;
+public:
+	//arrayview<byte> readall()
+	//cstring readallt()
+	
+	class mmap_t : public arrayview<byte>, nocopy {
+		friend class file2;
+		mmap_t(nullptr_t) {}
+		mmap_t(const uint8_t * ptr, size_t count) : arrayview(ptr, count) {}
+	public:
+		mmap_t(const mmap_t&) = delete;
+		mmap_t(mmap_t&& other) : arrayview(other) {other.items = nullptr; other.count = 0; }
+		~mmap_t();
+	};
+	
+	static mmap_t mmap(cstring filename);
+	//static mmapw_t mmapw(cstring filename);
+};
+
 class file : nocopy {
 public:
 	class impl : nocopy {
@@ -13,6 +55,15 @@ public:
 		virtual size_t pread(arrayvieww<byte> target, size_t start) = 0;
 		virtual bool pwrite(arrayview<byte> data, size_t start = 0) = 0;
 		virtual bool replace(arrayview<byte> data) { return resize(data.size()) && (data.size() == 0 || pwrite(data)); }
+		
+		virtual array<byte> readall()
+		{
+			array<byte> ret;
+			ret.reserve_noinit(this->size());
+			size_t actual = this->pread(ret, 0);
+			ret.resize(actual);
+			return ret;
+		}
 		
 		virtual arrayview<byte> mmap(size_t start, size_t len) = 0;
 		virtual void unmap(arrayview<byte> data) = 0;
@@ -88,14 +139,7 @@ public:
 	//Reading outside the file will return partial results.
 	size_t size() const { return core->size(); }
 	size_t pread(arrayvieww<byte> target, size_t start) const { return core->pread(target, start); }
-	array<byte> readall() const
-	{
-		array<byte> ret;
-		ret.reserve_noinit(this->size());
-		size_t actual = this->pread(ret, 0);
-		ret.resize(actual);
-		return ret;
-	}
+	array<byte> readall() const { return core->readall(); }
 	static array<byte> readall(cstring path)
 	{
 		file f(path);
@@ -115,7 +159,7 @@ public:
 	static bool writeall(cstring path, arrayview<byte> data)
 	{
 		file f(path, m_replace);
-		return f.pwrite(data);
+		return f && f.pwrite(data);
 	}
 	static bool writeall(cstring path, cstring data) { return writeall(path, data.bytes()); }
 	static bool replace_atomic(cstring path, arrayview<byte> data);
@@ -233,7 +277,7 @@ private:
 	};
 public:
 	
-	static array<string> listdir(cstring path); //Returns all items in the given directory, as absolute paths.
+	static array<string> listdir(cstring path); // Returns all items in the given directory. All outputs are prefixed with the input.
 	static bool mkdir(cstring path); // Returns whether that's now a directory. If it existed already, returns true; if a file, false.
 	static bool unlink(cstring filename); // Returns whether the file is now gone. If the file didn't exist, returns true.
 	static string dirname(cstring path){ return path.rsplit<1>("/")[0]+"/"; } //If the input path is a directory, the basename is blank.
@@ -252,9 +296,9 @@ public:
 	//On Unix, absolute paths start with a slash.
 	//On Windows:
 	// Absolute paths start with two slashes, or letter+colon+slash.
-	// Drive-relative or rooted paths (/foo.txt, C:foo.txt) are considered invalid and are implementation-defined.
+	// Half-absolute paths, like /foo.txt or C:foo.txt on Windows, are considered corrupt and are undefined behavior.
 	//The path component separator is the forward slash on all operating systems, including Windows.
-	//Paths to directories end with a slash. Paths to files do not. For example, /home/ and c:/windows/ are valid,
+	//Paths to directories end with a slash, Paths to files do not. For example, /home/ and c:/windows/ are valid,
 	// but /home and c:/windows are not.
 	static bool is_absolute(cstring path)
 	{

@@ -486,8 +486,8 @@ socketlisten* socketlisten::create(int port)
 	
 	int fd = -1;
 	if (fd<0) fd = socketlisten_create_ip6(port);
-#if defined(_WIN32) && _WIN32_WINNT < 0x0600
-	//Windows XP can't dualstack the v6 addresses, so let's keep the fallback
+#if defined(_WIN32) && _WIN32_WINNT < _WIN32_WINNT_LONGHORN
+	// XP can't dualstack the v6 addresses, so let's keep the fallback
 	if (fd<0) fd = socketlisten_create_ip4(port);
 #endif
 	if (fd<0) return NULL;

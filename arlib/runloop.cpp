@@ -283,15 +283,23 @@ public:
 		for (auto& pair : fdinfo)
 		{
 			int fd = pair.key;
-			if (fd != process::sigchld_fd_test_runner_only())
+#ifdef ARLIB_THREAD
+			if (fd == submit_fds[0]) continue;
+#endif
+			if (fd != process::_sigchld_fd_runloop_only())
 			{
 				if (RUNNING_ON_VALGRIND)
+				{
+					test_nothrow {
+						test_fail("fd left in runloop, check whoever allocated the following");
+					}
 					free(pair.value.valgrind_dummy); // intentional double free, to make valgrind print a stack trace of the malloc
+				}
 				else
 					printf("ERROR: fd %d left in runloop\n", pair.key);
 				is_empty = false;
 			}
-			set_fd(pair.key, nullptr, nullptr);
+			set_fd(fd, nullptr, nullptr);
 			goto again;
 		}
 		while (timerinfo.size())
@@ -314,11 +322,7 @@ public:
 
 runloop* runloop::create()
 {
-	runloop* ret = new runloop_linux();
-#ifdef ARLIB_TESTRUNNER
-	ret = runloop_wrap_blocktest(ret);
-#endif
-	return ret;
+	return runloop_wrap_blocktest(new runloop_linux());
 }
 #endif
 
@@ -332,20 +336,27 @@ uintptr_t runloop::raw_set_timer_abs(time_t when, function<void()> callback)
 }
 
 #ifdef ARGUI_NONE
-#ifndef _WIN32
 runloop* runloop::global()
 {
 	//ignore thread safety, this function can only be used from main thread
 	static runloop* ret = NULL;
-	if (!ret) ret = runloop::create();
+	if (!ret) ret = runloop_wrap_blocktest(runloop::create());
 	return ret;
 }
 #endif
+
+#if defined(_WIN32) && defined(ARLIB_TESTRUNNER)
+runloop* runloop::create()
+{
+	test_expfail("unimplemented");
+	abort();
+}
 #endif
 
 #include "os.h"
 #include "thread.h"
 #include "socket.h"
+#include "test.h"
 
 #ifdef ARLIB_TESTRUNNER
 class runloop_blocktest : public runloop {
@@ -456,7 +467,7 @@ void runloop_blocktest_recycle(runloop* loop)
 static void test_runloop(bool is_global)
 {
 #ifdef _WIN32
-	test_fail("unimplemented");
+	test_expfail("unimplemented");
 #else
 	runloop* loop = (is_global ? runloop::global() : runloop::create());
 	
@@ -546,10 +557,11 @@ test("private runloop", "function,array,set,time", "runloop")
 }
 test("epoll","","") { test_expfail("replace epoll with normal poll, epoll doesn't help at our small scale"); }
 
+#ifdef ARLIB_SOCKET
 static void test_runloop_2(bool is_global)
 {
 #ifdef _WIN32
-	test_fail("unimplemented");
+	test_expfail("unimplemented");
 #else
 	runloop* loop = (is_global ? runloop::global() : runloop::create());
 	
@@ -607,4 +619,5 @@ test("runloop with sockets", "function,array,set,time", "runloop")
 	testcall(test_runloop_2(false));
 	testcall(test_runloop_2(true));
 }
+#endif
 #endif

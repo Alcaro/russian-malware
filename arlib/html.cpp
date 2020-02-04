@@ -1,5 +1,4 @@
 #include "html.h"
-#include "thread.h"
 #include "test.h"
 
 //string format:

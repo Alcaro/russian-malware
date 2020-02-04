@@ -14,7 +14,7 @@
 #define CAT_STDIN "/bin/cat"
 #define CAT_STDIN_END ""
 #else
-#undef TRUE // go away windows, true !== 1 is just stupid. and so is TRUE
+#undef TRUE // go away windows, TRUE is just silly
 #define TRUE "cmd", "/c", "type NUL" // windows has no /bin/true, fake it
 #define ECHO "cmd", "/c", "echo"
 #define YES "cmd", "/c", "tree /f c:" // not actually infinite, but close enough
@@ -29,7 +29,7 @@
 test("process", "array,string,runloop", "process")
 {
 #ifdef _WIN32
-	test_fail("unimplemented");
+	test_expfail("unimplemented");
 #else
 	test_skip("kinda slow");
 	

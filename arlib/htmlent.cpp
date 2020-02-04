@@ -1,6 +1,4 @@
 #include "html.h"
-#include "thread.h"
-#include "test.h"
 
 //string format:
 //<ent-name> \0 <?> <bytes> \0
@@ -2150,6 +2148,7 @@ void HTML::all_entities()
 	set_entities(entities, ARRAY_SIZE(entities));
 }
 
+#include "test.h"
 test("HTML entities", "string", "html")
 {
 	HTML::all_entities();

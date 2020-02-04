@@ -1,3 +1,4 @@
+#pragma once
 #include "string.h"
 
 //If input is invalid, output will be blank, or contain U+FFFD.

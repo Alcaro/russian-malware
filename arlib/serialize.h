@@ -8,6 +8,8 @@
 #define SERIALIZE_CORE(member) s.item(STR(member), member);
 #define SERIALIZE(...) template<typename T> void serialize(T& s) { PPFOREACH(SERIALIZE_CORE, __VA_ARGS__); }
 
+// TODO: investigate if I can replace ser_enter with s.item("name", [](){}), or the other way round
+
 //Interface:
 //class serializer {
 //public:

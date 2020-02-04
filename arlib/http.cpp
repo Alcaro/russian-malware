@@ -417,7 +417,7 @@ static void test_url_fail(cstring url, cstring url2)
 	assert(HTTP::parseUrl(url, false, loc));
 	assert(!HTTP::parseUrl(url2, true, loc));
 }
-test("URL parser", "", "http")
+test("URL parser", "string", "http")
 {
 	testcall(test_url("wss://gateway.discord.gg/?v=5&encoding=json",          "wss", "gateway.discord.gg", 0, "/?v=5&encoding=json"));
 	testcall(test_url("wss://gateway.discord.gg?v=5&encoding=json",           "wss", "gateway.discord.gg", 0, "/?v=5&encoding=json"));
@@ -443,7 +443,7 @@ test("URL parser", "", "http")
 	testcall(test_url("http://a.com:8080/",                  "//b.com/",              "http", "b.com", 0, "/"));
 }
 
-test("HTTP", "tcp,ssl", "http")
+test("HTTP", "tcp,ssl,random", "http")
 {
 	test_skip("too slow");
 	
@@ -538,7 +538,7 @@ test("HTTP", "tcp,ssl", "http")
 	
 	T {
 		HTTP::req rq;
-		rq.url = "https://floating.muncher.se/arlib/test.php";
+		rq.url = "https://floating.muncher.se/arlib/echo.php";
 		// <?php
 		// header("Content-Type: application/json");
 		// echo json_encode(["post" => file_get_contents("php://input")]);
@@ -672,7 +672,7 @@ test("HTTP", "tcp,ssl", "http")
 		runloop_blocktest_recycle(loop);
 		
 		HTTP::req rq;
-		rq.url = "https://floating.muncher.se/arlib/test.php";
+		rq.url = "https://floating.muncher.se/arlib/echo.php"; // same as an earlier test
 		rq.body = blob;
 		rq.limit_ms = 2000 + sizeof(blob)/250;
 		rq.limit_bytes = sizeof(blob)+32768;

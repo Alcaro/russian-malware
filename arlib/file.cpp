@@ -142,6 +142,11 @@ test("file reading", "array", "file")
 	assert(!memcmp(bytes.ptr(), map2.ptr(), bytes.size()));
 	f.unmap(map2);
 	
+	auto map3 = file2::mmap(READONLY_FILE);
+	assert(map3.ptr());
+	assert(map3.size() == f.size());
+	assert(!memcmp(bytes.ptr(), map3.ptr(), bytes.size()));
+	
 	const size_t t_start[] = { 0,     65536, 4096, 1,     1,     1,     65537, 65535 };
 	const size_t t_len[]   = { 66000, 400,   400,  65535, 65536, 65999, 400,   2     };
 	for (size_t i=0;i<ARRAY_SIZE(t_start);i++)
@@ -162,12 +167,16 @@ test("file reading", "array", "file")
 	assert(file::dirname(READONLY_FILE).endswith("/"));
 	
 #ifdef _WIN32
+	char prev_dir[MAX_PATH];
+	assert(GetCurrentDirectory(MAX_PATH, prev_dir));
 	assert(SetCurrentDirectory("C:/Windows/"));
 	assert(f.open("notepad.exe"));
 	assert(f.open("C:/Windows/notepad.exe"));
-	//make sure these two are rejected, they're corrupt and have always been
+	//make sure these three paths are rejected, they're corrupt and have always been
 	assert(!f.open("C:notepad.exe"));
 	assert(!f.open("/Windows/notepad.exe"));
+	assert(!f.open("C:\\Windows\\notepad.exe"));
+	assert(SetCurrentDirectory(prev_dir));
 #endif
 }
 
@@ -284,12 +293,15 @@ test("file::resolve", "array,string", "")
 
 test("file::mkdir", "array,string", "")
 {
-	rmdir(CREATABLE_DIR); // TODO: this is unix only
+	rmdir(CREATABLE_DIR);
 	
+	assert(!file::writeall(CREATABLE_DIR "foo.txt", "hello"));
 	assert_eq(file::mkdir(CREATABLE_DIR), true);
+	assert( file::writeall(CREATABLE_DIR "foo.txt", "hello"));
 	assert_eq(file::mkdir(CREATABLE_DIR), true);
 	assert_eq(file::mkdir(READONLY_FILE), false);
 	
+	assert(file::unlink(CREATABLE_DIR "foo.txt"));
 	rmdir(CREATABLE_DIR);
 }
 
@@ -301,5 +313,16 @@ test("file::change_ext", "array,string", "")
 	assert_eq(file::change_ext("baz.bin", ".txt"), "baz.txt");
 	assert_eq(file::change_ext("baz", ".txt"), "baz.txt");
 	assert_eq(file::change_ext("baz.bin", ""), "baz");
+}
+
+test("file::listdir", "array,string", "")
+{
+	array<string> files = file::listdir("arlib/");
+	assert_gt(files.size(), 50);
+	assert(files.contains("arlib/string.cpp"));
+	assert(files.contains("arlib/.gitignore"));
+	assert(files.contains("arlib/gui/"));
+	assert(!files.contains("arlib/."));
+	assert(!files.contains("arlib/.."));
 }
 #endif

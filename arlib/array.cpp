@@ -16,18 +16,19 @@ void array<bool>::set_slice(size_t start, size_t num, const array<bool>& other, 
 	}
 }
 
-void array<bool>::clear_unused(size_t nbytes)
+void array<bool>::clear_unused(size_t start, size_t nbytes)
 {
-	size_t low = this->nbits;
+	size_t low = start;
 	size_t high = nbytes*8;
 	
 	if (low == high) return; // don't wipe bits()[8] if they're both 64
 	
-	uint8_t& byte = bits()[low/8];
+	uint8_t* ptr = bits();
+	uint8_t& byte = ptr[low/8];
 	byte &=~ (0xFF<<(low&7));
 	low = (low+7)&~7;
 	
-	memset(bits()+low/8, 0, (high-low)/8);
+	memset(ptr+low/8, 0, (high-low)/8);
 }
 
 void array<bool>::resize(size_t len)
@@ -38,7 +39,8 @@ void array<bool>::resize(size_t len)
 	switch ((prevlen > n_inline)<<1 | (len > n_inline))
 	{
 	case 0: // small->small
-		if (len < prevlen) clear_unused(sizeof(this->bits_inline));
+		if (len < prevlen)
+			clear_unused(this->nbits, sizeof(this->bits_inline));
 		break;
 	case 1: // small->big
 		{
@@ -54,7 +56,7 @@ void array<bool>::resize(size_t len)
 			uint8_t* freethis = this->bits_outline;
 			memcpy(this->bits_inline, this->bits_outline, sizeof(this->bits_inline));
 			free(freethis);
-			clear_unused(sizeof(this->bits_inline));
+			clear_unused(this->nbits, sizeof(this->bits_inline));
 		}
 		break;
 	case 3: // big->big
@@ -64,11 +66,11 @@ void array<bool>::resize(size_t len)
 			if (newbytes > prevbytes)
 			{
 				bits_outline = realloc(this->bits_outline, newbytes);
-				clear_unused(newbytes);
+				clear_unused(prevlen, newbytes);
 			}
-			if (len < prevlen)
+			else if (len < prevlen)
 			{
-				clear_unused(newbytes);
+				clear_unused(this->nbits, newbytes);
 			}
 		}
 		break;
@@ -203,8 +205,8 @@ static string ones_zeroes(int ones, int zeroes)
 }
 test("array<bool>", "", "array")
 {
-	for (size_t up=0;up<128;up+=13)
-	for (size_t down=0;down<=up;down+=13)
+	for (size_t up=0;up<256;up+=23)
+	for (size_t down=0;down<=up;down+=23)
 	{
 		array<bool> b;
 		for (size_t i=0;i<up;i++)

@@ -1,6 +1,38 @@
 #pragma once
 #include "global.h"
 
+// TODO: rewrite this thing
+// - windows support (lots of WSA stuff, like WSACreateEvent and WSAOVERLAPPED, are just the normal structs with weird prefixes)
+// - creating a socket should be async, this DNS-then-forward wrapper is silly
+// - backpressure; socketbuf is flawed at best, socket::write must be async
+// - concurrency pushback; object X may only handle one concurrent event
+//     for example a GUI program that sends HTTP requests; nested GUI event handling is impossible to reason about
+//     another example: simply an echo server
+//       read "hello ", async write "hello "
+//       read "world\n", async write "world\n"
+//     they must be in the right order, and a bounded number, so the next read must be delayed until the write is done
+//   for extra fun:
+//   - object X may handle multiple fds
+//   - object X may call into object Y, which also handles events
+//   - all relevant overhead must be optimized out as far as possible
+//   proposed solution:
+//     there is such a thing as an async context, which contains zero or more sockets
+//     an async context is usually idle, meaning it's trying to read all its sockets
+//     while the handler is running (including waiting for an async write), incoming data on those sockets is ignored
+//     you can also submit a function<async void()> to a context, which marks that context busy and runs the function
+//     timers and gui events do not belong in an async context, and cannot be async
+//   this can be done by giving async functions a lock argument, whose dtor releases the context, unless moved into a lambda capture
+//   however, that is very error prone, and requires nesting lambdas forever
+//   it'd be a lot easier with c++20 coroutines ...whenever gcc learns that...
+// - make socket handler less easy to screw up
+//     for example, if a HTTP handler reads only half of the output from a SSL socket, its ready callback must run again immediately
+//     this is currently SSL's responsibility, and the exact rules are pretty subtle - I doubt I did it right everywhere
+//   proposed solution: sockets have is_ready() function, and runloop loops that as necessary
+// - decide if I want the runloop in a thread local variable, instead of passing it around and calling runloop::global everywhere
+//   advantages: less boilerplate; no need to store runloop pointers everywhere; DECL_TIMER becomes trivial
+//   disadvantages: TLS is tricky, especially regarding destructors; it's a global variable; may complicate testing
+//   (if yes, use a global object's constructor to assign the GUI runloop to the main thread)
+
 //A runloop keeps track of a number of file descriptors, calling their handlers whenever the relevant operation is available.
 //Event handlers must handle the event. If they don't, the handler may be called again forever and block everything else.
 //Do not call enter() or step() while inside a callback. The others are safe.
@@ -140,7 +172,7 @@ public:
 #define DECL_TIMER(name, parent_t)                                             \
 	class JOIN(name, _t) : public runloop::base_timer<JOIN(name, _t)> {        \
 		template<typename Tp>                                                  \
-		typename std::enable_if_t<sizeof(&*std::declval<Tp>().loop) >= 0, runloop*>  \
+		typename std::enable_if_t<sizeof(&*std::declval<Tp>().loop) >= 0, runloop*> \
 		get_loop_inner(Tp* parent)                                             \
 		{                                                                      \
 			return parent->loop;                                               \
@@ -167,7 +199,6 @@ private:
 	virtual uintptr_t raw_set_timer_rel(unsigned ms, bool repeat, function<void()> callback) = 0;
 public:
 	//Each timer must be removed once you're done. To do this, pass the function's return value to raw_timer_remove.
-	//This includes timers; they go in raw_timer_remove.
 	//0 is guaranteed to never be returned, and to do nothing if passed to raw_timer_remove.
 	uintptr_t raw_set_timer_abs(time_t when, function<void()> callback);
 	uintptr_t raw_set_timer_repeat(unsigned ms, function<void()> callback) { return raw_set_timer_rel(ms, true, callback); }

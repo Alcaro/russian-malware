@@ -1,6 +1,6 @@
+// SPDX-License-Identifier: MIT
+
 // MIT License
-//
-// Copyright (c) 2016 Alfred Agrell
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,6 +21,7 @@
 // SOFTWARE.
 
 //The above license applies only to the WuTF directory, not the entire Arlib.
+
 
 // It is well known that Windows supports two flavors of every function that
 //  takes or returns strings(*): A and W. The A ones take strings in the local
@@ -51,9 +52,9 @@
 //- Very likely to crash if another thread is in an A API during WuTF_enable(). Very likely to screw
 //    up if anything has called any A API before WuTF_enable().
 //- Affects the entire process; don't do it unless you know the process wants it this way.
-//   I believe most processes actually wants it this way; everything I've seen either expects ASCII
+//   I believe most processes do want it this way; everything I've seen either expects ASCII
 //    only, uses the W APIs, or is console output (which is another codepage). I am not aware of
-//    anything that actually expects the ANSI codepage.
+//    anything that actually expects any particular A codepage.
 //- Disables support for non-UTF8 code pages in MultiByteToWideChar and WideCharToMultiByte and
 //    treats them as UTF-8, even if explicitly requested otherwise.
 //- Console input and output remains ANSI. Consoles are very strangely implemented in Windows;
@@ -70,8 +71,8 @@
 //- CharNextA/etc are unchanged and still expect the ANSI code page. (Does anything ever use them?)
 //- SetFileApisToOEM is untested. I don't know if it's ignored or if it actually does set them to
 //    OEM. Either way, the fix is easy: don't use it.
-//- Windows filenames are limited to ~260 characters; but I believe functions that return filenames
-//    will count the UTF-8 bytes. (The ones taking filename inputs should work up to 260 UTF-16
+//- Windows filenames are limited to ~260 characters; I believe functions that return filenames will
+//    count the UTF-8 bytes. (The ones taking filename inputs should work up to 260 UTF-16
 //    codepoints.)
 //- Buffer sizes may be underestimated. <https://blogs.msdn.microsoft.com/oldnewthing/20180608-00/?p=98945>
 //- According to Larry Osterman <https://blogs.msdn.microsoft.com/larryosterman/2007/03/20/other-fun-things-to-do-with-the-endpointvolume-interfaces/>,

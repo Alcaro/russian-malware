@@ -5,9 +5,7 @@
 #include "socket.h"
 #include "bytepipe.h"
 #include "stringconv.h"
-#ifdef __linux__
-#include <unistd.h>
-#endif
+#include "random.h"
 
 class HTTP : nocopy {
 public:
@@ -197,8 +195,7 @@ public:
 		form()
 		{
 			uint8_t rand[16];
-			// guaranteed to succeed unless kernel < 3.17 (october 2014), too big, or bad pointer
-			ignore(getentropy(&rand, sizeof(rand)));
+			random_t::get_seed(&rand, sizeof(rand));
 			boundary = "--ArlibFormBoundary"+tostringhex(rand); // max 70 characters allowed, not counting the two leading hyphens
 		}
 		

@@ -228,6 +228,7 @@ public:
 	
 #ifdef ARLIB_TESTRUNNER
 	//This fd is allowed to remain in runloops even when they destruct.
-	static int sigchld_fd_test_runner_only();
+	//Nothing except runloop implementations should call this.
+	static int _sigchld_fd_runloop_only();
 #endif
 };

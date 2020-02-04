@@ -7,7 +7,7 @@
 //Its lesser known cousin LD_AUDIT works better, but the library itself is open()ed.
 //This can be worked around with ptrace to make that specific syscall return a pre-opened fd, but that's way too much effort.
 //Instead, we will be the loader. Of course we don't want to actually load the program, that's even harder than ptrace,
-// so we'll just load the real loader, after setting up a SIGSYS handler (see sysemu.cpp) to let open() act normally.
+// so we'll "just" load the real loader, after setting up a SIGSYS handler (see sysemu.cpp) to let open() act normally.
 //We'll skip most error checking. Everything will succeed on a sane system, and if it doesn't, there's no way to recover.
 
 //#define _GNU_SOURCE // default (mandatory) in c++
@@ -98,6 +98,7 @@ static inline int munmap(void* addr, size_t length)
 	return syscall2(__NR_munmap, (long)addr, length);
 }
 
+// Clang's __builtin_align_up would make more sense, but gcc doesn't have that
 #define ALIGN_MULT 4096
 #define ALIGN_MASK (ALIGN_MULT-1)
 #define ALIGN_OFF(ptr) ((uintptr_t)(ptr) & ALIGN_MASK)
@@ -239,7 +240,7 @@ __asm__(R"(
 .globl _start
 _start:
 mov %rdi, %rsp
-push %rcx  # nothing in bootstrap_start seems to require stack alignment, but better do it anyways
+push %rcx  # stack alignment; nothing in bootstrap_start seems to need that, but better do it anyways
 call bootstrap_start
 pop %rcx  # why rcx? no real reason, I just picked one at random
 jmp %rax

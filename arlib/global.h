@@ -11,27 +11,18 @@
 #define __STDC_LIMIT_MACROS //how many of these stupid things exist
 #define __STDC_FORMAT_MACROS // if I include a header, it's because I want to use its contents
 #define __STDC_CONSTANT_MACROS
-#define _USE_MATH_DEFINES // needed for M_PI on Windows
-
-#include <stdint.h>
-#include <stddef.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <limits.h>
-#include <inttypes.h>
-#include <utility>
-#include "function.h"
+#define _USE_MATH_DEFINES // needed for M_PI on windows
 
 #ifdef _WIN32
 #  ifndef _WIN32_WINNT
-#    define _WIN32_WINNT 0x0600
-#    define NTDDI_VERSION NTDDI_VISTA
-#  elif _WIN32_WINNT < 0x0600
+#    define _WIN32_WINNT _WIN32_WINNT_WIN7
+#    define NTDDI_VERSION NTDDI_WIN7
+#    define _WIN32_IE _WIN32_IE_WIN7
+#  elif _WIN32_WINNT <= 0x0600 // don't replace with _WIN32_WINNT_LONGHORN, windows.h isn't included yet
 #    undef _WIN32_WINNT
-#    define _WIN32_WINNT 0x0502 // 0x0501 excludes SetDllDirectory, so I need to put it at 0x0502
+#    define _WIN32_WINNT _WIN32_WINNT_WS03 // _WIN32_WINNT_WINXP excludes SetDllDirectory, so I need to put it at 0x0502
 #    define NTDDI_VERSION NTDDI_WS03 // actually NTDDI_WINXPSP2, but MinGW sddkddkver.h gets angry about that
 #  endif
-#  define _WIN32_IE 0x0600
 //the namespace pollution this causes is massive, but without it, there's a bunch of functions that
 // just tail call kernel32.dll. With it, they can be inlined.
 #  define WIN32_LEAN_AND_MEAN
@@ -48,6 +39,15 @@
 #  include <windows.h>
 #  undef STRICT
 #endif
+
+#include <stdint.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <limits.h>
+#include <inttypes.h>
+#include <utility>
+#include "function.h"
 
 #ifdef _MSC_VER
 #pragma warning(disable:4800) // forcing value to bool 'true' or 'false' (performance warning)
@@ -108,11 +108,11 @@ template<typename T, size_t N> char(&ARRAY_SIZE_CORE(T(&x)[N]))[N];
 //- merged https://github.com/swansontec/map-macro/pull/3
 //- merged http://stackoverflow.com/questions/6707148/foreach-macro-on-macros-arguments#comment62878935_13459454, plus ifdef
 #define PPFE_EVAL0(...) __VA_ARGS__
-#define PPFE_EVAL1(...) PPFE_EVAL0 (PPFE_EVAL0 (PPFE_EVAL0 (__VA_ARGS__)))
-#define PPFE_EVAL2(...) PPFE_EVAL1 (PPFE_EVAL1 (PPFE_EVAL1 (__VA_ARGS__)))
-#define PPFE_EVAL3(...) PPFE_EVAL2 (PPFE_EVAL2 (PPFE_EVAL2 (__VA_ARGS__)))
-#define PPFE_EVAL4(...) PPFE_EVAL3 (PPFE_EVAL3 (PPFE_EVAL3 (__VA_ARGS__)))
-#define PPFE_EVAL(...)  PPFE_EVAL4 (PPFE_EVAL4 (PPFE_EVAL4 (__VA_ARGS__)))
+#define PPFE_EVAL1(...) PPFE_EVAL0(PPFE_EVAL0(PPFE_EVAL0(__VA_ARGS__)))
+#define PPFE_EVAL2(...) PPFE_EVAL1(PPFE_EVAL1(PPFE_EVAL1(__VA_ARGS__)))
+#define PPFE_EVAL3(...) PPFE_EVAL2(PPFE_EVAL2(PPFE_EVAL2(__VA_ARGS__)))
+#define PPFE_EVAL4(...) PPFE_EVAL3(PPFE_EVAL3(PPFE_EVAL3(__VA_ARGS__)))
+#define PPFE_EVAL(...)  PPFE_EVAL4(PPFE_EVAL4(PPFE_EVAL4(__VA_ARGS__)))
 #define PPFE_MAP_END(...)
 #define PPFE_MAP_OUT
 #define PPFE_MAP_GET_END2() 0, PPFE_MAP_END
@@ -122,19 +122,24 @@ template<typename T, size_t N> char(&ARRAY_SIZE_CORE(T(&x)[N]))[N];
 #ifdef _MSC_VER
 //this version doesn't work on GCC, it makes PPFE_MAP0 not get expanded the second time and quite effectively stops everything.
 //but completely unknown guy says it's required on MSVC, so I'll trust that and ifdef it
-//pretty sure one of them violate the C99/C++ specifications, but I have no idea which of them, nor what Clang does
-#define PPFE_MAP_NEXT1(test, next) PPFE_EVAL0(PPFE_MAP_NEXT0 (test, next, 0))
+//pretty sure one of them violate the C99/C++ specifications, but I have no idea which of them (Clang seems to follow GCC)
+#define PPFE_MAP_NEXT1(test, next) PPFE_EVAL0(PPFE_MAP_NEXT0(test, next, 0))
 #else
-#define PPFE_MAP_NEXT1(test, next) PPFE_MAP_NEXT0 (test, next, 0)
+#define PPFE_MAP_NEXT1(test, next) PPFE_MAP_NEXT0(test, next, 0)
 #endif
-#define PPFE_MAP_NEXT(test, next)  PPFE_MAP_NEXT1 (PPFE_MAP_GET_END test, next)
-#define PPFE_MAP0(f, x, peek, ...) f(x) PPFE_MAP_NEXT (peek, PPFE_MAP1) (f, peek, __VA_ARGS__)
-#define PPFE_MAP1(f, x, peek, ...) f(x) PPFE_MAP_NEXT (peek, PPFE_MAP0) (f, peek, __VA_ARGS__)
-#define PPFOREACH(f, ...) PPFE_EVAL (PPFE_MAP1 (f, __VA_ARGS__, ()()(), ()()(), ()()(), 0))
+#define PPFE_MAP_NEXT(test, next)  PPFE_MAP_NEXT1(PPFE_MAP_GET_END test, next)
+#define PPFE_MAP0(f, x, peek, ...) f(x) PPFE_MAP_NEXT(peek, PPFE_MAP1)(f, peek, __VA_ARGS__)
+#define PPFE_MAP1(f, x, peek, ...) f(x) PPFE_MAP_NEXT(peek, PPFE_MAP0)(f, peek, __VA_ARGS__)
+#define PPFE_MAP0A(f, arg, x, peek, ...) f(arg, x) PPFE_MAP_NEXT(peek, PPFE_MAP1A)(f, arg, peek, __VA_ARGS__)
+#define PPFE_MAP1A(f, arg, x, peek, ...) f(arg, x) PPFE_MAP_NEXT(peek, PPFE_MAP0A)(f, arg, peek, __VA_ARGS__)
+
 //usage:
 //#define STRING(x) const char * x##_string = #x;
 //PPFOREACH(STRING, foo, bar, baz)
 //limited to 365 entries, but that's enough.
+#define PPFOREACH(f, ...)        PPFE_EVAL(PPFE_MAP1(f,        __VA_ARGS__, ()()(), ()()(), ()()(), 0))
+// Same as the above, but the given macro has two arguments, of which the first is 'arg' here.
+#define PPFOREACH_A(f, arg, ...) PPFE_EVAL(PPFE_MAP1A(f, arg, __VA_ARGS__, ()()(), ()()(), ()()(), 0))
 
 
 
@@ -304,26 +309,27 @@ template<typename T, typename... Args> static T max(const T& a, Args... args)
 
 
 
+// Inherit from nocopy or nomove if possible, so you won't need a custom constructor.
+#define NO_COPY(type) \
+	type(const type&) = delete; \
+	const type& operator=(const type&) = delete; \
+	type(type&&) = default; \
+	type& operator=(type&&) = default
 class nocopy {
 protected:
 	nocopy() = default; // do not use {}, it optimizes poorly
-	nocopy(const nocopy&) = delete;
-	const nocopy& operator=(const nocopy&) = delete;
-#if !defined(_MSC_VER) || _MSC_VER >= 1900 // error C2610: is not a special member function which can be defaulted
-                                           // deleting the copies deletes the moves on gcc, but does nothing on msvc2013; known bug
-                                           // luckily, those two bugs cancel out pretty well, so we can do this
-	nocopy(nocopy&&) = default;
-	nocopy& operator=(nocopy&&) = default;
-#endif
+	NO_COPY(nocopy);
 };
 
+#define NO_MOVE(type) \
+	type(const type&) = delete; \
+	const type& operator=(const type&) = delete; \
+	type(type&&) = delete; \
+	type& operator=(type&&) = delete
 class nomove {
 protected:
 	nomove() = default;
-	nomove(const nomove&) = delete;
-	const nomove& operator=(const nomove&) = delete;
-	nomove(nomove&&) = delete;
-	nomove& operator=(nomove&&) = delete;
+	NO_MOVE(nomove);
 };
 
 template<typename T>
@@ -526,6 +532,10 @@ template<typename T> static inline T bitround(T in)
 #define SIMD_LOOP_TAIL // nop
 #endif
 
+#ifdef __GNUC__
+#define oninit() __attribute__((constructor)) static void JOIN(oninit,__LINE__)()
+#define ondeinit() __attribute__((destructor)) static void JOIN(ondeinit,__LINE__)()
+#else
 class initrunner {
 public:
 	initrunner(void(*fn)()) { fn(); }
@@ -541,10 +551,29 @@ public:
 #define ondeinit() static void JOIN(ondeinit,__LINE__)(); \
                    static MAYBE_UNUSED deinitrunner<JOIN(ondeinit,__LINE__)> JOIN(deinitrun,__LINE__); \
                    static void JOIN(ondeinit,__LINE__)()
+#endif
 
 #define container_of(ptr, outer_t, member) \
 	((outer_t*)((uint8_t*)(ptr) - (offsetof(outer_t,member))))
 
+class range_iter_t {
+	size_t n;
+public:
+	range_iter_t(size_t n) : n(n) {}
+	bool operator!=(const range_iter_t& other) { return n != other.n; }
+	void operator++() { n++; }
+	size_t operator*() { return n; }
+};
+class range_t {
+	size_t a;
+	size_t b;
+public:
+	range_t(size_t a, size_t b) : a(a), b(b) {}
+	range_iter_t begin() const { return a; }
+	range_iter_t end() const { return b; }
+};
+static inline range_t range(size_t n) { return range_t(0, n); }
+static inline range_t range(size_t a, size_t b) { return range_t(a, b); }
 
 //If an interface defines a function to set some state, and a callback for when this state changes,
 // calling that function will not trigger the state callback.

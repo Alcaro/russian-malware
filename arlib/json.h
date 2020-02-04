@@ -272,8 +272,14 @@ public:
 #undef JSONOPS
 	
 	//these technically aren't JSONw, but they act like them
-	JSONw& operator[](int n) { return *(JSONw*)&(list()[n]); }
-	JSONw& operator[](size_t n) { return *(JSONw*)&(list()[n]); }
+	JSONw& operator[](int n) { return operator[]((size_t)n); }
+	JSONw& operator[](size_t n)
+	{
+		ev.action = jsonparser::enter_list;
+		if (n == chld_list.size()) return *(JSONw*)&chld_list.append();
+		if (n < chld_list.size()) return *(JSONw*)&(list()[n]);
+		abort();
+	}
 	JSONw& operator[](const char * s) { return *(JSONw*)&(assoc().get_create(s)); }
 	JSONw& operator[](cstring s) { return *(JSONw*)&(assoc().get_create(s)); }
 	

@@ -44,7 +44,7 @@ again: ;
 		m_data--;
 		return '\0';
 	}
-	return '\1'; // all pre-space non-whitespace is invalid, doesn't matter which one to return
+	return '\1'; // all pre-space non-whitespace is invalid, just pick one at random
 }
 
 //returns false if the input is invalid

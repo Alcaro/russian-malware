@@ -535,6 +535,7 @@ public:
 	{
 		init_from(chars.reinterpret<uint8_t>());
 	}
+	string(array<uint8_t>&& bytes);
 	string(nullptr_t) { init_empty(); }
 	string& operator=(const string& other) { reinit_from(other); return *this; }
 	string& operator=(const cstring& other) { reinit_from(other); return *this; }
@@ -552,11 +553,12 @@ public:
 	
 	//Takes ownership of the given pointer. Will free() it when done.
 	static string create_usurp(char * str);
+	static string create_usurp(array<byte>&& in) { return string(std::move(in)); }
 	
 	//Returns a string containing a single NUL.
 	static cstring nul() { return arrayview<byte>((byte*)"", 1); }
 	
-	//Returns U+FFFD for invalid UTF16-reserved inputs. 0 yields a NUL byte.
+	//Returns U+FFFD for UTF16-reserved inputs. 0 yields a NUL byte.
 	static string codepoint(uint32_t cp);
 	
 	//3-way comparison. If a comes first, return value is negative; if equal, zero; if b comes first, positive.
