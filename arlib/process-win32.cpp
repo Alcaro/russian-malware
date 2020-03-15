@@ -37,8 +37,11 @@ static string escapearg(cstring arg)
 	//else return arg;
 }
 
+static mutex mut;
 bool process::launch(cstring prog, arrayview<string> args)
 {
+	synchronized(mut) { // so inheritable handles don't run off into other processes
+	
 	string cmdline = escapearg(prog);
 	for (cstring s : args)
 	{
@@ -80,10 +83,11 @@ bool process::launch(cstring prog, arrayview<string> args)
 	
 	update();
 	return true;
+	}
 }
 
 //returns whether it did anything
-static bool update_piperead(HANDLE h, array<byte>& out, size_t limit)
+static bool update_piperead(HANDLE h, array<uint8_t>& out, size_t limit)
 {
 	if (!h) return false;
 	DWORD newbytes;

@@ -39,7 +39,7 @@ static void socket_test_httpfail(socket* sock, bool xfail, runloop* loop)
 			if (n_buf < 8)
 			{
 				inside = true;
-				int bytes = sock->recv(arrayvieww<byte>(buf).slice(n_buf, n_buf==0 ? 2 : 1));
+				int bytes = sock->recv(arrayvieww<uint8_t>(buf).slice(n_buf, n_buf==0 ? 2 : 1));
 				inside = false;
 				
 				if (bytes == 0) return;
@@ -71,7 +71,7 @@ static void socket_test_httpfail(socket* sock, bool xfail, runloop* loop)
 		}));
 	
 	loop->enter();
-	if (!xfail) assert_eq(string(arrayview<byte>(buf)), "HTTP/1.1");
+	if (!xfail) assert_eq(string(arrayview<uint8_t>(buf)), "HTTP/1.1");
 	
 	loop->raw_timer_remove(timer);
 }
@@ -180,7 +180,7 @@ static void ser_test(autoptr<socketssl>& s)
 	assert(sp);
 	assert(!s);
 	int fd;
-	array<byte> data = sp->serialize(&fd);
+	array<uint8_t> data = sp->serialize(&fd);
 	assert(data);
 	s = socketssl::deserialize(fd, data);
 	assert(s);
@@ -195,7 +195,7 @@ test("SSL serialization")
 	testcall(ser_test(s));
 	s->send("Host: google.com\nConnection: close\n\n");
 	testcall(ser_test(s));
-	array<byte> bytes = recvall(s, 4);
+	array<uint8_t> bytes = recvall(s, 4);
 	assert_eq(string(bytes), "HTTP");
 	testcall(ser_test(s));
 	bytes = recvall(s, 4);

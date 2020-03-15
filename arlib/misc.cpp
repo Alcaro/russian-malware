@@ -5,12 +5,45 @@
 #warning "platform-specific floating-point rounding detected; consider adding -ffloat-store, -mfpmath=sse, or similar"
 #endif
 
+// trigger a warning if it doesn't stay disabled
+#define __USE_MINGW_ANSI_STDIO 0
+
 void malloc_fail(size_t size)
 {
 	if (size > 0) printf("malloc failed, size %" PRIuPTR "\n", size);
 	else puts("malloc failed, size unknown");
 	abort();
 }
+
+#if defined(__MINGW32__)
+float strtof_arlib(const char * str, char** str_end)
+{
+	int n = 0;
+	float ret;
+	sscanf(str, "%f%n", &ret, &n);
+	if (str_end) *str_end = (char*)str+n;
+	return ret;
+}
+double strtod_arlib(const char * str, char** str_end)
+{
+	int n = 0;
+	double ret;
+	sscanf(str, "%lf%n", &ret, &n);
+	if (str_end) *str_end = (char*)str+n;
+	return ret;
+}
+// gcc doesn't acknowledge scanf("%Lf") as legitimate
+// I can agree that long double is creepy, I'll just leave it like this
+// (needs testing, of course - maybe it just needs a #pragma diagnostic, like stringconv)
+//long double strtold_arlib(const char * str, char** str_end)
+//{
+//	int n;
+//	long double ret;
+//	sscanf(str, "%Lf%n", &ret, &n);
+//	if (str_end) *str_end = (char*)str+n;
+//	return ret;
+//}
+#endif
 
 //for windows:
 //  these are the only libstdc++ functions I use. if I reimplement them, I don't need that library at all,

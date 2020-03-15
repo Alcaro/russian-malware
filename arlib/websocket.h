@@ -17,7 +17,7 @@ class WebSocket : nocopy {
 		t_pong = 10
 	};
 	
-	array<byte> msg;
+	array<uint8_t> msg;
 	
 	bool inHandshake;
 	bool gotFirstLine; // HTTP/1.1 101 Switching Protocols
@@ -26,14 +26,14 @@ class WebSocket : nocopy {
 	bool break_callback;
 	
 	function<void(cstring)> cb_str;
-	function<void(arrayview<byte>)> cb_bin;
+	function<void(arrayview<uint8_t>)> cb_bin;
 	function<void()> cb_error;
 	
 	function<socket*(bool ssl, cstring domain, int port, runloop* loop)> cb_mksock = socket::create_sslmaybe;
 	
 	
 	void activity();
-	void send(arrayview<byte> message, int type);
+	void send(arrayview<uint8_t> message, int type);
 	void cancel() { sock = NULL; cb_error(); }
 	
 public:
@@ -43,13 +43,13 @@ public:
 	//A custom socket creation function, if you want proxy support.
 	void wrap_socks(function<socket*(bool ssl, cstring domain, int port, runloop* loop)> cb) { cb_mksock = cb; }
 	
-	void send(arrayview<byte> message) { send(message, t_binary); }
+	void send(arrayview<uint8_t> message) { send(message, t_binary); }
 	void send(cstring message) { send(message.bytes(), t_text); }
 	
 	//It's fine to call both of those if you need to keep text/binary data apart. If you don't, both will go to the same one.
 	//Do this before connect(), or you may miss events, for example if the target is unparseable.
-	void callback(function<void(cstring        )> cb_str, function<void()> cb_error) { this->cb_str = cb_str; this->cb_error = cb_error; }
-	void callback(function<void(arrayview<byte>)> cb_bin, function<void()> cb_error) { this->cb_bin = cb_bin; this->cb_error = cb_error; }
+	void callback(function<void(cstring           )> cb_str, function<void()> cb_error) { this->cb_str = cb_str; this->cb_error = cb_error; }
+	void callback(function<void(arrayview<uint8_t>)> cb_bin, function<void()> cb_error) { this->cb_bin = cb_bin; this->cb_error = cb_error; }
 	
 	bool isOpen() { return sock; }
 	void reset() { sock = NULL; tosend.reset(); msg.reset(); break_callback = true; }

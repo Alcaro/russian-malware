@@ -61,20 +61,20 @@ public:
 	// This is how most callers treat them anyways, no need to push a bunch of special cases into the callers.
 	//send() buffers everything internally, and always uses every byte.
 	//For UDP sockets, partial reads or writes aren't possible; you always get one or zero packets.
-	virtual int recv(arrayvieww<byte> data) = 0;
-	int recv(array<byte>& data)
+	virtual int recv(arrayvieww<uint8_t> data) = 0;
+	int recv(array<uint8_t>& data)
 	{
 		if (data.size()==0)
 		{
 			data.resize(4096);
-			int bytes = recv((arrayvieww<byte>)data);
+			int bytes = recv((arrayvieww<uint8_t>)data);
 			if (bytes >= 0) data.resize(bytes);
 			else data.resize(0);
 			return bytes;
 		}
-		else return recv((arrayvieww<byte>)data);
+		else return recv((arrayvieww<uint8_t>)data);
 	}
-	virtual int send(arrayview<byte> data) = 0;
+	virtual int send(arrayview<uint8_t> data) = 0;
 	
 	//It is safe to call this multiple times.
 	//If there's still data available for reading on the socket, the callbacks will be called again.
@@ -95,12 +95,12 @@ public:
 	
 	
 	// Network byte order.
-	static string ip_to_string(arrayview<byte> bytes);
-	static array<byte> string_to_ip(cstring str);
+	static string ip_to_string(arrayview<uint8_t> bytes);
+	static array<uint8_t> string_to_ip(cstring str);
 	// The buffer must be at least 16 bytes. Returns bytes actually used (4 or 16, or 0 for error).
-	static int string_to_ip(arrayvieww<byte> out, cstring str);
-	static bool string_to_ip4(arrayvieww<byte> out, cstring str);
-	static bool string_to_ip6(arrayvieww<byte> out, cstring str);
+	static int string_to_ip(arrayvieww<uint8_t> out, cstring str);
+	static bool string_to_ip4(arrayvieww<uint8_t> out, cstring str);
+	static bool string_to_ip6(arrayvieww<uint8_t> out, cstring str);
 };
 
 //SSL feature matrix:

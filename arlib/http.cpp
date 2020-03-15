@@ -242,7 +242,7 @@ newsock:
 	try_compile_req();
 	if (!sock) goto newsock;
 	
-	array<byte> newrecv;
+	array<uint8_t> newrecv;
 	if (sock->recv(newrecv) < 0) { sock = NULL; goto newsock; }
 	this->bytes_in_req += newrecv.size();
 	

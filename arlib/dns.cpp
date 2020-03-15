@@ -165,7 +165,7 @@ void DNS::sock_cb()
 		return;
 	}
 	if (nbytes == 0) return;
-	arrayview<byte> bytes(packet, nbytes);
+	arrayview<uint8_t> bytes(packet, nbytes);
 	bytestream stream = bytes;
 	
 	//header:

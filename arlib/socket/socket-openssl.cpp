@@ -162,7 +162,7 @@ public:
 		{
 			if (buflen > 4096) buflen = 4096;
 			
-			int bytes = sock->send(arrayview<byte>((uint8_t*)buf, buflen));
+			int bytes = sock->send(arrayview<uint8_t>((uint8_t*)buf, buflen));
 //printf("SOCKWRITE(%li)=%i\n",buflen,bytes);
 			if (bytes < 0) sock = NULL;
 			if (bytes > 0)
@@ -197,7 +197,7 @@ public:
 		set_child_cb();
 	}
 	
-	int recv(arrayvieww<byte> data) override
+	int recv(arrayvieww<uint8_t> data) override
 	{
 		int ret = fixret(SSL_read(ssl, data.ptr(), data.size()));
 //printf("USERREAD(%lu)=%i\n",data.size(),ret);
@@ -216,7 +216,7 @@ public:
 		return ret;
 	}
 	
-	int send(arrayview<byte> data) override
+	int send(arrayview<uint8_t> data) override
 	{
 		if (!sock) return -1;
 		

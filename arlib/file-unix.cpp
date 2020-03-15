@@ -101,38 +101,38 @@ namespace {
 			return (ftruncate(this->fd, newsize) == 0);
 		}
 		
-		size_t pread(arrayvieww<byte> target, size_t start)
+		size_t pread(arrayvieww<uint8_t> target, size_t start)
 		{
 			size_t ret = ::pread(fd, target.ptr(), target.size(), start);
 			if (ret<0) return 0;
 			else return ret;
 		}
-		bool pwrite(arrayview<byte> data, size_t start)
+		bool pwrite(arrayview<uint8_t> data, size_t start)
 		{
 			size_t ret = ::pwrite(fd, data.ptr(), data.size(), start);
 			if (ret<0) return 0;
 			else return ret;
 		}
 		
-		/*private*/ arrayvieww<byte> mmap(bool writable, size_t start, size_t len)
+		/*private*/ arrayvieww<uint8_t> mmap(bool writable, size_t start, size_t len)
 		{
 			//TODO: for small things (64KB? 1MB?), use malloc, it's faster
 			//http://lkml.iu.edu/hypermail/linux/kernel/0004.0/0728.html
 			size_t offset = start % pagesize;
 			void* data = ::mmap(NULL, len+offset, writable ? PROT_WRITE|PROT_READ : PROT_READ, MAP_SHARED, this->fd, start-offset);
 			if (data == MAP_FAILED) return NULL;
-			return arrayvieww<byte>((uint8_t*)data+offset, len);
+			return arrayvieww<uint8_t>((uint8_t*)data+offset, len);
 		}
 		
-		arrayview<byte> mmap(size_t start, size_t len) { return mmap(false, start, len); }
-		void unmap(arrayview<byte> data)
+		arrayview<uint8_t> mmap(size_t start, size_t len) { return mmap(false, start, len); }
+		void unmap(arrayview<uint8_t> data)
 		{
 			size_t offset = (uintptr_t)data.ptr() % pagesize;
 			munmap((char*)data.ptr()-offset, data.size()+offset);
 		}
 		
-		arrayvieww<byte> mmapw(size_t start, size_t len) { return mmap(true, start, len); }
-		bool unmapw(arrayvieww<byte> data)
+		arrayvieww<uint8_t> mmapw(size_t start, size_t len) { return mmap(true, start, len); }
+		bool unmapw(arrayvieww<uint8_t> data)
 		{
 			unmap(data);
 			// manpage documents no errors for the case where file writing fails, gotta assume it never does

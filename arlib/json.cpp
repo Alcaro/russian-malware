@@ -139,7 +139,7 @@ jsonparser::event jsonparser::next()
 				continue;
 			}
 			fast_iter += ctz32(mask);
-			val = string(arrayview<byte>(m_data, fast_iter-m_data));
+			val = string(arrayview<uint8_t>(m_data, fast_iter-m_data));
 			m_data = fast_iter;
 			if (LIKELY(*m_data == '"'))
 			{
@@ -155,7 +155,7 @@ jsonparser::event jsonparser::next()
 			uint8_t ch = *fast_iter;
 			if (UNLIKELY(ch < 32 || ch == '\\' || ch == '"'))
 			{
-				val = string(arrayview<byte>(m_data, fast_iter-m_data));
+				val = string(arrayview<uint8_t>(m_data, fast_iter-m_data));
 				m_data = fast_iter;
 				if (LIKELY(ch == '"'))
 				{
@@ -189,14 +189,14 @@ jsonparser::event jsonparser::next()
 					if (m_data+4 > m_data_end) return do_error();
 					
 					uint32_t codepoint;
-					if (!fromstringhex(arrayview<byte>(m_data, 4), codepoint)) return do_error();
+					if (!fromstringhex(arrayview<uint8_t>(m_data, 4), codepoint)) return do_error();
 					m_data += 4;
 					
 					// curse utf16 forever
 					if (codepoint >= 0xD800 && codepoint <= 0xDBFF && m_data[0] == '\\' && m_data[1] == 'u')
 					{
 						uint16_t low_sur;
-						if (!fromstringhex(arrayview<byte>(m_data+2, 4), low_sur)) return do_error();
+						if (!fromstringhex(arrayview<uint8_t>(m_data+2, 4), low_sur)) return do_error();
 						
 						if (low_sur >= 0xDC00 && low_sur <= 0xDFFF)
 						{
@@ -288,7 +288,7 @@ jsonparser::event jsonparser::next()
 		}
 		
 		double d;
-		if (!fromstring(arrayview<byte>(start, m_data-start), d)) return do_error();
+		if (!fromstring(arrayview<uint8_t>(start, m_data-start), d)) return do_error();
 		if (!skipcomma()) return do_error();
 		return { num, d };
 	}
@@ -345,7 +345,7 @@ string jsonwriter::strwrap(cstring s)
 		// DEL is legal according to nst/JSONTestSuite, but let's avoid it anyways
 		if (c < 32 || c == '"' || c == '\\' || c == 0x7F)
 		{
-			out += arrayview<byte>(previt, it-previt);
+			out += arrayview<uint8_t>(previt, it-previt);
 			previt = it+1;
 			
 			if(0);
@@ -359,7 +359,7 @@ string jsonwriter::strwrap(cstring s)
 			else out += "\\u"+tostringhex<4>(c);
 		}
 	}
-	out += arrayview<byte>(previt, spe-previt);
+	out += arrayview<uint8_t>(previt, spe-previt);
 	return out+"\"";
 }
 
@@ -735,8 +735,8 @@ test("JSON parser", "string", "json")
 	testcall(testjson_error("{\"a\":0,}"));
 	testcall(testjson_error("[1,,2]"));
 	testcall(testjson_error("[-.123]"));
-	testcall(testjson_error(arrayview<byte>((uint8_t*)"123\0", 4)));
-	testcall(testjson_error(arrayview<byte>((uint8_t*)"[]\0", 3)));
+	testcall(testjson_error(arrayview<uint8_t>((uint8_t*)"123\0", 4)));
+	testcall(testjson_error(arrayview<uint8_t>((uint8_t*)"[]\0", 3)));
 }
 
 

@@ -10,7 +10,7 @@ inline string tostring(cstring s) { return s; }
 //printf has PRIi32, but the native ones are defined in terms of int/long
 inline string tostring(  signed char val)     { char ret[32]; sprintf(ret, "%d",   val); return ret; } // the C++ standard says
 inline string tostring(unsigned char val)     { char ret[32]; sprintf(ret, "%u",   val); return ret; } // (un)signed char/short are
-//signless char isn't integral, so not here. If anything, it should be returned as character.
+//signless char isn't integral, so not here
 inline string tostring(  signed short val)    { char ret[32]; sprintf(ret, "%d",   val); return ret; } // promoted to (un)signed int
 inline string tostring(unsigned short val)    { char ret[32]; sprintf(ret, "%u",   val); return ret; } // in ellipsis
 inline string tostring(  signed int val)      { char ret[32]; sprintf(ret, "%d",   val); return ret; }
@@ -43,7 +43,7 @@ template<int n> inline string tostringhex(unsigned long val) { char ret[32]; spr
 string tostring(double val);
 string tostring(float val);
 inline string tostring(bool val) { return val ? "true" : "false"; }
-//inline string tostring(char val); // not sure if this one makes sense
+//inline string tostring(char val); // there's no obvious interpretation of this
 
 inline string tostring(const char * s) { return s; } // only exists as tostring, fromstring would be a memory leak
 
@@ -79,9 +79,9 @@ bool fromstringhex(cstring s, unsigned int & out);
 bool fromstringhex(cstring s, unsigned long & out);
 bool fromstringhex(cstring s, unsigned long long & out);
 
-string tostringhex(arrayview<byte> val);
-bool fromstringhex(cstring s, arrayvieww<byte> val);
-bool fromstringhex(cstring s, array<byte>& val);
+string tostringhex(arrayview<uint8_t> val);
+bool fromstringhex(cstring s, arrayvieww<uint8_t> val);
+bool fromstringhex(cstring s, array<uint8_t>& val);
 
 #define ALLSTRINGABLE(x) \
 	ALLNUMS(x) \

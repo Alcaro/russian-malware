@@ -52,7 +52,7 @@ void WebSocket::activity()
 		cancel();
 		return;
 	}
-	msg += arrayview<byte>(bytes, nbyte);
+	msg += arrayview<uint8_t>(bytes, nbyte);
 	
 	while (inHandshake)
 	{
@@ -95,7 +95,7 @@ again:
 	
 	size_t bodysize = msgsize-headsize;
 	
-	arrayvieww<byte> out = msg.slice(headsize, bodysize);
+	arrayvieww<uint8_t> out = msg.slice(headsize, bodysize);
 	
 	if (msg[1] & 0x80) // spec says server isn't allowed to mask, so this shouldn't happen
 	{
@@ -133,7 +133,7 @@ again:
 	goto again;
 }
 
-void WebSocket::send(arrayview<byte> message, int type)
+void WebSocket::send(arrayview<uint8_t> message, int type)
 {
 	if (!sock) return;
 	

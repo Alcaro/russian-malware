@@ -65,7 +65,7 @@ static const uint16_t cp437[256]={
 };
 static string fromcp437(string in)
 {
-	for (byte b : in.bytes())
+	for (uint8_t b : in.bytes())
 	{
 		if (b < 0x20 || b >= 0x7F) goto slow;
 	}
@@ -73,7 +73,7 @@ static string fromcp437(string in)
 	
 slow:
 	string out;
-	for (byte b : in.bytes())
+	for (uint8_t b : in.bytes())
 	{
 		out += string::codepoint(cp437[b]);
 	}
@@ -130,7 +130,7 @@ struct zip::endofcdr {
 	litend<uint16_t> zipcommentlen;
 };
 
-zip::endofcdr* zip::getendofcdr(arrayview<byte> data)
+zip::endofcdr* zip::getendofcdr(arrayview<uint8_t> data)
 {
 	//must be somewhere in zip::, they're private
 	static_assert(sizeof(zip::locfhead)==30);
@@ -153,7 +153,7 @@ zip::endofcdr* zip::getendofcdr(arrayview<byte> data)
 	return NULL;
 }
 
-zip::centdirrec* zip::getcdr(arrayview<byte> data, endofcdr* end)
+zip::centdirrec* zip::getcdr(arrayview<uint8_t> data, endofcdr* end)
 {
 	if (end->cdrstart_fromdisk+sizeof(centdirrec) > data.size()) return NULL;
 	centdirrec* ret = (centdirrec*)data.slice(end->cdrstart_fromdisk, sizeof(centdirrec)).ptr();
@@ -161,7 +161,7 @@ zip::centdirrec* zip::getcdr(arrayview<byte> data, endofcdr* end)
 	return ret;
 }
 
-zip::centdirrec* zip::nextcdr(arrayview<byte> data, centdirrec* cdr)
+zip::centdirrec* zip::nextcdr(arrayview<uint8_t> data, centdirrec* cdr)
 {
 	size_t start = (uint8_t*)cdr - data.ptr();
 	size_t len = sizeof(centdirrec) + cdr->len_fname + cdr->len_exfield + cdr->len_fcomment;
@@ -172,7 +172,7 @@ zip::centdirrec* zip::nextcdr(arrayview<byte> data, centdirrec* cdr)
 	return next;
 }
 
-zip::locfhead* zip::geth(arrayview<byte> data, centdirrec* cdr)
+zip::locfhead* zip::geth(arrayview<uint8_t> data, centdirrec* cdr)
 {
 	if (cdr->header_start+sizeof(locfhead) > data.size()) return NULL;
 	locfhead* ret = (locfhead*)data.slice(cdr->header_start, sizeof(locfhead)).ptr();
@@ -180,7 +180,7 @@ zip::locfhead* zip::geth(arrayview<byte> data, centdirrec* cdr)
 	return ret;
 }
 
-arrayview<byte> zip::fh_fname(arrayview<byte> data, locfhead* fh)
+arrayview<uint8_t> zip::fh_fname(arrayview<uint8_t> data, locfhead* fh)
 {
 	size_t start = (uint8_t*)fh - data.ptr();
 	if (start + sizeof(locfhead) + fh->len_fname > data.size()) return NULL;
@@ -188,7 +188,7 @@ arrayview<byte> zip::fh_fname(arrayview<byte> data, locfhead* fh)
 	return data.slice(start+sizeof(locfhead), fh->len_fname);
 }
 
-arrayview<byte> zip::fh_data(arrayview<byte> data, locfhead* fh, centdirrec* cdr)
+arrayview<uint8_t> zip::fh_data(arrayview<uint8_t> data, locfhead* fh, centdirrec* cdr)
 {
 	size_t start = (uint8_t*)fh - data.ptr();
 	size_t headlen = sizeof(locfhead) + fh->len_fname + fh->len_exfield;
@@ -197,7 +197,7 @@ arrayview<byte> zip::fh_data(arrayview<byte> data, locfhead* fh, centdirrec* cdr
 	return data.slice(start+headlen, cdr->size_comp);
 }
 
-bool zip::init(arrayview<byte> data)
+bool zip::init(arrayview<uint8_t> data)
 {
 	corrupt = false;
 	
@@ -236,7 +236,7 @@ size_t zip::find_file(cstring name) const
 	return (size_t)-1;
 }
 
-bool zip::read_idx(size_t id, array<byte>& out, bool permissive, string* error, time_t * time) const
+bool zip::read_idx(size_t id, array<uint8_t>& out, bool permissive, string* error, time_t * time) const
 {
 	{
 		string discard;
@@ -280,7 +280,7 @@ fail:
 	return false;
 }
 
-void zip::replace_idx(size_t id, arrayview<byte> data, time_t date)
+void zip::replace_idx(size_t id, arrayview<uint8_t> data, time_t date)
 {
 	if (!data)
 	{
@@ -294,7 +294,7 @@ void zip::replace_idx(size_t id, arrayview<byte> data, time_t date)
 	f.crc32 = crc32(data);
 	if (date) f.dosdate = todosdate(date); // else leave unchanged, or leave as 0
 	
-	array<byte> comp;
+	array<uint8_t> comp;
 	comp.resize(data.size());
 	size_t complen = tdefl_compress_mem_to_mem(comp.ptr(), comp.size(), data.ptr(), data.size(), TDEFL_DEFAULT_MAX_PROBES);
 	if (complen != 0 && complen < data.size())
@@ -310,7 +310,7 @@ void zip::replace_idx(size_t id, arrayview<byte> data, time_t date)
 	}
 }
 
-void zip::write(cstring name, arrayview<byte> data, time_t date)
+void zip::write(cstring name, arrayview<uint8_t> data, time_t date)
 {
 	size_t id = find_file(name);
 	
@@ -362,11 +362,11 @@ void zip::repack()
 {
 	for (size_t i=0;i<filedat.size();i++)
 	{
-		array<byte> data = read_idx(i);
+		array<uint8_t> data = read_idx(i);
 		if (!data) continue;
 		
 		file& f = filedat[i];
-		array<byte> comp;
+		array<uint8_t> comp;
 		comp.resize(data.size());
 		size_t complen = tdefl_compress_mem_to_mem(comp.ptr(), comp.size(), data.ptr(), data.size(), TDEFL_DEFAULT_MAX_PROBES);
 		if (complen != 0 && complen < f.data.size())
@@ -392,9 +392,9 @@ void zip::sort()
 	}
 }
 
-array<byte> zip::pack() const
+array<uint8_t> zip::pack() const
 {
-	array<byte> ret;
+	array<uint8_t> ret;
 	
 	array<size_t> headerstarts;
 	for (size_t i=0;i<filenames.size();i++)
@@ -415,7 +415,7 @@ array<byte> zip::pack() const
 			/*len_fname*/   filenames[i].length(),
 			/*len_exfield*/ 0,
 		};
-		arrayview<byte> hb((uint8_t*)&h, sizeof(h));
+		arrayview<uint8_t> hb((uint8_t*)&h, sizeof(h));
 		ret += hb;
 		ret += filenames[i].bytes();
 		ret += f.data;
@@ -444,7 +444,7 @@ array<byte> zip::pack() const
 			/*attr_ext*/     0, // APPNOTE.TXT doesn't document this, other packers I checked are huge mazes. just gonna ignore it
 			/*header_start*/ headerstarts[i],
 		};
-		arrayview<byte> cdrb((uint8_t*)&cdr, sizeof(cdr));
+		arrayview<uint8_t> cdrb((uint8_t*)&cdr, sizeof(cdr));
 		ret += cdrb;
 		ret += filenames[i].bytes();
 	}
@@ -460,7 +460,7 @@ array<byte> zip::pack() const
 		/*cdrstart_fromdisk*/ cdrstart,
 		/*zipcommentlen*/     0,
 	};
-	arrayview<byte> eodb((uint8_t*)&eod, sizeof(eod));
+	arrayview<uint8_t> eodb((uint8_t*)&eod, sizeof(eod));
 	ret += eodb;
 	
 	return ret;
@@ -532,7 +532,7 @@ test("DOS timestamp conversion", "", "zip")
 test("ZIP reading", "file", "zip")
 {
 	zip z;
-	assert(z.init(arrayview<byte>(zipbytes, sizeof(zipbytes))));
+	assert(z.init(arrayview<uint8_t>(zipbytes, sizeof(zipbytes))));
 	
 	arrayview<string> files = z.files();
 	assert_eq(files.size(), 3);
@@ -557,13 +557,13 @@ test("ZIP reading", "file", "zip")
 	assert_eq(string(z2.read("hello.txt")), "hello world");
 }
 
-static arrayview<byte> sb(const char * str) { return arrayview<byte>((uint8_t*)str, strlen(str)); }
+static arrayview<uint8_t> sb(const char * str) { return arrayview<uint8_t>((uint8_t*)str, strlen(str)); }
 test("ZIP writing", "file", "zip")
 {
 	zip z;
-	assert(z.init(arrayview<byte>(zipbytes, sizeof(zipbytes))));
+	assert(z.init(arrayview<uint8_t>(zipbytes, sizeof(zipbytes))));
 	
-	array<byte> zb = z.pack();
+	array<uint8_t> zb = z.pack();
 	assert_eq(zb.size(), sizeof(zipbytes));
 	
 	//puts("");
@@ -602,15 +602,15 @@ test("ZIP writing", "file", "zip")
 	assert_eq(t, 1000000000);
 	
 	zip z3; // no initing
-	array<byte> nuls;
+	array<uint8_t> nuls;
 	nuls.resize(65536);
 	z3.write("nul.bin", nuls);
 	
-	array<byte> nulsc = z3.pack();
+	array<uint8_t> nulsc = z3.pack();
 	assert_lt(nulsc.size(), 1024);
 	zip z4;
 	assert(z4.init(nulsc));
-	array<byte> nulsdc = z4.read("nul.bin");
+	array<uint8_t> nulsdc = z4.read("nul.bin");
 	assert(nulsdc == nuls);
 }
 #endif

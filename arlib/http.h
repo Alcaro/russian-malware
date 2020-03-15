@@ -23,7 +23,7 @@ public:
 		//Content-Type: application/json if body starts with [ or {, and method is POST
 		//           or application/x-www-form-urlencoded, if method is POST and body is something else
 		array<string> headers; // TODO: multimap
-		array<byte> body;
+		array<uint8_t> body;
 		
 		enum {
 			f_no_retry = 0x00000001,
@@ -60,14 +60,14 @@ public:
 		//string status_str; // useless
 		
 		array<string> headers; // TODO: switch to multimap once it exists
-		array<byte> body;
+		array<uint8_t> body;
 		
 		
 		bool success() const
 		{
 			return (status >= 200 && status <= 299);
 		}
-		operator arrayvieww<byte>() const
+		operator arrayvieww<uint8_t>() const
 		{
 			if (success()) return body;
 			else return NULL;
@@ -189,7 +189,7 @@ public:
 	// TODO: automatically switch to application/x-www-form-urlencoded if appropriate
 	class form {
 		string boundary;
-		array<byte> result;
+		array<uint8_t> result;
 		
 	public:
 		form()
@@ -206,7 +206,7 @@ public:
 			           value+"\r\n").bytes();
 		}
 		
-		void file(cstring key, cstring filename, arrayview<byte> content)
+		void file(cstring key, cstring filename, arrayview<uint8_t> content)
 		{
 			result += (boundary+"\r\n"
 			           "Content-Disposition: file; name=\""+key+"\"; filename=\""+filename.replace("\"","\\\"")+"\"\r\n\r\n").bytes();
@@ -216,7 +216,7 @@ public:
 		void file(cstring key, cstring filename, cstring content) { file(key, filename, content.bytes()); }
 		
 		//Can only be called once.
-		array<byte> pack()
+		array<uint8_t> pack()
 		{
 			result += (boundary+"--").bytes();
 			return std::move(result);

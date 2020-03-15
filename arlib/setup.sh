@@ -9,6 +9,7 @@ program=$1
 mkdir obj
 
 cat > arlib.h <<EOF
+#pragma once
 #if defined(ARLIB_OPENGL) && defined(ARLIB_OPT)
 #define AROPENGL_SLIM
 #endif

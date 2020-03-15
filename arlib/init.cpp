@@ -59,7 +59,7 @@ void argparse::single_arg(cstring name, const char * value, arglevel_t arglevel,
 		}
 	}
 	if (name != "") error("unknown argument: --"+name);
-	else error("non-arguments not supported");
+	else error("positional arguments not supported");
 }
 void argparse::single_arg(char sname, const char * value, arglevel_t arglevel, bool* used_value)
 {
@@ -178,7 +178,7 @@ void argparse::parse_post()
 	}
 }
 
-void arlib_init(argparse& args, char** argv)
+static void arlib_init_shared()
 {
 #if defined(__unix__) && !defined(ARLIB_OPT)
 	rlimit lim;
@@ -186,8 +186,13 @@ void arlib_init(argparse& args, char** argv)
 	lim.rlim_max = RLIM_INFINITY;
 	setrlimit(RLIMIT_CORE, &lim);
 #endif
-	
 	srand(time(NULL));
+}
+
+void arlib_init(argparse& args, char** argv)
+{
+	arlib_init_shared();
+	
 #ifndef ARGUI_NONE
 	_arlib_init_gui(args, argv);
 #else
@@ -197,8 +202,17 @@ void arlib_init(argparse& args, char** argv)
 
 void arlib_init(nullptr_t, char** argv)
 {
-	argparse dummy;
-	arlib_init(dummy, argv);
+	arlib_init_shared();
+	
+#ifndef ARGUI_NONE
+	_arlib_init_gui(argv);
+#else
+	if (argv[1])
+	{
+		fprintf(stderr, "%s: this program does not take any arguments\n", argv[0]);
+		exit(1);
+	}
+#endif
 }
 
 

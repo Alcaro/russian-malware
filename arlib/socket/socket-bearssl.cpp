@@ -63,21 +63,21 @@ ondeinit()
 
 static void bytes_append(void* dest_ctx, const void * src, size_t len)
 {
-	(*(array<byte>*)dest_ctx) += arrayview<byte>((byte*)src, len);
+	(*(array<uint8_t>*)dest_ctx) += arrayview<uint8_t>((byte*)src, len);
 }
-static byte* blobdup(arrayview<byte> blob)
+static byte* blobdup(arrayview<uint8_t> blob)
 {
 	byte* newblob = malloc(blob.size()); // intentional leak; doesn't matter, initialize() only runs once
 	memcpy(newblob, blob.ptr(), blob.size());
 	return newblob;
 }
-static bool append_cert_x509(arrayview<byte> xc)
+static bool append_cert_x509(arrayview<uint8_t> xc)
 {
 	br_x509_trust_anchor& ta = certs.append();
 	
 	br_x509_decoder_context dc;
 	
-	array<byte> vdn;
+	array<uint8_t> vdn;
 	br_x509_decoder_init(&dc, bytes_append, &vdn);
 	br_x509_decoder_push(&dc, xc.ptr(), xc.size());
 	br_x509_pkey* pk = br_x509_decoder_get_pkey(&dc);
@@ -92,15 +92,15 @@ static bool append_cert_x509(arrayview<byte> xc)
 	case BR_KEYTYPE_RSA:
 		ta.pkey.key_type = BR_KEYTYPE_RSA;
 		ta.pkey.key.rsa.nlen = pk->key.rsa.nlen;
-		ta.pkey.key.rsa.n = blobdup(arrayview<byte>(pk->key.rsa.n, pk->key.rsa.nlen));
+		ta.pkey.key.rsa.n = blobdup(arrayview<uint8_t>(pk->key.rsa.n, pk->key.rsa.nlen));
 		ta.pkey.key.rsa.elen = pk->key.rsa.elen;
-		ta.pkey.key.rsa.e = blobdup(arrayview<byte>(pk->key.rsa.e, pk->key.rsa.elen));
+		ta.pkey.key.rsa.e = blobdup(arrayview<uint8_t>(pk->key.rsa.e, pk->key.rsa.elen));
 		break;
 	case BR_KEYTYPE_EC:
 		ta.pkey.key_type = BR_KEYTYPE_EC;
 		ta.pkey.key.ec.curve = pk->key.ec.curve;
 		ta.pkey.key.ec.qlen = pk->key.ec.qlen;
-		ta.pkey.key.ec.q = blobdup(arrayview<byte>(pk->key.ec.q, pk->key.ec.qlen));
+		ta.pkey.key.ec.q = blobdup(arrayview<uint8_t>(pk->key.ec.q, pk->key.ec.qlen));
 		break;
 	default:
 		return false;
@@ -109,10 +109,10 @@ static bool append_cert_x509(arrayview<byte> xc)
 }
 
 //unused on Windows, its cert store gives me x509s directly
-MAYBE_UNUSED static void append_certs_pem_x509(array<byte> certs_pem)
+MAYBE_UNUSED static void append_certs_pem_x509(array<uint8_t> certs_pem)
 {
 	array<cstring> certs = cstring(certs_pem).csplit("-----BEGIN CERTIFICATE-----");
-	array<byte> buf;
+	array<uint8_t> buf;
 	for (cstring cert : certs)
 	{
 		size_t certend = cert.indexof("-----END CERTIFICATE-----");
@@ -126,11 +126,11 @@ MAYBE_UNUSED static void append_certs_pem_x509(array<byte> certs_pem)
 }
 
 //old version, ~9x slower (9ms->82ms) due to running the base64 decoder as a state machine
-//MAYBE_UNUSED static void append_certs_pem_x509(arrayview<byte> certs_pem)
+//MAYBE_UNUSED static void append_certs_pem_x509(arrayview<uint8_t> certs_pem)
 //{
 //	br_pem_decoder_context pc;
 //	br_pem_decoder_init(&pc);
-//	array<byte> cert_this;
+//	array<uint8_t> cert_this;
 //	
 //	while (certs_pem)
 //	{
@@ -176,7 +176,7 @@ RUN_ONCE_FN(initialize)
 	const CERT_CONTEXT * ctx = NULL;
 	while ((ctx = CertEnumCertificatesInStore(store, ctx)))
 	{
-		append_cert_x509(arrayview<byte>(ctx->pbCertEncoded, ctx->cbCertEncoded));
+		append_cert_x509(arrayview<uint8_t>(ctx->pbCertEncoded, ctx->cbCertEncoded));
 	}
 	CertFreeCertificateContext(ctx);
 	CertCloseStore(store, 0);
@@ -286,7 +286,7 @@ public:
 		byte* buf = br_ssl_engine_sendrec_buf(&s.sc.eng, &buflen);
 		if (buflen)
 		{
-			int bytes = sock->send(arrayview<byte>(buf, buflen));
+			int bytes = sock->send(arrayview<uint8_t>(buf, buflen));
 			if (bytes < 0) sock = NULL;
 			if (bytes > 0) br_ssl_engine_sendrec_ack(&s.sc.eng, bytes);
 			
@@ -302,7 +302,7 @@ public:
 		byte* buf = br_ssl_engine_recvrec_buf(&s.sc.eng, &buflen);
 		if (buflen)
 		{
-			int bytes = sock->recv(arrayvieww<byte>(buf, buflen));
+			int bytes = sock->recv(arrayvieww<uint8_t>(buf, buflen));
 			if (bytes < 0) sock = NULL;
 			if (bytes > 0) br_ssl_engine_recvrec_ack(&s.sc.eng, bytes);
 			
@@ -310,7 +310,7 @@ public:
 		}
 	}
 	
-	int recv(arrayvieww<byte> data)
+	int recv(arrayvieww<uint8_t> data)
 	{
 		if (!sock) { errored=true; return -1; }
 		
@@ -326,7 +326,7 @@ public:
 		return buflen;
 	}
 	
-	int send(arrayview<byte> data)
+	int send(arrayview<uint8_t> data)
 	{
 		if (!sock) { errored=true; return -1; }
 		
@@ -390,9 +390,9 @@ public:
 	//	byte iobuf[BR_SSL_BUFSIZE_BIDI];
 	//};
 	//
-	//array<byte> serialize(int* fd)
+	//array<uint8_t> serialize(int* fd)
 	//{
-	//	array<byte> bytes;
+	//	array<uint8_t> bytes;
 	//	bytes.resize(sizeof(state_fr));
 	//	state_fr& out = *(state_fr*)bytes.ptr();
 	//	
@@ -407,7 +407,7 @@ public:
 	//}
 	//
 	////deserializing constructor
-	//socketssl_impl(int fd, arrayview<byte> data) : socket(fd)
+	//socketssl_impl(int fd, arrayview<uint8_t> data) : socket(fd)
 	//{
 	//	this->sock = socket::create_from_fd(fd);
 	//	const state_fr& in = *(state_fr*)data.ptr();
@@ -441,11 +441,11 @@ socket* socket::wrap_ssl_raw(socket* inner, cstring domain, runloop* loop)
 	return new socketssl_impl(inner, domain, loop, false);
 }
 
-//array<byte> socketssl::serialize(int* fd)
+//array<uint8_t> socketssl::serialize(int* fd)
 //{
 //	return ((socketssl_impl*)this)->serialize(fd);
 //}
-//socketssl* socketssl::deserialize(int fd, arrayview<byte> data)
+//socketssl* socketssl::deserialize(int fd, arrayview<uint8_t> data)
 //{
 //	if (sizeof(socketssl_impl::state_fr) != data.size()) return NULL;
 //	initialize();

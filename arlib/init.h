@@ -3,6 +3,8 @@
 #include "stringconv.h"
 #include "file.h"
 
+// TODO: huge parts of this thing can't x
+
 class argparse {
 	class arg_base {
 		friend class argparse;
@@ -259,4 +261,5 @@ void arlib_init(nullptr_t, char** argv);
 
 
 //Called by arlib_init(). Don't use it yourself.
+void _arlib_init_gui(char** argv); // If the program takes no arguments.
 void _arlib_init_gui(argparse& args, char** argv);

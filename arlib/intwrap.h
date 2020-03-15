@@ -12,7 +12,7 @@ public:
 	T operator--(int) { T r = get(); set(r-1); return r; }
 	intwrap<U,T>& operator++() { set(get()+1); return *this; }
 	intwrap<U,T>& operator--() { set(get()-1); return *this; }
-	intwrap<U,T>& operator  =(const T i) { set(        i); return *this; }
+	//intwrap<U,T>& operator  =(const T i) { set(        i); return *this; } // can't really implement this in terms of itself
 	intwrap<U,T>& operator +=(const T i) { set(get() + i); return *this; }
 	intwrap<U,T>& operator -=(const T i) { set(get() - i); return *this; }
 	intwrap<U,T>& operator *=(const T i) { set(get() * i); return *this; }

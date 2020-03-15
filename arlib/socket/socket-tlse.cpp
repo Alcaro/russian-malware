@@ -26,7 +26,7 @@ RUN_ONCE_FN(initialize)
 	rootcerts = tls_create_context(false, TLS_V12);
 	
 #ifdef __unix__
-	array<byte> certs = file::read("/etc/ssl/certs/ca-certificates.crt");
+	array<uint8_t> certs = file::read("/etc/ssl/certs/ca-certificates.crt");
 	tls_load_root_certificates(rootcerts, certs.ptr(), certs.size());
 #else
 #error unsupported
@@ -76,12 +76,12 @@ public:
 		const uint8_t * out = tls_get_write_buffer(ssl, &outlen);
 		if (out && outlen)
 		{
-			if (sock->send(arrayview<byte>(out, outlen)) < 0) { error(); return; }
+			if (sock->send(arrayview<uint8_t>(out, outlen)) < 0) { error(); return; }
 			tls_buffer_clear(ssl);
 		}
 		
 		uint8_t in[0x2000];
-		int inlen = sock->recv(arrayvieww<byte>(in, sizeof(in)), block);
+		int inlen = sock->recv(arrayvieww<uint8_t>(in, sizeof(in)), block);
 		if (inlen<0) { error(); return; }
 		if (inlen>0) tls_consume_stream(ssl, in, inlen, (permissive ? NULL : verify));
 	}
@@ -120,7 +120,7 @@ public:
 		return ret;
 	}
 	
-	int recv(arrayvieww<byte> data, bool block = false)
+	int recv(arrayvieww<uint8_t> data, bool block = false)
 	{
 	again:
 		process(block);
@@ -132,7 +132,7 @@ public:
 		return ret;
 	}
 	
-	int sendp(arrayview<byte> data, bool block = true)
+	int sendp(arrayview<uint8_t> data, bool block = true)
 	{
 	again:
 		if (!sock) return -1;
@@ -161,9 +161,9 @@ public:
 	}
 	
 	
-	array<byte> serialize(int* fd)
+	array<uint8_t> serialize(int* fd)
 	{
-		array<byte> bytes;
+		array<uint8_t> bytes;
 		int len = tls_export_context(ssl, NULL, 0, false);
 		if (len <= 0) return NULL;
 		bytes.resize(len);
@@ -180,7 +180,7 @@ public:
 	}
 	
 	//deserializing constructor
-	socketssl_impl(int fd, arrayview<byte> data) : socketssl(fd)
+	socketssl_impl(int fd, arrayview<uint8_t> data) : socketssl(fd)
 	{
 		this->sock = socket::create_from_fd(fd);
 		this->ssl = tls_import_context((byte*)data.ptr(), data.size());
@@ -193,11 +193,11 @@ socketssl* socketssl::create(socket* parent, cstring domain, bool permissive)
 	return socketssl_impl::create(parent, domain, permissive);
 }
 
-array<byte> socketssl::serialize(int* fd)
+array<uint8_t> socketssl::serialize(int* fd)
 {
 	return ((socketssl_impl*)this)->serialize(fd);
 }
-socketssl* socketssl::deserialize(int fd, arrayview<byte> data)
+socketssl* socketssl::deserialize(int fd, arrayview<uint8_t> data)
 {
 	initialize();
 	return new socketssl_impl(fd, data);

@@ -15,11 +15,11 @@
 // read all and flock()
 //
 // read all should, as now, be a single function, but implemented in the backend
-//  since typical usecase is passing return value to e.g. JSON::parse, it should return normal array<byte> or string
+//  since typical usecase is passing return value to e.g. JSON::parse, it should return normal array<uint8_t> or string
 // replace should also be a backend function, but it should be atomic, initially writing to filename+".aswptmp" (remember to fsync)
 //  ideally, it'd be open(O_TMPFILE)+linkat(O_REPLACE), but kernel doesn't allow that
 // mmap shouldn't be in the file object either, but take a filename and return an arrayview(w)<byte> child with a dtor
-// read-and-lock should also be a function, also returning an arrayview<byte> child with a dtor
+// read-and-lock should also be a function, also returning an arrayview<uint8_t> child with a dtor
 //  this one should also have a 'replace contents' member, still atomic (flock the new one before renaming)
 // async can be ignored for now; it's rarely useful, async local file needs threads on linux, and async gvfs requires glib runloop
 // the other four combinations belong in the file object; replace/append streaming is useful for logs
@@ -28,10 +28,10 @@
 class file2 : nocopy {
 	file2() = delete;
 public:
-	//arrayview<byte> readall()
+	//arrayview<uint8_t> readall()
 	//cstring readallt()
 	
-	class mmap_t : public arrayview<byte>, nocopy {
+	class mmap_t : public arrayview<uint8_t>, nocopy {
 		friend class file2;
 		mmap_t(nullptr_t) {}
 		mmap_t(const uint8_t * ptr, size_t count) : arrayview(ptr, count) {}
@@ -52,30 +52,30 @@ public:
 		virtual size_t size() = 0;
 		virtual bool resize(size_t newsize) = 0;
 		
-		virtual size_t pread(arrayvieww<byte> target, size_t start) = 0;
-		virtual bool pwrite(arrayview<byte> data, size_t start = 0) = 0;
-		virtual bool replace(arrayview<byte> data) { return resize(data.size()) && (data.size() == 0 || pwrite(data)); }
+		virtual size_t pread(arrayvieww<uint8_t> target, size_t start) = 0;
+		virtual bool pwrite(arrayview<uint8_t> data, size_t start = 0) = 0;
+		virtual bool replace(arrayview<uint8_t> data) { return resize(data.size()) && (data.size() == 0 || pwrite(data)); }
 		
-		virtual array<byte> readall()
+		virtual array<uint8_t> readall()
 		{
-			array<byte> ret;
+			array<uint8_t> ret;
 			ret.reserve_noinit(this->size());
 			size_t actual = this->pread(ret, 0);
 			ret.resize(actual);
 			return ret;
 		}
 		
-		virtual arrayview<byte> mmap(size_t start, size_t len) = 0;
-		virtual void unmap(arrayview<byte> data) = 0;
-		virtual arrayvieww<byte> mmapw(size_t start, size_t len) = 0;
-		virtual bool unmapw(arrayvieww<byte> data) = 0;
+		virtual arrayview<uint8_t> mmap(size_t start, size_t len) = 0;
+		virtual void unmap(arrayview<uint8_t> data) = 0;
+		virtual arrayvieww<uint8_t> mmapw(size_t start, size_t len) = 0;
+		virtual bool unmapw(arrayvieww<uint8_t> data) = 0;
 		
 		virtual ~impl() {}
 		
-		arrayview<byte> default_mmap(size_t start, size_t len);
-		void default_unmap(arrayview<byte> data);
-		arrayvieww<byte> default_mmapw(size_t start, size_t len);
-		bool default_unmapw(arrayvieww<byte> data);
+		arrayview<uint8_t> default_mmap(size_t start, size_t len);
+		void default_unmap(arrayview<uint8_t> data);
+		arrayvieww<uint8_t> default_mmapw(size_t start, size_t len);
+		bool default_unmapw(arrayvieww<uint8_t> data);
 	};
 	
 	class implrd : public impl {
@@ -83,14 +83,14 @@ public:
 		virtual size_t size() = 0;
 		bool resize(size_t newsize) { return false; }
 		
-		virtual size_t pread(arrayvieww<byte> target, size_t start) = 0;
-		bool pwrite(arrayview<byte> data, size_t start = 0) { return false; }
-		bool replace(arrayview<byte> data) { return false; }
+		virtual size_t pread(arrayvieww<uint8_t> target, size_t start) = 0;
+		bool pwrite(arrayview<uint8_t> data, size_t start = 0) { return false; }
+		bool replace(arrayview<uint8_t> data) { return false; }
 		
-		virtual arrayview<byte> mmap(size_t start, size_t len) = 0;
-		virtual void unmap(arrayview<byte> data) = 0;
-		arrayvieww<byte> mmapw(size_t start, size_t len) { return NULL; }
-		bool unmapw(arrayvieww<byte> data) { return false; }
+		virtual arrayview<uint8_t> mmap(size_t start, size_t len) = 0;
+		virtual void unmap(arrayview<uint8_t> data) = 0;
+		arrayvieww<uint8_t> mmapw(size_t start, size_t len) { return NULL; }
+		bool unmapw(arrayvieww<uint8_t> data) { return false; }
 	};
 private:
 	impl* core;
@@ -138,9 +138,10 @@ public:
 	
 	//Reading outside the file will return partial results.
 	size_t size() const { return core->size(); }
-	size_t pread(arrayvieww<byte> target, size_t start) const { return core->pread(target, start); }
-	array<byte> readall() const { return core->readall(); }
-	static array<byte> readall(cstring path)
+	size_t pread(arrayvieww<uint8_t> target, size_t start) const { return core->pread(target, start); }
+	size_t pread(array<uint8_t>& target, size_t start, size_t len) const { target.resize(len); return core->pread(target, start); }
+	array<uint8_t> readall() const { return core->readall(); }
+	static array<uint8_t> readall(cstring path)
 	{
 		file f(path);
 		if (f) return f.readall();
@@ -151,32 +152,32 @@ public:
 	
 	bool resize(size_t newsize) { return core->resize(newsize); }
 	//Writes outside the file will extend it with NULs.
-	bool pwrite(arrayview<byte> data, size_t pos = 0) { return core->pwrite(data, pos); }
+	bool pwrite(arrayview<uint8_t> data, size_t pos = 0) { return core->pwrite(data, pos); }
 	//File pointer is undefined after calling this.
-	bool replace(arrayview<byte> data) { return core->replace(data); }
+	bool replace(arrayview<uint8_t> data) { return core->replace(data); }
 	bool replace(cstring data) { return replace(data.bytes()); }
 	bool pwrite(cstring data, size_t pos = 0) { return pwrite(data.bytes(), pos); }
-	static bool writeall(cstring path, arrayview<byte> data)
+	static bool writeall(cstring path, arrayview<uint8_t> data)
 	{
 		file f(path, m_replace);
 		return f && f.pwrite(data);
 	}
 	static bool writeall(cstring path, cstring data) { return writeall(path, data.bytes()); }
-	static bool replace_atomic(cstring path, arrayview<byte> data);
+	static bool replace_atomic(cstring path, arrayview<uint8_t> data);
 	static bool replace_atomic(cstring path, cstring data) { return replace_atomic(path, data.bytes()); }
 	
 	//Seeking outside the file is fine. This will return short reads, or extend the file on write.
 	bool seek(size_t pos) { this->pos = pos; return true; }
 	size_t tell() { return pos; }
-	size_t read(arrayvieww<byte> data)
+	size_t read(arrayvieww<uint8_t> data)
 	{
 		size_t ret = core->pread(data, pos);
 		pos += ret;
 		return ret;
 	}
-	array<byte> read(size_t len)
+	array<uint8_t> read(size_t len)
 	{
-		array<byte> ret;
+		array<uint8_t> ret;
 		ret.resize(len);
 		size_t newlen = core->pread(ret, pos);
 		pos += newlen;
@@ -186,14 +187,14 @@ public:
 	string readt(size_t len)
 	{
 		string ret;
-		arrayvieww<byte> bytes = ret.construct(len);
+		arrayvieww<uint8_t> bytes = ret.construct(len);
 		size_t newlen = core->pread(bytes, pos);
 		pos += newlen;
 		
 		if (newlen == bytes.size()) return ret;
 		else return ret.substr(0, newlen);
 	}
-	bool write(arrayview<byte> data)
+	bool write(arrayview<uint8_t> data)
 	{
 		bool ok = core->pwrite(data, pos);
 		if (ok) pos += data.size();
@@ -205,38 +206,38 @@ public:
 	//If the underlying file is changed while a written mapping exists, it's undefined which (if any) writes take effect.
 	//Resizing the file while a mapping exists is undefined behavior, including if the mapping is still in bounds (memimpl doesn't like that).
 	//Mappings must be deleted before deleting the file object.
-	arrayview<byte> mmap(size_t start, size_t len) const { return core->mmap(start, len); }
-	arrayview<byte> mmap() const { return this->mmap(0, this->size()); }
-	void unmap(arrayview<byte> data) const { return core->unmap(data); }
+	arrayview<uint8_t> mmap(size_t start, size_t len) const { return core->mmap(start, len); }
+	arrayview<uint8_t> mmap() const { return this->mmap(0, this->size()); }
+	void unmap(arrayview<uint8_t> data) const { return core->unmap(data); }
 	
-	arrayvieww<byte> mmapw(size_t start, size_t len) { return core->mmapw(start, len); }
-	arrayvieww<byte> mmapw() { return this->mmapw(0, this->size()); }
+	arrayvieww<uint8_t> mmapw(size_t start, size_t len) { return core->mmapw(start, len); }
+	arrayvieww<uint8_t> mmapw() { return this->mmapw(0, this->size()); }
 	//If this succeeds, data written to the file is guaranteed to be written, assuming no other writes were made in the region.
 	//If not, file contents are undefined in that range.
 	//TODO: remove return value, replace with ->sync()
 	//if failure is detected, set a flag to fail sync()
 	//actually, make all failures trip sync(), both read/write/unmapw
-	bool unmapw(arrayvieww<byte> data) { return core->unmapw(data); }
+	bool unmapw(arrayvieww<uint8_t> data) { return core->unmapw(data); }
 	
 	~file() { delete core; }
 	
-	static file mem(arrayview<byte> data)
+	static file mem(arrayview<uint8_t> data)
 	{
 		return file(new file::memimpl(data));
 	}
 	//the array may not be modified while the file object exists, other than via the file object itself
-	static file mem(array<byte>& data)
+	static file mem(array<uint8_t>& data)
 	{
 		return file(new file::memimpl(&data));
 	}
 private:
 	class memimpl : public file::impl {
 	public:
-		arrayview<byte> datard;
-		array<byte>* datawr; // even if writable, this object does not own the array
+		arrayview<uint8_t> datard;
+		array<uint8_t>* datawr; // even if writable, this object does not own the array
 		
-		memimpl(arrayview<byte> data) : datard(data), datawr(NULL) {}
-		memimpl(array<byte>* data) : datard(*data), datawr(data) {}
+		memimpl(arrayview<uint8_t> data) : datard(data), datawr(NULL) {}
+		memimpl(array<uint8_t>* data) : datard(*data), datawr(data) {}
 		
 		size_t size() { return datard.size(); }
 		bool resize(size_t newsize)
@@ -247,13 +248,13 @@ private:
 			return true;
 		}
 		
-		size_t pread(arrayvieww<byte> target, size_t start)
+		size_t pread(arrayvieww<uint8_t> target, size_t start)
 		{
 			size_t nbyte = min(target.size(), datard.size()-start);
 			memcpy(target.ptr(), datard.slice(start, nbyte).ptr(), nbyte);
 			return nbyte;
 		}
-		bool pwrite(arrayview<byte> newdata, size_t start = 0)
+		bool pwrite(arrayview<uint8_t> newdata, size_t start = 0)
 		{
 			if (!datawr) return false;
 			size_t nbyte = newdata.size();
@@ -262,7 +263,7 @@ private:
 			datard = *datawr;
 			return true;
 		}
-		bool replace(arrayview<byte> newdata)
+		bool replace(arrayview<uint8_t> newdata)
 		{
 			if (!datawr) return false;
 			*datawr = newdata;
@@ -270,10 +271,10 @@ private:
 			return true;
 		}
 		
-		arrayview<byte>   mmap(size_t start, size_t len) { return datard.slice(start, len); }
-		arrayvieww<byte> mmapw(size_t start, size_t len) { if (!datawr) return NULL; return datawr->slice(start, len); }
-		void  unmap(arrayview<byte>  data) {}
-		bool unmapw(arrayvieww<byte> data) { return true; }
+		arrayview<uint8_t>   mmap(size_t start, size_t len) { return datard.slice(start, len); }
+		arrayvieww<uint8_t> mmapw(size_t start, size_t len) { if (!datawr) return NULL; return datawr->slice(start, len); }
+		void  unmap(arrayview<uint8_t>  data) {}
+		bool unmapw(arrayvieww<uint8_t> data) { return true; }
 	};
 public:
 	
@@ -330,25 +331,27 @@ public:
 	static cstring exepath();
 	//Returns the current working directory.
 	static cstring cwd();
+	
+	static string realpath(cstring path) { return resolve(cwd(), path); }
 private:
 	static bool mkdir_fs(cstring filename);
 	static bool unlink_fs(cstring filename);
 };
 
 
-class autommap : public arrayview<byte> {
+class autommap : public arrayview<uint8_t> {
 	const file& f;
 public:
-	autommap(const file& f, arrayview<byte> b) : arrayview(b), f(f) {}
+	autommap(const file& f, arrayview<uint8_t> b) : arrayview(b), f(f) {}
 	autommap(const file& f, size_t start, size_t end) : arrayview(f.mmap(start, end)), f(f) {}
 	autommap(const file& f) : arrayview(f.mmap()), f(f) {}
 	~autommap() { f.unmap(*this); }
 };
 
-class autommapw : public arrayvieww<byte> {
+class autommapw : public arrayvieww<uint8_t> {
 	file& f;
 public:
-	autommapw(file& f, arrayvieww<byte> b) : arrayvieww(b), f(f) {}
+	autommapw(file& f, arrayvieww<uint8_t> b) : arrayvieww(b), f(f) {}
 	autommapw(file& f, size_t start, size_t end) : arrayvieww(f.mmapw(start, end)), f(f) {}
 	autommapw(file& f) : arrayvieww(f.mmapw()), f(f) {}
 	~autommapw() { f.unmapw(*this); }

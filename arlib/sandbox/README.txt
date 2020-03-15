@@ -275,7 +275,7 @@ The locker's job is long, but fairly straightforward. After broker's fork() retu
         defense in depth.
     NEWCGROUP, to limit various resources
     NEWIPC, NEWNS and NEWUTC are mostly paranoia. I doubt they make any difference, but why not?
-    (this is actually part of the fork(), and the fork is actually clone(), because unshare(CLONE_NEWPID) is screwy)
+    (this is actually part of the fork(), and the fork is actually clone(), because unshare(CLONE_NEWPID) is weird)
 - dup2 the broker socket to fd 3
     it was created before clone()
     it's half of socketpair(AF_UNIX, SOCK_SEQPACKET, 0), used for passing additional file descriptors around

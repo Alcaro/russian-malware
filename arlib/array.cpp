@@ -143,7 +143,7 @@ test("array", "", "array")
 	{
 		//passes if it does not leak memory
 		class glutton {
-			array<byte> food;
+			array<uint8_t> food;
 		public:
 			glutton() { food.resize(1000); }
 		};

@@ -146,6 +146,7 @@ void WuTF_redirect_function(WuTF_funcptr victim, WuTF_funcptr replacement)
 
 void WuTF_enable()
 {
+	if (GetACP() == CP_UTF8) return;
 	//it's safe to call this multiple times, that just replaces some bytes with their current values
 	//if wutf becomes more complex, add a static bool initialized
 #define STRINGIFY_(x) #x

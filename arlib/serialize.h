@@ -29,10 +29,10 @@
 //	//Similar to item(), but uses hex rather than decimal, if applicable. If not, identical to item, except the type restrictions.
 //	//Valid types:
 //	//- Any unsigned integral type
-//	//- array<byte>
-//	//- arrayvieww<byte>
+//	//- array<uint8_t>
+//	//- arrayvieww<uint8_t>
 //	template<typename T> void hex(cstring name, T& item);
-//	void hex(cstring name, arrayvieww<byte> item);
+//	void hex(cstring name, arrayvieww<uint8_t> item);
 //	
 //	//Makes serialized data look nicer. May be ignored. Ignored while unserializing.
 //	void comment(cstring c);
@@ -147,7 +147,7 @@ public:
 	{
 		w.node(bmlwriter::escape(name), tostringhex(item));
 	}
-	void hex(cstring name, arrayview<byte> item)
+	void hex(cstring name, arrayview<uint8_t> item)
 	{
 		w.node(bmlwriter::escape(name), tostringhex(item));
 	}
@@ -342,7 +342,7 @@ public:
 		}
 	}
 	
-	void hex(cstring name, arrayvieww<byte> out)
+	void hex(cstring name, arrayvieww<uint8_t> out)
 	{
 		while (thisnode == name)
 		{
@@ -492,7 +492,7 @@ class jsonserializer {
 	
 	void add_node(bool inner, int ov_resolut1) { w.boolean(inner); }
 	
-	void add_node_hex(arrayvieww<byte> inner) { w.str(tostringhex(inner)); }
+	void add_node_hex(arrayvieww<uint8_t> inner) { w.str(tostringhex(inner)); }
 	
 #define LEAF(T) \
 		void add_node(T inner, int ov_resolut1) { w.num((double)inner); } \
@@ -853,7 +853,7 @@ public:
 		}
 	}
 	
-	void hex(cstring name, arrayvieww<byte> out)
+	void hex(cstring name, arrayvieww<uint8_t> out)
 	{
 		while (ev.action == jsonparser::map_key && ev.str == name)
 		{
@@ -868,7 +868,7 @@ public:
 		}
 	}
 	
-	void hex(cstring name, array<byte>& out)
+	void hex(cstring name, array<uint8_t>& out)
 	{
 		while (ev.action == jsonparser::map_key && ev.str == name)
 		{

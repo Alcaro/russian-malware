@@ -25,11 +25,11 @@ public:
 	
 	//if called multiple times on the same object, undefined behavior, call deinit() first
 	bool init(const char * filename);
-	//like init, but if the library is loaded already, it fails
-	//does not protect against a subsequent init() loading the same thing
-	bool init_uniq(const char * filename);
-	//like init_uniq, but if the library is loaded already, it loads a new instance, if supported by the platform
-	bool init_uniq_force(const char * filename);
+	////like init, but if the library is loaded already, it fails
+	////does not protect against a subsequent init() loading the same thing
+	//bool init_uniq(const char * filename);
+	////like init_uniq, but if the library is loaded already, it loads a new instance, if supported by the platform
+	//bool init_uniq_force(const char * filename);
 	//guaranteed to return NULL if initialization failed
 	void* sym_ptr(const char * name);
 	//separate function because
@@ -72,11 +72,13 @@ public:
 	private: \
 		dylib _internal_dylib; \
 	}
-#define DECL_DYLIB_T(name, ...) DECL_DYLIB_PREFIX_T(name, , __VA_ARGS__)
 //The intended usecase of the prefixed one is a DLL exporting multiple functions, for example isalpha, isdigit, and isalnum.
 //DECL_DYLIB_PREFIX_T(is_t, is, alpha, digit, alnum);
 //is_t is("libc.so.6");
 //if (is.alpha('a')) {}
+//If your functions don't have any plausible prefix, or you want the prefix on the members, feel free to instead use
+#define DECL_DYLIB_T(name, ...) DECL_DYLIB_PREFIX_T(name, , __VA_ARGS__)
+//which is just the above without the second argument.
 
 
 //If the program is run under a debugger, this triggers a breakpoint. If not, does nothing.

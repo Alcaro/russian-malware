@@ -60,7 +60,7 @@ static bool l_isspace(char ch)
 	return (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n');
 }
 
-size_t base64_dec_raw(arrayvieww<byte> out, size_t* outend, cstring text, size_t* textend)
+size_t base64_dec_raw(arrayvieww<uint8_t> out, size_t* outend, cstring text, size_t* textend)
 {
 	size_t outat = 0;
 	const char * ptr = (char*)text.bytes().ptr();
@@ -116,9 +116,9 @@ finish:
 	return 0;
 }
 
-array<byte> base64_dec(cstring text)
+array<uint8_t> base64_dec(cstring text)
 {
-	array<byte> ret;
+	array<uint8_t> ret;
 	ret.resize(base64_dec_len(text.length()));
 	size_t actual = base64_dec_raw(ret, NULL, text, NULL);
 	if (!actual) return NULL;
@@ -126,7 +126,7 @@ array<byte> base64_dec(cstring text)
 	return ret;
 }
 
-void base64_enc_raw(arrayvieww<byte> out, arrayview<byte> bytes)
+void base64_enc_raw(arrayvieww<uint8_t> out, arrayview<uint8_t> bytes)
 {
 	uint8_t* outp = out.ptr();
 	const uint8_t* inp = bytes.ptr();
@@ -164,7 +164,7 @@ void base64_enc_raw(arrayvieww<byte> out, arrayview<byte> bytes)
 	}
 }
 
-string base64_enc(arrayview<byte> bytes)
+string base64_enc(arrayview<uint8_t> bytes)
 {
 	string ret;
 	base64_enc_raw(ret.construct(base64_enc_len(bytes.size())), bytes);

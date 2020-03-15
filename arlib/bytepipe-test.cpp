@@ -3,7 +3,7 @@
 
 static void push(bytepipe& p, size_t& t_written, size_t request, size_t push)
 {
-	arrayvieww<byte> tmp = p.push_buf(request);
+	arrayvieww<uint8_t> tmp = p.push_buf(request);
 	assert(tmp.ptr() != NULL);
 	assert(tmp.size() >= request);
 	for (size_t i=0;i<push;i++)
@@ -15,7 +15,7 @@ static void push(bytepipe& p, size_t& t_written, size_t request, size_t push)
 
 static void pull(bytepipe& p, size_t& t_read, size_t& t_written, bool all, size_t expect, size_t use)
 {
-	arrayview<byte> tmp = (all ? p.pull_buf_full() : p.pull_buf());
+	arrayview<uint8_t> tmp = (all ? p.pull_buf_full() : p.pull_buf());
 	assert_eq(p.remaining(), t_written-t_read);
 	assert_eq(tmp.size(), expect);
 	for (size_t i=0;i<use;i++)
@@ -83,9 +83,9 @@ test("bytepipe", "array", "bytepipe")
 			{
 				for (int i=0;text[i];i++)
 				{
-					byte tmp[1] = { (byte)text[i] };
-					p.push(arrayview<byte>(tmp));
-					arrayview<byte> line = p.pull_line();
+					uint8_t tmp[1] = { (uint8_t)text[i] };
+					p.push(arrayview<uint8_t>(tmp));
+					arrayview<uint8_t> line = p.pull_line();
 					if (text[i]!='\n') assert(!line);
 					else
 					{
@@ -97,27 +97,27 @@ test("bytepipe", "array", "bytepipe")
 			
 			for (int pass_inner=0;pass_inner<3;pass_inner++)
 			{
-				p.push(arrayview<byte>((byte*)text, strlen(text)));
-				arrayview<byte> line = p.pull_line();
+				p.push(arrayview<uint8_t>((uint8_t*)text, strlen(text)));
+				arrayview<uint8_t> line = p.pull_line();
 				assert_eq(string(line), text);
 				p.pull_done(line);
 			}
 			
 			for (int pass_inner=0;pass_inner<3;pass_inner++)
 			{
-				p.push(arrayview<byte>((byte*)text, strlen(text)));
+				p.push(arrayview<uint8_t>((uint8_t*)text, strlen(text)));
 			}
 			
 			for (int pass_inner=0;pass_inner<3;pass_inner++)
 			{
-				arrayview<byte> line = p.pull_line();
+				arrayview<uint8_t> line = p.pull_line();
 				assert_eq(string(line), text);
 				p.pull_done(line);
 			}
 			
 			for (int pass_inner=0;pass_inner<3;pass_inner++)
 			{
-				arrayview<byte> line = p.pull_line();
+				arrayview<uint8_t> line = p.pull_line();
 				assert(!line);
 			}
 		}

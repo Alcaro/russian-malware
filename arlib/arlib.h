@@ -4,13 +4,14 @@
 //     splitting a string by linebreaks.
 // - std:: is full of strange features and guarantees whose existence increase the constant factor
 //     of every operation, even if unused and unnecessary.
-// - Dependency management in C++ is cumbersome at best.
+// - std:: headers are huge, and compile time acts accordingly. Again, removing unnecessary features
+//     and guarantees helps.
 // - I care a lot about binary size and easy distribution (no DLLs) on Windows, and including the
 //     C++ standard library would often triple the program size.
 // - And, most importantly, every feature I implement is a feature I fully understand, so I can
 //     debug it, debug other instances of the same protocol or format, know which edge cases are
 //     likely to cause bugs (for example to write a test suites, or research potential security
-//     vulnerabilities), and appreciate the hidden complexity of something that seems simple.
+//     vulnerabilities), and appreciate the true complexity of something that seems simple.
 
 //if anyone whines about antivirus, https://arstechnica.com/information-technology/2017/01/antivirus-is-bad/
 //  and linked:
@@ -19,6 +20,9 @@
 //    https://blog.mozilla.org/nnethercote/2012/02/16/mcafee-is-killing-us/
 //    https://googleprojectzero.blogspot.com/2016/06/how-to-compromise-enterprise-endpoint.html
 //  and https://blogs.msdn.microsoft.com/oldnewthing/20180615-00/?p=99025
+
+// some of this is unnecessary, but most of the compile time is used by mandatory things, like array
+//  and string
 
 #pragma once
 #include "global.h"

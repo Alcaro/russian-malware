@@ -8,7 +8,7 @@
 #include "../stringconv.h"
 
 #ifdef USE_INET_NTOP
-string socket::ip_to_string(arrayview<byte> ip)
+string socket::ip_to_string(arrayview<uint8_t> ip)
 {
 	char ret[INET6_ADDRSTRLEN];
 	int af = (ip.size() == 4 ? AF_INET : ip.size() == 16 ? AF_INET6 : AF_UNSPEC);
@@ -16,7 +16,7 @@ string socket::ip_to_string(arrayview<byte> ip)
 	return inet_ntop(af, ip.ptr(), ret, INET6_ADDRSTRLEN);
 }
 #else
-string socket::ip_to_string(arrayview<byte> ip)
+string socket::ip_to_string(arrayview<uint8_t> ip)
 {
 	if (ip.size() == 4)
 	{
@@ -81,13 +81,13 @@ which IPs should be rendered as v4? ::ffff:0.0.0.0/96 only probably
 #endif
 
 
-array<byte> socket::string_to_ip(cstring str)
+array<uint8_t> socket::string_to_ip(cstring str)
 {
 	uint8_t out[16];
-	return array<byte>(out, string_to_ip(out, str));
+	return array<uint8_t>(out, string_to_ip(out, str));
 }
 
-int socket::string_to_ip(arrayvieww<byte> out, cstring str)
+int socket::string_to_ip(arrayvieww<uint8_t> out, cstring str)
 {
 	if (out.size() < 16) abort();
 	if (string_to_ip4(out, str)) return 4;
@@ -96,19 +96,19 @@ int socket::string_to_ip(arrayvieww<byte> out, cstring str)
 }
 
 #ifdef USE_INET_NTOP
-bool socket::string_to_ip4(arrayvieww<byte> out, cstring str)
+bool socket::string_to_ip4(arrayvieww<uint8_t> out, cstring str)
 {
 	if (str.contains_nul()) return false;
 	return inet_pton(AF_INET, str.c_str(), out.ptr());
 }
-bool socket::string_to_ip6(arrayvieww<byte> out, cstring str)
+bool socket::string_to_ip6(arrayvieww<uint8_t> out, cstring str)
 {
 	if (str.contains_nul()) return false;
 return false; // TODO: enable
 	return inet_pton(AF_INET6, str.c_str(), out.ptr());
 }
 #else
-bool socket::string_to_ip4(arrayvieww<byte> out, cstring str)
+bool socket::string_to_ip4(arrayvieww<uint8_t> out, cstring str)
 {
 	const char* inp = (char*)str.bytes().ptr();
 	const char* inpe = inp + str.length();
@@ -135,7 +135,7 @@ bool socket::string_to_ip4(arrayvieww<byte> out, cstring str)
 }
 
 //TODO: implement
-bool socket::string_to_ip6(arrayvieww<byte> out, cstring str)
+bool socket::string_to_ip6(arrayvieww<uint8_t> out, cstring str)
 {
 	return false;
 }
@@ -159,8 +159,8 @@ test("IP conversion", "array,string", "ipconv")
 	assert_bad("127.0.0");
 	assert_bad("1");
 	assert_bad("16777217");
-	assert_eq(tostringhex(socket::string_to_ip(arrayview<byte>((byte*)"1.1.1.1\0", 8))), "");
-	assert_eq(tostringhex(socket::string_to_ip(arrayview<byte>((byte*)"::1.1.1.1\0", 10))), "");
+	assert_eq(tostringhex(socket::string_to_ip(arrayview<uint8_t>((uint8_t*)"1.1.1.1\0", 8))), "");
+	assert_eq(tostringhex(socket::string_to_ip(arrayview<uint8_t>((uint8_t*)"::1.1.1.1\0", 10))), "");
 	
 	assert_eq(socket::ip_to_string(socket::string_to_ip("127.0.0.1")), "127.0.0.1");
 	

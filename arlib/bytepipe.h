@@ -5,11 +5,11 @@
 //A bytepipe accepts an infinite amount of bytes and returns them, first one first.
 //Guaranteed amortized O(n) no matter how many bytes are pushed at the time, except if pull_line() is used and there is no line.
 class bytepipe {
-	array<byte> buf1;
+	array<uint8_t> buf1;
 	size_t buf1st;
 	size_t buf1end;
 	
-	array<byte> buf2;
+	array<uint8_t> buf2;
 	size_t buf2end;
 	
 	void try_swap()
@@ -24,9 +24,9 @@ class bytepipe {
 		}
 	}
 	
-	void push_one(arrayview<byte> bytes)
+	void push_one(arrayview<uint8_t> bytes)
 	{
-		arrayvieww<byte> tmp = push_buf(bytes.size());
+		arrayvieww<uint8_t> tmp = push_buf(bytes.size());
 		memcpy(tmp.ptr(), bytes.ptr(), bytes.size());
 		push_done(bytes.size());
 	}
@@ -43,7 +43,7 @@ public:
 	}
 	
 	//Will return a buffer of at least 'bytes' bytes. Can be bigger. Use push_done afterwards.
-	arrayvieww<byte> push_buf(size_t bytes = 512)
+	arrayvieww<uint8_t> push_buf(size_t bytes = 512)
 	{
 		if (buf2end + bytes > buf2.size())
 		{
@@ -69,13 +69,13 @@ public:
 	}
 	
 	//Can return less than remaining().
-	arrayview<byte> pull_buf()
+	arrayview<uint8_t> pull_buf()
 	{
 		try_swap();
 		return buf1.slice(buf1st, buf1end-buf1st);
 	}
 	//Returns whatever was pushed that pull_buf didn't return. Can't be acknowledged and discarded, use pull_buf.
-	arrayview<byte> pull_next()
+	arrayview<uint8_t> pull_next()
 	{
 		return buf2.slice(0, buf2end);
 	}
@@ -83,12 +83,12 @@ public:
 	{
 		buf1st += bytes;
 	}
-	void pull_done(arrayview<byte> bytes)
+	void pull_done(arrayview<uint8_t> bytes)
 	{
 		pull_done(bytes.size());
 	}
 	//Returns the entire thing.
-	arrayview<byte> pull_buf_full()
+	arrayview<uint8_t> pull_buf_full()
 	{
 		if (buf1end+buf2end > buf1.size())
 		{
@@ -112,7 +112,7 @@ public:
 		return buf1.slice(buf1st, buf1end-buf1st);
 	}
 	//Returns the entire thing, and immediately acknowledges it. Other than the return value, it's equivalent to reset().
-	array<byte> pull_buf_full_drain()
+	array<uint8_t> pull_buf_full_drain()
 	{
 		if (buf1st != 0)
 		{
@@ -131,7 +131,7 @@ public:
 			buf1end += buf2end;
 		}
 		
-		array<byte> ret = std::move(buf1);
+		array<uint8_t> ret = std::move(buf1);
 		ret.resize(buf1end);
 		
 		reset();
@@ -139,17 +139,17 @@ public:
 	}
 	
 	//Returns data until and including the next \n. Doesn't acknowledge it. If there is no \n, returns an empty array.
-	arrayview<byte> pull_line()
+	arrayview<uint8_t> pull_line()
 	{
-		byte* start = buf1.ptr()+buf1st;
+		uint8_t* start = buf1.ptr()+buf1st;
 		size_t len = buf1end-buf1st;
-		byte* nl = (byte*)memchr(start, '\n', len);
+		uint8_t* nl = (uint8_t*)memchr(start, '\n', len);
 		if (nl)
 		{
-			return arrayview<byte>(start, nl+1-start);
+			return arrayview<uint8_t>(start, nl+1-start);
 		}
 		
-		nl = (byte*)memchr(buf2.ptr(), '\n', buf2end);
+		nl = (uint8_t*)memchr(buf2.ptr(), '\n', buf2end);
 		if (nl)
 		{
 			size_t pos = buf1end-buf1st + nl+1-buf2.ptr();
@@ -160,7 +160,7 @@ public:
 	}
 	//Returns 'line' minus a trailing \r\n or \n. The \n must exist.
 	//Usable together with the above, though you must acknowledge the \n too.
-	static arrayview<byte> trim_line(arrayview<byte> line)
+	static arrayview<uint8_t> trim_line(arrayview<uint8_t> line)
 	{
 		if (line.size()==1) return NULL;
 		if (line[line.size()-2]=='\r') return line.slice(0, line.size()-2);

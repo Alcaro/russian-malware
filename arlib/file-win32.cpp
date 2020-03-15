@@ -161,7 +161,7 @@ namespace {
 			return size.QuadPart;
 		}
 		
-		size_t pread(arrayvieww<byte> target, size_t start)
+		size_t pread(arrayvieww<uint8_t> target, size_t start)
 		{
 			seek(start);
 			DWORD actual;
@@ -175,7 +175,7 @@ namespace {
 			return (SetEndOfFile(this->handle));
 		}
 		
-		bool pwrite(arrayview<byte> data, size_t start)
+		bool pwrite(arrayview<uint8_t> data, size_t start)
 		{
 			seek(start);
 			DWORD actual;
@@ -203,30 +203,30 @@ namespace {
 		//yes, I just wrote a 1KB rant about a single extra F in this mask
 		/*private*/ const size_t mmap_gran_mask = 0xFFFF;
 		
-		/*private*/ arrayvieww<byte> mmap(bool write, size_t start, size_t len)
+		/*private*/ arrayvieww<uint8_t> mmap(bool write, size_t start, size_t len)
 		{
 			HANDLE mem = CreateFileMapping(handle, NULL, write ? PAGE_READWRITE : PAGE_READONLY, 0, 0, NULL);
 			
 			size_t round = (start&mmap_gran_mask);
 			start &= ~mmap_gran_mask;
 			
-			byte* ptr = (byte*)MapViewOfFile(mem, write ? (FILE_MAP_READ|FILE_MAP_WRITE) : FILE_MAP_READ,
-			                                 start>>16>>16, start&0xFFFFFFFF, len+round);
+			uint8_t* ptr = (uint8_t*)MapViewOfFile(mem, write ? (FILE_MAP_READ|FILE_MAP_WRITE) : FILE_MAP_READ,
+			                                       start>>16>>16, start&0xFFFFFFFF, len+round);
 			CloseHandle(mem);
 			
-			if (ptr) return arrayvieww<byte>(ptr+round, len);
-			else return arrayvieww<byte>(NULL, 0);
+			if (ptr) return arrayvieww<uint8_t>(ptr+round, len);
+			else return arrayvieww<uint8_t>(NULL, 0);
 		}
 		
-		arrayview<byte> mmap(size_t start, size_t len) { return mmap(false, start, len); }
-		void unmap(arrayview<byte> data)
+		arrayview<uint8_t> mmap(size_t start, size_t len) { return mmap(false, start, len); }
+		void unmap(arrayview<uint8_t> data)
 		{
 			//docs say this should be identical to a MapViewOfFile return value, but it works fine with the low bits garbled
 			UnmapViewOfFile(data.ptr());
 		}
 		
-		arrayvieww<byte> mmapw(size_t start, size_t len) { return mmap(true, start, len); }
-		bool unmapw(arrayvieww<byte> data) { unmap(data); return true; }
+		arrayvieww<uint8_t> mmapw(size_t start, size_t len) { return mmap(true, start, len); }
+		bool unmapw(arrayvieww<uint8_t> data) { unmap(data); return true; }
 		
 		~file_fs() { CloseHandle(handle); }
 	};
@@ -257,7 +257,7 @@ bool file::mkdir_fs(cstring filename)
 {
 	if (path_corrupt(filename)) return false;
 	if (CreateDirectory(filename.c_str(), nullptr)) return true;
-	else return (GetLastError() == ERROR_ALREADY_EXISTS);
+	else return (GetLastError() == ERROR_ALREADY_EXISTS && (GetFileAttributes(filename.c_str())&FILE_ATTRIBUTE_DIRECTORY));
 }
 
 bool file::unlink_fs(cstring filename)
@@ -288,5 +288,45 @@ array<string> file::listdir(cstring path)
 	} while (FindNextFile(dir, &f));
 	FindClose(dir);
 	return ret;
+}
+
+
+#define MMAP_THRESHOLD 1024*1024
+file2::mmap_t file2::mmap(cstring filename)
+{
+	if (path_corrupt(filename)) return nullptr;
+	
+	HANDLE file = CreateFile(filename.c_str(), GENERIC_READ, FILE_SHARE_ALL, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (file == INVALID_HANDLE_VALUE) return NULL;
+	
+	LARGE_INTEGER len_li;
+	if (!GetFileSizeEx(file, &len_li) || (LONGLONG)(size_t)len_li.QuadPart != len_li.QuadPart) { CloseHandle(file); return NULL; }
+	size_t len = len_li.QuadPart;
+	
+	if (len <= MMAP_THRESHOLD)
+	{
+		uint8_t* data = malloc(len);
+		DWORD len2;
+		if (!ReadFile(file, data, len, &len2, NULL) || len2 != len)
+		{
+			free(data);
+			CloseHandle(file);
+			return NULL;
+		}
+		return { data, len };
+	}
+	
+	HANDLE mem = CreateFileMapping(file, NULL, PAGE_READONLY, 0, 0, NULL);
+	CloseHandle(file);
+	if (mem == NULL) return NULL;
+	uint8_t* ptr = (uint8_t*)MapViewOfFile(mem, FILE_MAP_READ, 0, 0, 0);
+	CloseHandle(mem);
+	
+	return { ptr, len };
+}
+file2::mmap_t::~mmap_t()
+{
+	if (count > MMAP_THRESHOLD) UnmapViewOfFile(items);
+	else free(items);
 }
 #endif

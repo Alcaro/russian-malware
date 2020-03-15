@@ -9,6 +9,7 @@
 
 // this is PCG-XSH-RR with 64-bit state and 32-bit output, adapted from wikipedia
 // https://en.wikipedia.org/wiki/Permuted_congruential_generator
+// could use Romu instead http://www.romu-random.org/, but I like how PCG's state is just 64 bits
 class random_pcg : nocopy {
 	uint64_t state; // wikipedia initializes this to 0x4d595df4d0f33173
 	

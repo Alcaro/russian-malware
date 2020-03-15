@@ -51,14 +51,14 @@
 //- figure out if (?:\1([ab]))+ should be error, match aab but not abb, or something else
 //- pass capture sets forwards, not just outwards, in the flattener; reject backreferences to anything not-yet-defined
 
-#include <stdint.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <string.h>
 #if defined(__has_include) && __has_include("arlib.h")
 #define HAVE_ARLIB
 #include "string.h"
 #endif
+#include <stdint.h>
+#include <stdlib.h>
+#include <stddef.h>
+#include <string.h>
 
 // Most of this namespace is considered private. Callers should only use the REGEX macro, regex::match_t<>, and regex::pair.
 // It's okay to keep variables of type regex::matcher<>, but they should be declared as function-local auto.
@@ -239,6 +239,8 @@ template<> struct simple_escape<'W'> { using content = typename invert_class<typ
 
 template<size_t n_capture, char head, char... tail> struct parse_term<n_capture, str<head, tail...>> {
 	static_assert(
+		(uint8_t)head >= 32, "invalid literal character - did you type \\1 instead of \\\\1?");
+	static_assert(
 		(' ' <= head && head <= '#') ||
 		('%' <= head && head <= '\'') ||
 		head == ',' || head == '-' || head == '/' ||
@@ -249,7 +251,8 @@ template<size_t n_capture, char head, char... tail> struct parse_term<n_capture,
 		('a' <= head && head <= 'z') ||
 		head == '_' || head == '`' || head == '~' ||
 		(uint8_t)head >= 128 ||
-		false, "invalid literal character - did you type \\1 instead of \\\\1?");
+		(uint8_t)head < 32 || // to not assert false twice
+		false, "invalid literal character - did you forget escaping something?");
 	
 	static const size_t out_n_capture = n_capture;
 	using out_tail = str<tail...>;

@@ -87,8 +87,8 @@ struct ser8 {
 };
 
 struct ser9 {
-	byte foo[4];
-	array<byte> bar;
+	uint8_t foo[4];
+	array<uint8_t> bar;
 	
 	explicit operator string() const { return "FAIL"; } // should use serialize_as if it exists
 	void operator=(cstring str) { foo[0] = 0xDE; foo[1] = 0xAD; foo[2] = 0xBE; foo[3] = 0xEF; }
@@ -96,7 +96,7 @@ struct ser9 {
 	template<typename T>
 	void serialize(T& s)
 	{
-		s.hex("foo", arrayvieww<byte>(foo));
+		s.hex("foo", arrayvieww<uint8_t>(foo));
 		s.hex("bar", bar);
 	}
 };
@@ -117,7 +117,7 @@ struct ser12 {
 };
 
 struct ser13 { // can't be bml serialized, json only; 'foo=1 foo=2 foo=3 foo=4' can't keep track of how much is written
-	byte foo[4];
+	uint8_t foo[4];
 	bool t;
 	bool f;
 	

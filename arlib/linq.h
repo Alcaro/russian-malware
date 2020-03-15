@@ -177,6 +177,7 @@ public:
 	
 	T join()
 	{
+		if (!base.hasValue()) return T();
 		T ret = base.get();
 		base.moveNext();
 		while (base.hasValue())

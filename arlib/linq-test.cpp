@@ -97,5 +97,10 @@ test("LINQ", "array,set", "linq")
 		array<string> baz = bar.where([](cstring str)->bool { return str.contains("muncher"); });
 		assert_eq(baz.join(","), "muncher,floating muncher");
 	}
+	
+	{
+		array<int> x = { 1, 2, 3, 4, 5 };
+		assert_eq(x.where([](int x) -> bool { return x>5; }).join(), 0); // not allowed to assume the sequence is nonempty
+	}
 }
 #endif

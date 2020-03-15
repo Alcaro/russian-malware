@@ -4,7 +4,7 @@
 inline string bmlwriter::indent()
 {
 	string ret;
-	arrayvieww<byte> bytes = ret.construct(m_indent*2);
+	arrayvieww<uint8_t> bytes = ret.construct(m_indent*2);
 	memset(bytes.ptr(), ' ', m_indent*2);
 	return ret;
 }
@@ -89,7 +89,7 @@ string bmlwriter::escape(cstring val)
 {
 	string esc = "-";
 	bool needescape = (val.startswith("-"));
-	for (byte c : val.bytes())
+	for (uint8_t c : val.bytes())
 	{
 		if (isalnum(c) || c=='.') esc+=c;
 		else if (c=='-') esc+="--";
@@ -108,7 +108,7 @@ string bmlwriter::unescape(cstring val)
 	{
 		if (val[i]=='-')
 		{
-			byte tmp;
+			uint8_t tmp;
 			if (val[i+1]=='-')
 			{
 				i++;

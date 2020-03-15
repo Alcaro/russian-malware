@@ -14,21 +14,21 @@
 //  simplifies my closefrom(), current one is pretty ugly
 //[unmerged?] CLONE_WAIT_PID
 //  makes waitpid(-1) not care about that child, allowing use of GSubprocess
-//[unmerged] AT_BENEATH
-//  this will improve performance by not involving broker for the vast majority of open()s
-//  it's still open/openat/sigreturn, but it's way better than open/sendto/recvfrom/openat/sendmsg/recvmsg/sigreturn
-//  can only be used for readonly open, max_write is mandatory
-//  openat2, which contains this, seems headed for kernel 5.4 - but its flags are in a struct so I can't do anything
 //[root-only] eBPF
 //  moving some policy from broker to BPF would be an improvement
 //  but to my knowledge, non-classic BPF is still true-root only (CLONE_NEWUSER isn't enough)
 //  due to the 99999 Spectre variants, CLONE_NEWUSER or lower will likely never have access to eBPF
 //[no patch exists] make execveat accept NULL as a blank string
 //  that last mappable page hack is terrible
+//[no patch exists] RESOLVE_BENEATH with seccomp-bpf
+//  RESOLVE_BENEATH will improve performance by not involving broker for the vast majority of open()s
+//  it's still open/openat/sigreturn, but it's way better than open/sendto/recvfrom/openat/sendmsg/recvmsg/sigreturn
+//  can only be used for readonly open, max_write is mandatory
+//  it was added to kernel 5.6 (unreleased) via openat2 - but its flags are in a struct, so I can't do anything
 //[no patch exists] deep argument inspection for seccomp-bpf https://lwn.net/Articles/799557/
-//  this would also allow purging the last mappable page hack, and a few others
+//  this would allow using RESOLVE_BENEATH, purging the last mappable page hack, and fix various other ugliness
 //[unmerged] Landlock; an alternative to seccomp-bpf, somewhat higher level
-//  the inability to access pointers means I have reject 100% of file access, which leads to e.g. the last mappable page hack
+//  seccomp-bpf is quite limited, and needs some weird tricks; perhaps a completely different approach would be better
 
 //minimum kernel version policy is similar to minimum C++ version: it must work on latest Debian stable and Ubuntu LTS
 //however, syscalls can be runtime tested with fallbacks; any released kernel is acceptable

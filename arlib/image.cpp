@@ -571,7 +571,7 @@ void image::convert_scanline<ifmt_rgb888_by, ifmt_xrgb8888>(void* out, const voi
 #ifdef ARGUI_GTK3
 #include <gtk/gtk.h>
 
-static bool image_decode_gtk(image* out, arrayview<byte> data)
+static bool image_decode_gtk(image* out, arrayview<uint8_t> data)
 {
 	GInputStream* is = g_memory_input_stream_new_from_data(data.ptr(), data.size(), NULL);
 	GdkPixbuf* pix = gdk_pixbuf_new_from_stream(is, NULL, NULL);
@@ -637,7 +637,7 @@ out->fmt = ifmt_0rgb8888;
 //or maybe it's better to keep my homebrew, so I know it'll work the same way everywhere
 
 
-bool image::init_decode(arrayview<byte> data)
+bool image::init_decode(arrayview<uint8_t> data)
 {
 	this->fmt = ifmt_none;
 	return
@@ -646,7 +646,7 @@ bool image::init_decode(arrayview<byte> data)
 		false;
 }
 
-bool image::init_decode_extern(arrayview<byte> data)
+bool image::init_decode_extern(arrayview<uint8_t> data)
 {
 	this->fmt = ifmt_none;
 	return
@@ -656,7 +656,7 @@ bool image::init_decode_extern(arrayview<byte> data)
 		false;
 }
 
-bool image::init_decode_permissive(arrayview<byte> data)
+bool image::init_decode_permissive(arrayview<uint8_t> data)
 {
 	this->fmt = ifmt_none;
 	return

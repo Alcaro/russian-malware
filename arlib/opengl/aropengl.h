@@ -18,7 +18,7 @@
 #endif
 #endif
 
-//This isn't the object you want. Use aropengl instead, it contains all OpenGL functions as function pointer members so you can do
+//This isn't the object you want. Use aropengl instead, it contains all OpenGL functions as function pointer members, so you can do
 //aropengl gl;
 //gl.create(widget_viewport*, aropengl::t_ver_3_3);
 //gl.ClearColor(0,0,0,0);
@@ -56,7 +56,7 @@ public:
 		//- May be slightly slower, especially with vsync off; it does an extra render pass
 		//    (this pass contains only a single Direct3DDevice9Ex->StretchRect, so it's fast, but nonzero)
 		//The flag is ignored on non-Windows systems.
-		//It is safe to use gl.defaultFramebuffer and gl.notifyResize on non-d3dsync objects, even outside Windows.
+		//It is safe to use gl.outputFramebuffer and gl.notifyResize on non-d3dsync objects, even outside Windows.
 # ifdef _WIN32
 		t_direct3d_vsync = 0x004000,
 # else
@@ -66,6 +66,12 @@ public:
 #endif
 	};
 	
+	// TODO: add query VRAM feature, using GLX_MESA_query_renderer
+	// there doesn't seem to be any equivalent in WGL; there is one in D3D (DXGI_ADAPTER_DESC), but it requires opening a D3D context
+	// TODO: make GL work without the GUI, going for straight GLX and ignoring GTK
+	// probably requires rewriting the runloop system, definitely requires XAddConnectionWatch (XCB can't GL, and manually is even worse)
+	// probably easier on Windows first, but that definitely requires a runloop rewrite
+	// for X, requires deciding who's responsible for XOpenDisplay, and how to pass it to the other side (needed to process other events)
 	class context : nocopy {
 	public:
 		//this is basically the common subset of WGL/GLX/etc
@@ -115,6 +121,7 @@ protected:
 	
 public:
 	//Must be called after the window is resized. If created from a viewport, this is configured automatically.
+	//Make sure to also call gl.Viewport(0, 0, width, height), or OpenGL will do something ridiculous.
 	void notifyResize(unsigned int width, unsigned int height)
 	{
 		core->notifyResize(width, height);
@@ -141,7 +148,7 @@ public:
 	//If the window is resized, use this function to report the new size.
 	//Not needed if the object is created from a viewport.
 	void notifyResize(GLsizei width, GLsizei height) { core->notifyResize(width, height); }
-	//Used only for Direct3D sync. If you're not using that, just use 0.
+	//Used for Direct3D sync. If you're not using that, this will return 0; feel free to use that instead.
 	GLuint outputFramebuffer() { return core->outputFramebuffer(); }
 	
 	//Releases all resources owned by the object; the object may not be used after this.
@@ -163,7 +170,7 @@ public:
 	//void enableDefaultDebugger(FILE* out = NULL); //Use only if the context was created with the debug flag.
 	
 	//note to self: on modern hardware, drawing fullscreen vertex-uniform
-	//is faster when one triangle at 0,0 2,0 0,2 than two triangles at 0,0 1,0 0,1 1,1
+	//is faster with one triangle at 0,0 2,0 0,2 than two triangles at 0,0 1,0 0,1 1,1
 	//https://michaldrobot.com/2014/04/01/gcn-execution-patterns-in-full-screen-passes/
 	
 private:

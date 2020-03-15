@@ -1,31 +1,31 @@
 #include "file.h"
 #include "test.h"
 
-arrayview<byte> file::impl::default_mmap(size_t start, size_t len)
+arrayview<uint8_t> file::impl::default_mmap(size_t start, size_t len)
 {
-	arrayvieww<byte> ret(malloc(len), len);
+	arrayvieww<uint8_t> ret(malloc(len), len);
 	size_t actual = this->pread(ret, start);
 	return ret.slice(0, actual);
 }
 
-void file::impl::default_unmap(arrayview<byte> data)
+void file::impl::default_unmap(arrayview<uint8_t> data)
 {
 	free((void*)data.ptr());
 }
 
-arrayvieww<byte> file::impl::default_mmapw(size_t start, size_t len)
+arrayvieww<uint8_t> file::impl::default_mmapw(size_t start, size_t len)
 {
-	byte* ptr = malloc(sizeof(size_t) + len);
+	uint8_t* ptr = malloc(sizeof(size_t) + len);
 	*(size_t*)ptr = start;
 	
-	arrayvieww<byte> ret(ptr+sizeof(size_t), len);
+	arrayvieww<uint8_t> ret(ptr+sizeof(size_t), len);
 	size_t actual = this->pread(ret, start);
 	return ret.slice(0, actual);
 }
 
-bool file::impl::default_unmapw(arrayvieww<byte> data)
+bool file::impl::default_unmapw(arrayvieww<uint8_t> data)
 {
-	byte* ptr = data.ptr() - sizeof(size_t);
+	uint8_t* ptr = data.ptr() - sizeof(size_t);
 	size_t start = *(size_t*)ptr;
 	bool ok = this->pwrite(data, start);
 	free(ptr);
@@ -109,8 +109,14 @@ bool file::mkdir(cstring filename)
 #ifdef _WIN32
 #define READONLY_FILE "C:/Windows/notepad.exe" // screw anything where the windows directory isn't on C:
 #define READONLY_FILE_HEAD "MZ"
-#define WRITABLE_FILE "C:/Temp/arlib-selftest.txt"
-#define CREATABLE_DIR "C:/Temp/arlib-selftest/"
+static string get_temp_dir() // no constant location, grumble grumble
+{
+	char temp_dir[MAX_PATH];
+	GetEnvironmentVariable("temp", temp_dir, sizeof(temp_dir));
+	return file::sanitize_path(temp_dir);
+}
+#define WRITABLE_FILE get_temp_dir()+"/arlib-selftest.txt"
+#define CREATABLE_DIR get_temp_dir()+"/arlib-selftest/"+
 #define rmdir RemoveDirectory
 #else
 #define READONLY_FILE "/bin/sh"
@@ -127,16 +133,16 @@ test("file reading", "array", "file")
 	assert(f.size());
 	assert(f.size() > strlen(READONLY_FILE_HEAD));
 	assert(f.size() >= 66000);
-	array<byte> bytes = f.readall();
+	array<uint8_t> bytes = f.readall();
 	assert(bytes.size() == f.size());
 	assert(!memcmp(bytes.ptr(), READONLY_FILE_HEAD, strlen(READONLY_FILE_HEAD)));
 	
-	arrayview<byte> map = f.mmap();
+	arrayview<uint8_t> map = f.mmap();
 	assert(map.ptr());
 	assert(map.size() == f.size());
 	assert(!memcmp(bytes.ptr(), map.ptr(), bytes.size()));
 	
-	arrayview<byte> map2 = f.mmap();
+	arrayview<uint8_t> map2 = f.mmap();
 	assert(map2.ptr());
 	assert(map2.size() == f.size());
 	assert(!memcmp(bytes.ptr(), map2.ptr(), bytes.size()));
@@ -151,7 +157,7 @@ test("file reading", "array", "file")
 	const size_t t_len[]   = { 66000, 400,   400,  65535, 65536, 65999, 400,   2     };
 	for (size_t i=0;i<ARRAY_SIZE(t_start);i++)
 	{
-		arrayview<byte> map3 = f.mmap(t_start[i], t_len[i]);
+		arrayview<uint8_t> map3 = f.mmap(t_start[i], t_len[i]);
 		assert(map3.ptr());
 		assert(map3.size() == t_len[i]);
 		assert(!memcmp(bytes.ptr()+t_start[i], map3.ptr(), t_len[i]));
@@ -205,13 +211,13 @@ test("file writing", "array", "file")
 	
 	assert(f.resize(8));
 	assert_eq(f.size(), 8);
-	byte expected[8]={'f','o','o',0,0,0,0,0};
-	array<byte> actual = file::readall(WRITABLE_FILE);
+	uint8_t expected[8]={'f','o','o',0,0,0,0,0};
+	array<uint8_t> actual = file::readall(WRITABLE_FILE);
 	assert(actual.ptr());
 	assert_eq(actual.size(), 8);
 	assert(!memcmp(actual.ptr(), expected, 8));
 	
-	arrayvieww<byte> map = f.mmapw();
+	arrayvieww<uint8_t> map = f.mmapw();
 	assert(map.ptr());
 	assert_eq(map.size(), 8);
 	assert(!memcmp(map.ptr(), expected, 8));
@@ -248,10 +254,10 @@ test("file writing", "array", "file")
 
 test("in-memory files", "array", "file")
 {
-	array<byte> bytes;
+	array<uint8_t> bytes;
 	bytes.resize(8);
 	for (int i=0;i<8;i++) bytes[i]=i;
-	array<byte> bytes2;
+	array<uint8_t> bytes2;
 	bytes2.resize(4);
 	
 	file f = file::mem(bytes.slice(0, 8));
@@ -293,16 +299,17 @@ test("file::resolve", "array,string", "")
 
 test("file::mkdir", "array,string", "")
 {
-	rmdir(CREATABLE_DIR);
+	file::unlink(CREATABLE_DIR "foo.txt");
+	rmdir(CREATABLE_DIR ""); // must have this silly suffix because Windows
 	
 	assert(!file::writeall(CREATABLE_DIR "foo.txt", "hello"));
-	assert_eq(file::mkdir(CREATABLE_DIR), true);
+	assert_eq(file::mkdir(CREATABLE_DIR ""), true);
 	assert( file::writeall(CREATABLE_DIR "foo.txt", "hello"));
-	assert_eq(file::mkdir(CREATABLE_DIR), true);
+	assert_eq(file::mkdir(CREATABLE_DIR ""), true);
 	assert_eq(file::mkdir(READONLY_FILE), false);
 	
 	assert(file::unlink(CREATABLE_DIR "foo.txt"));
-	rmdir(CREATABLE_DIR);
+	rmdir(CREATABLE_DIR "");
 }
 
 test("file::change_ext", "array,string", "")

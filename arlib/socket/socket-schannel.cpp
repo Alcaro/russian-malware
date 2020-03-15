@@ -77,7 +77,7 @@ public:
 	
 	void fetch(bool block)
 	{
-		array<byte> retbytes;
+		array<uint8_t> retbytes;
 		int ret = sock->recv(retbytes, block);
 		if (ret<0) return error();
 		
@@ -141,7 +141,7 @@ public:
 		{
 			if (OutBuffer.cbBuffer != 0 && OutBuffer.pvBuffer != NULL)
 			{
-				if (sock->send(arrayview<byte>((BYTE*)OutBuffer.pvBuffer, OutBuffer.cbBuffer)) < 0)
+				if (sock->send(arrayview<uint8_t>((BYTE*)OutBuffer.pvBuffer, OutBuffer.cbBuffer)) < 0)
 				{
 					SSPI->FreeContextBuffer(OutBuffer.pvBuffer);
 					error();
@@ -190,7 +190,7 @@ public:
 		
 		if (OutBuffer.cbBuffer != 0)
 		{
-			if (sock->send(arrayview<byte>((BYTE*)OutBuffer.pvBuffer, OutBuffer.cbBuffer)) < 0)
+			if (sock->send(arrayview<uint8_t>((BYTE*)OutBuffer.pvBuffer, OutBuffer.cbBuffer)) < 0)
 			{
 				SSPI->FreeContextBuffer(OutBuffer.pvBuffer);
 				error();
@@ -273,7 +273,7 @@ public:
 		}
 	}
 	
-	int recv(arrayvieww<byte> data, bool block = false)
+	int recv(arrayvieww<uint8_t> data, bool block = false)
 	{
 		if (!sock) return -1;
 		
@@ -288,7 +288,7 @@ public:
 		return bytes_ret;
 	}
 	
-	int sendp(arrayview<byte> bytes, bool block = true)
+	int sendp(arrayview<uint8_t> bytes, bool block = true)
 	{
 		if (!sock) return -1;
 		
@@ -313,7 +313,7 @@ public:
 		SecBufferDesc Message = { SECBUFFER_VERSION, 4, Buffers };
 		if (FAILED(SSPI->EncryptMessage(&ssl, 0, &Message, 0))) { error(); return -1; }
 		
-		if (sock->send(arrayview<byte>(sendbuf, Buffers[0].cbBuffer + Buffers[1].cbBuffer + Buffers[2].cbBuffer)) < 0) error();
+		if (sock->send(arrayview<uint8_t>(sendbuf, Buffers[0].cbBuffer + Buffers[1].cbBuffer + Buffers[2].cbBuffer)) < 0) error();
 		
 		return len;
 	}
