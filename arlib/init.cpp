@@ -180,12 +180,6 @@ void argparse::parse_post()
 
 static void arlib_init_shared()
 {
-#if defined(__unix__) && !defined(ARLIB_OPT)
-	rlimit lim;
-	lim.rlim_cur = (RUNNING_ON_VALGRIND ? 0 : 64*1024*1024);
-	lim.rlim_max = RLIM_INFINITY;
-	setrlimit(RLIMIT_CORE, &lim);
-#endif
 	srand(time(NULL));
 }
 
@@ -219,7 +213,6 @@ void arlib_init(nullptr_t, char** argv)
 #include "test.h"
 
 #ifdef ARLIB_TEST
-template<typename... Args>
 static void test_one_pack(const char * opts, cstring extras, bool error, const char * const argvp[])
 {
 	bool b[3] = {};

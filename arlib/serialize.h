@@ -8,7 +8,19 @@
 #define SERIALIZE_CORE(member) s.item(STR(member), member);
 #define SERIALIZE(...) template<typename T> void serialize(T& s) { PPFOREACH(SERIALIZE_CORE, __VA_ARGS__); }
 
-// TODO: investigate if I can replace ser_enter with s.item("name", [](){}), or the other way round
+#define ser_enter_1(s,x) for (bool serialize_first = true; s.enter(serialize_first);)
+#define ser_enter_2(s,name) for (bool serialize_first = true; s.enter(serialize_first, name);)
+#define ser_enter_pick(x1,x2,use,...) use(x1,x2)
+#define ser_enter(...) ser_enter_pick(__VA_ARGS__, ser_enter_2, ser_enter_1)
+
+// TODO: clean up this stuff, it's fairly nasty
+// - teach item() to handle lambdas
+// - teach item() to not be an overload handling mess
+// - find a way to share the tricky parts of item() between the four classes
+// - delete ser_enter and the enter() members
+// much of the mess is caused by not properly accounting for children being named vs anonymous
+//   {"a":1,"b":2,"c":3} is named, [1,2,3] is anonymous
+
 
 //Interface:
 //class serializer {
@@ -17,12 +29,13 @@
 //	
 //	//Valid types:
 //	//- Any integral type ('char' doesn't count as integral)
-//	//- string (but not cstring)
+//	//- string (cstring allowed only when serializing)
 //	//- array, set, map (if their contents are serializable)
 //	//    map must use integer or string key, nothing funny
 //	//- Any object with a serialize() function (see below)
 //	//- Any object with a 'typedef uint64_t serialize_as;' member
 //	//- Any object with a operator string() or operator=(cstring) function (only one needed if only one of serialize/deserialize needed)
+//	//- A lambda, which will be called as the serialize() function
 //	//The name can be any string.
 //	template<typename T> void item(cstring name, T& item);
 //	
@@ -371,11 +384,6 @@ template<typename T> void bmldeserialize_to(cstring bml, T& to)
 	bmldeserializer s(bml);
 	s.read_item(to, 1);
 }
-
-#define ser_enter_1(s,x) for (bool serialize_first = true; s.enter(serialize_first);)
-#define ser_enter_2(s,name) for (bool serialize_first = true; s.enter(serialize_first, name);)
-#define ser_enter_pick(x1,x2,use,...) use(x1,x2)
-#define ser_enter(...) ser_enter_pick(__VA_ARGS__, ser_enter_2, ser_enter_1)
 
 
 

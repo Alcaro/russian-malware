@@ -58,7 +58,7 @@ void HTTP::send(req q, function<void(rsp)> callback)
 {
 	rsp_i& i = requests.append();
 	i.callback = callback;
-	i.n_tries_left = ((q.flags & req::f_no_retry) ? 1 : 3);
+	i.n_tries_left = ((q.flags & req::f_no_retry) ? 1 : 2);
 	rsp& r = i.r;
 	r.q = std::move(q);
 	
@@ -118,7 +118,7 @@ again:
 	if (method != "GET" && next_send != 0)
 		return;
 	
-	if (ri.n_tries_left == 1 && next_send == 0)
+	if (ri.n_tries_left == 1 && next_send != 0)
 		return;
 	
 	if (ri.n_tries_left-- <= 0)

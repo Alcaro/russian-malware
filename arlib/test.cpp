@@ -59,8 +59,12 @@ static err_t result;
 
 static bool show_verbose;
 
-static array<int> callstack;
-void _teststack_push(int line) { callstack.append(line); }
+struct stack_entry {
+	cstring file;
+	int line;
+};
+static array<stack_entry> callstack;
+void _teststack_push(cstring file, int line) { callstack.append({ file, line }); }
 void _teststack_pop() { callstack.resize(callstack.size()-1); }
 
 static array<string> ctxstack;
@@ -69,10 +73,10 @@ int _teststack_popstr() { ctxstack.resize(ctxstack.size()-1); return 0; }
 
 static size_t n_malloc = 0;
 static size_t n_free = 0;
-static size_t n_malloc_block = 0;
+static int n_malloc_block = 0;
 void _test_malloc()
 {
-	if (UNLIKELY(n_malloc_block))
+	if (UNLIKELY(n_malloc_block > 0))
 	{
 		n_malloc_block = 0; // failing usually allocates
 		if (result == err_ok) test_fail("can't malloc here");
@@ -83,26 +87,31 @@ void _test_free() { n_free++; }
 int _test_blockmalloc() { n_malloc_block++; return 1; }
 int _test_unblockmalloc() { n_malloc_block--; return 0; }
 
-static string fmt_callstack(int top)
+static string fmt_stackentry(bool verbose, cstring file, int line)
+{
+	if (file == cur_test->filename) return (verbose?"line ":"")+tostring(line);
+	else return file+":"+tostring(line);
+}
+static string fmt_callstack(cstring file, int top)
 {
 	if (top<0) return "";
 	
-	string ret = " (line "+tostring(top);
+	string ret = " ("+fmt_stackentry(true, file, top);
 	
 	for (int i=callstack.size()-1;i>=0;i--)
 	{
-		ret += ", called from "+tostring(callstack[i]);
+		ret += ", called from "+fmt_stackentry(false, callstack[i].file, callstack[i].line);
 	}
 	
 	return ret+")";
 }
-static string stack(int top)
+static string stack(cstring file, int top)
 {
-	string ret = fmt_callstack(top);
+	string ret = fmt_callstack(file, top);
 	
-	for (int i=ctxstack.size()-1;i>=0;i--)
+	for (cstring ctx : ctxstack)
 	{
-		ret += " ("+ctxstack[i]+")";
+		ret += " ("+ctx+")";
 	}
 	return ret;
 }
@@ -131,20 +140,20 @@ static void _testfail(cstring why)
 	test_throw(err_fail);
 }
 
-void _testfail(cstring why, int line)
+void _testfail(cstring why, cstring file, int line)
 {
-	_testfail(why+stack(line));
+	_testfail(why+stack(file, line));
 }
 
-void _testcmpfail(cstring name, int line, cstring expected, cstring actual)
+void _testcmpfail(cstring name, cstring file, int line, cstring expected, cstring actual)
 {
 	//if (expected.contains("\n") || actual.contains("\n") || name.length()+expected.length()+actual.length() > 240)
 	{
-		_testfail("\nFailed assertion "+name+stack(line)+"\nexpected: "+expected+"\nactual:   "+actual);
+		_testfail("\nFailed assertion "+name+stack(file, line)+"\nexpected: "+expected+"\nactual:   "+actual);
 	}
 	//else
 	//{
-	//	_testfail("\nFailed assertion "+name+stack(line)+": expected "+expected+", got "+actual);
+	//	_testfail("\nFailed assertion "+name+stack(file, line)+": expected "+expected+", got "+actual);
 	//}
 }
 
@@ -436,7 +445,9 @@ int main(int argc, char* argv[])
 				uint64_t end_time = time_us_ne();
 				uint64_t time_us = end_time - start_time;
 				uint64_t time_lim = (all_tests ? 5000*1000 : 500*1000);
+				runloop_blocktest_recycle(runloop::global());
 				runloop::global()->assert_empty();
+				assert_eq(n_malloc_block, 0);
 				if (time_us > time_lim)
 				{
 					printf("too slow: max %uus, got %uus\n", (unsigned)time_lim, (unsigned)time_us);

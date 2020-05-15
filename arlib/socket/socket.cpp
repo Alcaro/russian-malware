@@ -10,10 +10,13 @@
 	#define MSG_NOSIGNAL 0
 	#define MSG_DONTWAIT 0
 	#define SOCK_CLOEXEC 0
+	#define SOCK_NONBLOCK 0
+	#define EINPROGRESS WSAEINPROGRESS
 	#define close closesocket
 	#ifdef _MSC_VER
 		#pragma comment(lib, "ws2_32.lib")
 	#endif
+	typedef intptr_t socketint_t;
 #else
 	#include <netdb.h>
 	#include <errno.h>
@@ -22,10 +25,11 @@
 	
 	#include <netinet/tcp.h>
 	#include <arpa/inet.h>
+	typedef int socketint_t;
 #endif
 
 //wrapper because 'socket' is a type in this code, so socket(2) needs another name
-static int mksocket(int domain, int type, int protocol) { return socket(domain, type|SOCK_CLOEXEC, protocol); }
+static socketint_t mksocket(int domain, int type, int protocol) { return socket(domain, type|SOCK_CLOEXEC, protocol); }
 #define socket socket_t
 
 namespace {
@@ -48,25 +52,24 @@ static int fixret(int ret)
 	if (ret == 0) return socket::e_closed;
 #ifdef __unix__
 	if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return 0;
-#endif
-#ifdef _WIN32
+#else
 	if (ret < 0 && WSAGetLastError() == WSAEWOULDBLOCK) return 0;
 #endif
 	return socket::e_broken;
 }
 
-static int setsockopt(int socket, int level, int option_name, const void * option_value, socklen_t option_len)
+static int setsockopt(socketint_t socket, int level, int option_name, const void * option_value, socklen_t option_len)
 {
 	return ::setsockopt(socket, level, option_name, (char*)/*lol windows*/option_value, option_len);
 }
 
-static int setsockopt(int socket, int level, int option_name, int option_value)
+static int setsockopt(socketint_t socket, int level, int option_name, int option_value)
 {
 	return setsockopt(socket, level, option_name, &option_value, sizeof(option_value));
 }
 
 //MSG_DONTWAIT is usually better, but accept() and connect() don't take that argument
-static void MAYBE_UNUSED setblock(int fd, bool newblock)
+static void MAYBE_UNUSED setblock(socketint_t fd, bool newblock)
 {
 #ifdef _WIN32
 	u_long nonblock = !newblock;
@@ -103,8 +106,7 @@ static int connect(cstring domain, int port)
 	addrinfo * addr = parse_hostname(domain, port, false);
 	if (!addr) return -1;
 	
-	//TODO: this probably fails on windows...
-	int fd = mksocket(addr->ai_family, addr->ai_socktype | SOCK_CLOEXEC | SOCK_NONBLOCK, addr->ai_protocol);
+	socketint_t fd = mksocket(addr->ai_family, addr->ai_socktype | SOCK_CLOEXEC | SOCK_NONBLOCK, addr->ai_protocol);
 	if (fd < 0) return -1;
 #ifndef _WIN32
 	//because 30 second pauses are unequivocally detestable
@@ -145,14 +147,19 @@ static int connect(cstring domain, int port)
 
 class socket_raw : public socket {
 public:
-	socket_raw(int fd, runloop* loop) : fd(fd), loop(loop) {}
+	socket_raw(socketint_t fd, runloop* loop) : fd(fd), loop(loop) {}
 	
-	int fd;
+	socketint_t fd;
+#ifdef _WIN32
+	MAKE_DESTRUCTIBLE_FROM_CALLBACK();
+	HANDLE waiter = CreateEvent(NULL, true, false, NULL);
+#endif
+	
 	runloop* loop = NULL;
 	function<void()> cb_read;
 	function<void()> cb_write;
 	
-	static socket* create(int fd, runloop* loop)
+	static socket* create(socketint_t fd, runloop* loop)
 	{
 		if (fd<0) return NULL;
 		return new socket_raw(fd, loop);
@@ -168,33 +175,52 @@ public:
 		return fixret(::send(this->fd, (char*)data.ptr(), data.size(), MSG_NOSIGNAL));
 	}
 	
-	/*private*/ void on_readable(uintptr_t) { cb_read(); }
-	/*private*/ void on_writable(uintptr_t) { cb_write(); }
 	void callback(function<void()> cb_read, function<void()> cb_write)
 	{
 		this->cb_read = cb_read;
 		this->cb_write = cb_write;
+#ifdef __unix__
 		loop->set_fd(fd,
-		             cb_read  ? bind_this(&socket_raw::on_readable) : NULL,
-		             cb_write ? bind_this(&socket_raw::on_writable) : NULL);
+		             cb_read  ? bind_lambda([this](uintptr_t) { this->cb_read();  }) : NULL,
+		             cb_write ? bind_lambda([this](uintptr_t) { this->cb_write(); }) : NULL);
+#else
+		WSAEventSelect(fd, waiter, (cb_read ? FD_READ : 0) | (cb_write ? FD_WRITE : 0) | FD_CLOSE);
+		// don't know whether readable or writable; call both, they'll deal with zero bytes
+		loop->set_object(waiter, (cb_read || cb_write) ? bind_lambda([this](HANDLE)
+			{
+				ResetEvent(this->waiter);
+				RETURN_IF_CALLBACK_DESTRUCTS(this->cb_write());
+				RETURN_IF_CALLBACK_DESTRUCTS(this->cb_read());
+			}) : NULL);
+#endif
 	}
 	
 	~socket_raw()
 	{
+#ifndef _WIN32
 		loop->set_fd(fd, NULL, NULL);
+#endif
 		close(fd);
+#ifdef _WIN32
+		loop->set_object(waiter, NULL);
+		CloseHandle(waiter);
+#endif
 	}
 };
 
 class socket_raw_udp : public socket {
 public:
-	socket_raw_udp(int fd, sockaddr * addr, socklen_t addrlen, runloop* loop)
+	socket_raw_udp(socketint_t fd, sockaddr * addr, socklen_t addrlen, runloop* loop)
 		: fd(fd), loop(loop), peeraddr((uint8_t*)addr, addrlen)
 	{
 		peeraddr_cmp.resize(addrlen);
 	}
 	
-	int fd;
+	socketint_t fd;
+#ifdef _WIN32
+	MAKE_DESTRUCTIBLE_FROM_CALLBACK();
+	HANDLE waiter = CreateEvent(NULL, true, false, NULL);
+#endif
 	
 	runloop* loop;
 	function<void()> cb_read;
@@ -209,7 +235,7 @@ public:
 		int ret = fixret(::recvfrom(fd, (char*)data.ptr(), data.size(), MSG_NOSIGNAL, (sockaddr*)peeraddr_cmp.ptr(), &len));
 		//discard data from unexpected sources. source IPs can be forged under UDP, but probably helps a little
 		//TODO: may be better to implement recvfrom as an actual function on those sockets
-		if (len != peeraddr.size() || peeraddr != peeraddr_cmp) return 0;
+		if (len != (socklen_t)peeraddr.size() || peeraddr != peeraddr_cmp) return 0;
 		return ret;
 	}
 	
@@ -224,15 +250,32 @@ public:
 	{
 		this->cb_read = cb_read;
 		this->cb_write = cb_write;
+#ifdef __unix__
 		loop->set_fd(fd,
 		             cb_read  ? bind_this(&socket_raw_udp::on_readable) : NULL,
 		             cb_write ? bind_this(&socket_raw_udp::on_writable) : NULL);
+#else
+		WSAEventSelect(fd, waiter, (cb_read ? FD_READ : 0) | (cb_write ? FD_WRITE : 0) | FD_CLOSE);
+		// don't know whether readable or writable; call both, they'll deal with zero bytes
+		loop->set_object(waiter, (cb_read || cb_write) ? bind_lambda([this](HANDLE)
+			{
+				ResetEvent(this->waiter);
+				RETURN_IF_CALLBACK_DESTRUCTS(this->cb_write());
+				RETURN_IF_CALLBACK_DESTRUCTS(this->cb_read());
+			}) : NULL);
+#endif
 	}
 	
 	~socket_raw_udp()
 	{
+#ifdef __unix__
 		loop->set_fd(fd, NULL, NULL);
+#endif
 		close(fd);
+#ifdef _WIN32
+		loop->set_object(waiter, NULL);
+		CloseHandle(waiter);
+#endif
 	}
 };
 
@@ -342,7 +385,7 @@ public:
 	/*private*/ void set_loop()
 	{
 		if (!child) return;
-		child->callback(cb_read, tosend.remaining() ? bind_this(&socketbuf::trysend_void) : NULL);
+		child->callback(cb_read, tosend ? bind_this(&socketbuf::trysend_void) : NULL);
 		
 		if (cb_write || (cb_read && !child))
 		{
@@ -414,7 +457,7 @@ socket* socket::create_udp(cstring domain, int port, runloop* loop)
 	addrinfo * addr = parse_hostname(domain, port, true);
 	if (!addr) return NULL;
 	
-	int fd = mksocket(addr->ai_family, addr->ai_socktype | SOCK_CLOEXEC | SOCK_NONBLOCK, addr->ai_protocol);
+	socketint_t fd = mksocket(addr->ai_family, addr->ai_socktype | SOCK_CLOEXEC | SOCK_NONBLOCK, addr->ai_protocol);
 	socket* ret = new socket_raw_udp(fd, addr->ai_addr, addr->ai_addrlen, loop);
 	freeaddrinfo(addr);
 	//TODO: teach the wrapper about UDP, then add it
@@ -438,8 +481,7 @@ socket* socket::create_sslmaybe(bool ssl, cstring domain, int port, runloop* loo
 }
 
 
-#if 0
-static MAYBE_UNUSED int socketlisten_create_ip4(int port)
+static MAYBE_UNUSED socketint_t socketlisten_create_ip4(int port)
 {
 	struct sockaddr_in sa;
 	memset(&sa, 0, sizeof(sa));
@@ -447,7 +489,7 @@ static MAYBE_UNUSED int socketlisten_create_ip4(int port)
 	sa.sin_addr.s_addr = htonl(INADDR_ANY);
 	sa.sin_port = htons(port);
 	
-	int fd = mksocket(AF_INET, SOCK_STREAM, 0);
+	socketint_t fd = mksocket(AF_INET, SOCK_STREAM, 0);
 	if (fd < 0) goto fail;
 	
 	if (bind(fd, (struct sockaddr*)&sa, sizeof(sa)) < 0) goto fail;
@@ -459,7 +501,7 @@ fail:
 	return -1;
 }
 
-static int socketlisten_create_ip6(int port)
+static socketint_t socketlisten_create_ip6(int port)
 {
 	struct sockaddr_in6 sa; // IN6ADDR_ANY_INIT should work, but doesn't.
 	memset(&sa, 0, sizeof(sa));
@@ -467,7 +509,7 @@ static int socketlisten_create_ip6(int port)
 	sa.sin6_addr = in6addr_any;
 	sa.sin6_port = htons(port);
 	
-	int fd = mksocket(AF_INET6, SOCK_STREAM, 0);
+	socketint_t fd = mksocket(AF_INET6, SOCK_STREAM, 0);
 	if (fd < 0) return -1;
 	
 	if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, false) < 0) goto fail;
@@ -480,11 +522,11 @@ fail:
 	return -1;
 }
 
-socketlisten* socketlisten::create(int port)
+socketlisten* socketlisten::create(int port, runloop* loop, function<void(autoptr<socket>)> callback)
 {
 	initialize();
 	
-	int fd = -1;
+	socketint_t fd = -1;
 	if (fd<0) fd = socketlisten_create_ip6(port);
 #if defined(_WIN32) && _WIN32_WINNT < _WIN32_WINNT_LONGHORN
 	// XP can't dualstack the v6 addresses, so let's keep the fallback
@@ -492,14 +534,41 @@ socketlisten* socketlisten::create(int port)
 #endif
 	if (fd<0) return NULL;
 	
-	setblock(fd, false);
-	return new socketlisten(fd);
+	return new socketlisten(fd, loop, callback);
 }
 
-socket* socketlisten::accept()
+socketlisten::socketlisten(socketint_t fd, runloop* loop, function<void(autoptr<socket>)> callback)
+	: fd(fd), loop(loop), callback(callback)
 {
-	return socket_wrap(::accept(this->fd, NULL,NULL));
+	setblock(fd, false);
+#ifdef __unix__
+	loop->set_fd(fd, [this](uintptr_t n) {
+#ifdef __linux__
+		int nfd = accept4(this->fd, NULL, NULL, SOCK_CLOEXEC);
+#else
+		int nfd = accept(this->fd, NULL, NULL);
+#endif
+		if (nfd < 0) return;
+		this->callback(new socketbuf(socket_raw::create(nfd, this->loop), this->loop));
+	});
+#else
+	WSAEventSelect(fd, waiter, FD_ACCEPT);
+	loop->set_object(waiter, [this](HANDLE h) {
+		ResetEvent(this->waiter);
+		socketint_t nfd = accept(this->fd, NULL, NULL);
+		if (nfd < 0) return;
+		this->callback(new socketbuf(socket_raw::create(nfd, this->loop), this->loop));
+	});
+#endif
 }
 
-socketlisten::~socketlisten() { if (loop) loop->set_fd(fd, NULL, NULL); close(this->fd); }
+socketlisten::~socketlisten()
+{
+#ifdef __unix__
+	loop->set_fd(fd, NULL, NULL);
+#else
+	loop->set_object(waiter, NULL);
+	CloseHandle(waiter);
 #endif
+	close(fd);
+}

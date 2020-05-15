@@ -17,6 +17,10 @@
 #define UNLIKELY(expr)  (expr)
 #endif
 
+#if __cplusplus < 201703L
+#error need C++17
+#endif
+
 template<typename T> class function;
 template<typename Tr, typename... Ta>
 class function<Tr(Ta...)> {
@@ -31,7 +35,7 @@ class function<Tr(Ta...)> {
 	
 	Tfp func;
 	void* ctx;
-	refcount* ref = NULL;
+	refcount* ref;
 	
 	class dummy {};
 	
@@ -63,11 +67,13 @@ class function<Tr(Ta...)> {
 		{
 			func = freewrap;
 			ctx = (void*)fp;
+			ref = NULL;
 		}
 		else
 		{
 			func = empty;
 			ctx = (void*)empty;
+			ref = NULL;
 		}
 	}
 	
@@ -75,6 +81,7 @@ class function<Tr(Ta...)> {
 	{
 		this->func = fp;
 		this->ctx = ctx;
+		this->ref = NULL;
 	}
 	
 	template<typename Tl>
@@ -149,6 +156,7 @@ public:
 	{
 		this->func = (Tfp)(Tr(*)(Tc*, Ta...))lambda;
 		this->ctx = (void*)ctx;
+		this->ref = NULL;
 	}
 	
 	template<typename Tl, typename Tc>

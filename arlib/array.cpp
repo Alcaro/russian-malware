@@ -183,9 +183,30 @@ test("array", "", "array")
 	{
 		array<int> x = { 1, 2, 3, 4, 5 };
 		x.swap(1,3);
-		assert_eq(tostring_dbg(x), "1,4,3,2,5");
+		assert_eq(tostring_dbg(x), "[1,4,3,2,5]");
 		x.swap(3,1);
-		assert_eq(tostring_dbg(x), "1,2,3,4,5");
+		assert_eq(tostring_dbg(x), "[1,2,3,4,5]");
+	}
+	
+	{
+		array<int> x = { 13,43,11,21,41,31,42,23,33,14,32,22,44,12,34,24 };
+		array<int> y = { 13,11,14,12,21,23,22,24,31,33,32,34,43,41,42,44 };
+		x.ssort([](const int& a, const int& b) { assert(&a > &b); return a/10 < b/10; });
+		assert_eq(x, y);
+	}
+	
+	{
+		array<int> x = { 0,1,2,3,4,5,6,7,8,9 };
+		int n_comp = 0;
+		x.ssort([&](int a, int b) { n_comp++; return a<b; });
+		assert_lte(n_comp, x.size());
+	}
+	
+	{
+		array<int> x;
+		x.insert(0, 42);
+		for (int i : range(50))
+			x.insert(i, x[i]); // passes if Valgrind is happy
 	}
 }
 

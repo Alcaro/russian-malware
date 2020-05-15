@@ -5,7 +5,7 @@
 
 // TODO: this class needs to be rewritten
 // commonly needed usecases, like file::readall, should not depend on unnecessary functionality, like seeking
-// (/dev/stdin is unseekable, and gvfs http seek sometimes fails)
+// (/dev/stdin is unseekable, and gvfs http seek is unreliable)
 //
 // usecases:
 // read all, read streaming, read random
@@ -16,12 +16,12 @@
 //
 // read all should, as now, be a single function, but implemented in the backend
 //  since typical usecase is passing return value to e.g. JSON::parse, it should return normal array<uint8_t> or string
-// replace should also be a backend function, but it should be atomic, initially writing to filename+".aswptmp" (remember to fsync)
+// replace should also be a backend function, but it should be atomic, initially writing to filename+".swptmp" (remember to fsync)
 //  ideally, it'd be open(O_TMPFILE)+linkat(O_REPLACE), but kernel doesn't allow that
 // mmap shouldn't be in the file object either, but take a filename and return an arrayview(w)<byte> child with a dtor
 // read-and-lock should also be a function, also returning an arrayview<uint8_t> child with a dtor
 //  this one should also have a 'replace contents' member, still atomic (flock the new one before renaming)
-// async can be ignored for now; it's rarely useful, async local file needs threads on linux, and async gvfs requires glib runloop
+// async can be ignored for now; it's rarely useful, async local file needs threads on linux, and async without coroutines is painful
 // the other four combinations belong in the file object; replace/append streaming is useful for logs
 //  they should use seek/read/size as primitives, not pread
 

@@ -45,7 +45,7 @@ cat > Makefile <<-EOF
 	ARTHREAD = 0
 	ARWUTF = 0
 	ARSOCKET = 0
-	#valid values: openssl (default), gnutls, tlse, bearssl, no
+	#valid values: openssl (default), gnutls, bearssl, no
 	ARSOCKET_SSL = openssl
 	#valid values: schannel (default), bearssl, no (others may work, not tested)
 	ARSOCKET_SSL_WINDOWS = schannel

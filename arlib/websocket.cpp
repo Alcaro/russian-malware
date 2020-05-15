@@ -88,8 +88,8 @@ again:
 	if (msg.size() < headsize) return;
 	
 	size_t msgsize = headsize + headsizespec;
-	if (headsizespec == 126) msgsize = headsize + bigend<uint16_t>(msg.slice(2, 2));
-	if (headsizespec == 127) msgsize = headsize + bigend<uint64_t>(msg.slice(2, 8));
+	if (headsizespec == 126) msgsize = headsize + readu_be16(msg.slice(2, 2).ptr());
+	if (headsizespec == 127) msgsize = headsize + readu_be64(msg.slice(2, 8).ptr());
 	
 	if (msg.size() < msgsize) return;
 	

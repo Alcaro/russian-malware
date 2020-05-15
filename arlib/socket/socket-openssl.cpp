@@ -18,10 +18,10 @@ RUN_ONCE_FN(initialize)
 }
 
 #if OPENSSL_VERSION_NUMBER < 0x10002000
-static bool validate_hostname(const char * hostname, const X509 * server_cert);
+#error please upgrade your openssl
 #endif
 
-class socketssl_impl : public socket {
+class socketssl_openssl : public socket {
 public:
 	runloop* loop;
 	autoptr<socket> sock;
@@ -35,7 +35,7 @@ public:
 	function<void()> cb_read;
 	function<void()> cb_write;
 	
-	DECL_TIMER(timer, socketssl_impl);
+	DECL_TIMER(timer, socketssl_openssl);
 	MAKE_DESTRUCTIBLE_FROM_CALLBACK();
 	
 #if OPENSSL_VERSION_NUMBER < 0x10002000 // < 1.0.2
@@ -43,7 +43,7 @@ public:
 	string domain;
 #endif
 	
-	socketssl_impl(socket* parent, cstring domain, runloop* loop, bool permissive)
+	socketssl_openssl(socket* parent, cstring domain, runloop* loop, bool permissive)
 	{
 		this->loop = loop;
 		
@@ -56,17 +56,12 @@ public:
 		SSL_set_tlsext_host_name(ssl, (const char*)domain.c_str());
 		SSL_set_bio(ssl, from_sock, to_sock);
 		
-		//the fuck kind of drugs is SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER,
+		//what kind of drugs are SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER,
 		// what possible excuse could there be for that to not always be on
 		//partial writes are perfectly fine with me, and seem mandatory on nonblocking BIOs, enable that too
 		SSL_set_mode(ssl, SSL_MODE_ENABLE_PARTIAL_WRITE | SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
 		
 		SSL_set_verify(ssl, permissive ? SSL_VERIFY_NONE : SSL_VERIFY_PEER, NULL);
-		
-#if OPENSSL_VERSION_NUMBER < 0x10002000
-		this->permissive = permissive;
-		this->domain = domain;
-#endif
 		
 #if OPENSSL_VERSION_NUMBER >= 0x10002000 && OPENSSL_VERSION_NUMBER < 0x10100000 // >= 1.0.2, < 1.1.0
 		if (!permissive)
@@ -145,8 +140,8 @@ public:
 	{
 		if (sock)
 		{
-			sock->callback(                  bind_this(&socketssl_impl::on_readable),
-			          BIO_pending(to_sock) ? bind_this(&socketssl_impl::on_writable) : NULL);
+			sock->callback(                  bind_this(&socketssl_openssl::on_readable),
+			          BIO_pending(to_sock) ? bind_this(&socketssl_openssl::on_writable) : NULL);
 		}
 	}
 	
@@ -163,8 +158,10 @@ public:
 			if (buflen > 4096) buflen = 4096;
 			
 			int bytes = sock->send(arrayview<uint8_t>((uint8_t*)buf, buflen));
+//printf("(send %d crypt)",bytes);fflush(stdout);
 //printf("SOCKWRITE(%li)=%i\n",buflen,bytes);
 			if (bytes < 0) sock = NULL;
+//else puts(tostringhex_dbg(arrayview<uint8_t>((uint8_t*)buf,bytes)));
 			if (bytes > 0)
 			{
 				uint8_t discard[4096];
@@ -185,7 +182,9 @@ public:
 		int bytes = sock->recv(buf);
 //VALGRIND_PRINTF_BACKTRACE
 //printf("SOCKREAD(4096)=%i\n",bytes);
+//printf("(recv %d crypt)",bytes);fflush(stdout);
 		if (bytes < 0) sock = NULL;
+//else puts(tostringhex_dbg(arrayview<uint8_t>(buf,bytes)));
 		if (bytes > 0)
 		{
 			int bytes2 = BIO_write(from_sock, buf, bytes);
@@ -238,10 +237,10 @@ public:
 	{
 		this->cb_read = cb_read;
 		this->cb_write = cb_write;
-		if (cb_write) timer.set_idle(bind_this(&socketssl_impl::update));
+		if (cb_write) timer.set_idle(bind_this(&socketssl_openssl::update));
 	}
 	
-	~socketssl_impl()
+	~socketssl_openssl()
 	{
 		if (sock)
 		{
@@ -259,7 +258,7 @@ socket* socket::wrap_ssl_raw(socket* inner, cstring domain, runloop* loop)
 	initialize();
 	if (!ctx) return NULL;
 	if (!inner) return NULL;
-	return new socketssl_impl(inner, domain, loop, false);
+	return new socketssl_openssl(inner, domain, loop, false);
 }
 
 socket* socket::wrap_ssl_raw_noverify(socket* inner, runloop* loop)
@@ -267,7 +266,7 @@ socket* socket::wrap_ssl_raw_noverify(socket* inner, runloop* loop)
 	initialize();
 	if (!ctx) return NULL;
 	if (!inner) return NULL;
-	return new socketssl_impl(inner, "", loop, true);
+	return new socketssl_openssl(inner, "", loop, true);
 }
 
 #include "../test.h"
@@ -288,232 +287,6 @@ test("OpenSSL init", "array,base64", "tcp")
 	{
 		assert_lt(end_us-begin_us, 5000); // takes about 1ms - no clue why Bear is so much slower
 	}
-}
-#endif
-
-
-#if OPENSSL_VERSION_NUMBER < 0x10002000
-//from TLSe https://github.com/eduardsui/tlse/blob/90bdc5d/tlse.c#L2519
-#define bad_certificate -1
-static int tls_certificate_valid_subject_name(const unsigned char *cert_subject, const char *subject) {
-    // no subjects ...
-    if (((!cert_subject) || (!cert_subject[0])) && ((!subject) || (!subject[0])))
-        return 0;
-    
-    if ((!subject) || (!subject[0]))
-        return bad_certificate;
-    
-    if ((!cert_subject) || (!cert_subject[0]))
-        return bad_certificate;
-    
-    // exact match
-    if (!strcmp((const char *)cert_subject, subject))
-        return 0;
-    
-    const char *wildcard = strchr((const char *)cert_subject, '*');
-    if (wildcard) {
-        // 6.4.3 (1) The client SHOULD NOT attempt to match a presented identifier in
-        // which the wildcard character comprises a label other than the left-most label
-        if (!wildcard[1]) {
-            // subject is [*]
-            // or
-            // subject is [something*] .. invalid
-            return bad_certificate;
-        }
-        wildcard++;
-        const char *match = strstr(subject, wildcard);
-        if ((!match) && (wildcard[0] == '.')) {
-            // check *.domain.com agains domain.com
-            wildcard++;
-            if (!strcasecmp(subject, wildcard))
-                return 0;
-        }
-        if (match) {
-            unsigned long offset = (unsigned long)match - (unsigned long)subject;
-            if (offset) {
-                // check for foo.*.domain.com against *.domain.com (invalid)
-                if (memchr(subject, '.', offset))
-                    return bad_certificate;
-            }
-            // check if exact match
-            if (!strcasecmp(match, wildcard))
-                return 0;
-        }
-    }
-    
-    return bad_certificate;
-}
-
-//copypasted from https://wiki.openssl.org/index.php/Hostname_validation
-//and modified a bit (for example to add a missing cast)
-/*
-Copyright (C) 2012, iSEC Partners.
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of
-this software and associated documentation files (the "Software"), to deal in
-the Software without restriction, including without limitation the rights to
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
-of the Software, and to permit persons to whom the Software is furnished to do
-so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
- */
-
-/*
- * Helper functions to perform basic hostname validation using OpenSSL.
- *
- * Please read "everything-you-wanted-to-know-about-openssl.pdf" before
- * attempting to use this code. This whitepaper describes how the code works,
- * how it should be used, and what its limitations are.
- *
- * Author:  Alban Diquet
- * License: See LICENSE
- *
- */
-
-// Get rid of OSX 10.7 and greater deprecation warnings.
-#if defined(__APPLE__) && defined(__clang__)
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-#endif
-
-//#include <openssl/ssl.h>
-
-//#include "openssl_hostname_validation.h"
-//#include "hostcheck.h"
-
-#define HOSTNAME_MAX_SIZE 255
-enum HostnameValidationResult { Error, MalformedCertificate, NoSANPresent, MatchFound, MatchNotFound };
-
-/**
-* Tries to find a match for hostname in the certificate's Common Name field.
-*
-* Returns MatchFound if a match was found.
-* Returns MatchNotFound if no matches were found.
-* Returns MalformedCertificate if the Common Name had a NUL character embedded in it.
-* Returns Error if the Common Name could not be extracted.
-*/
-static HostnameValidationResult matches_common_name(const char *hostname, const X509 *server_cert) {
-        int common_name_loc = -1;
-        X509_NAME_ENTRY *common_name_entry = NULL;
-        ASN1_STRING *common_name_asn1 = NULL;
-        char *common_name_str = NULL;
-
-        // Find the position of the CN field in the Subject field of the certificate
-        common_name_loc = X509_NAME_get_index_by_NID(X509_get_subject_name((X509 *) server_cert), NID_commonName, -1);
-        if (common_name_loc < 0) {
-                return Error;
-        }
-
-        // Extract the CN field
-        common_name_entry = X509_NAME_get_entry(X509_get_subject_name((X509 *) server_cert), common_name_loc);
-        if (common_name_entry == NULL) {
-                return Error;
-        }
-
-        // Convert the CN field to a C string
-        common_name_asn1 = X509_NAME_ENTRY_get_data(common_name_entry);
-        if (common_name_asn1 == NULL) {
-                return Error;
-        }
-        common_name_str = (char *) ASN1_STRING_data(common_name_asn1);
-
-        // Make sure there isn't an embedded NUL character in the CN
-        if ((size_t)ASN1_STRING_length(common_name_asn1) != strlen(common_name_str)) {
-                return MalformedCertificate;
-        }
-
-        // Compare expected hostname with the CN
-        if (tls_certificate_valid_subject_name((uint8_t*)common_name_str, hostname)==0) {
-                return MatchFound;
-        }
-        else {
-                return MatchNotFound;
-        }
-}
-
-
-/**
-* Tries to find a match for hostname in the certificate's Subject Alternative Name extension.
-*
-* Returns MatchFound if a match was found.
-* Returns MatchNotFound if no matches were found.
-* Returns MalformedCertificate if any of the hostnames had a NUL character embedded in it.
-* Returns NoSANPresent if the SAN extension was not present in the certificate.
-*/
-static HostnameValidationResult matches_subject_alternative_name(const char *hostname, const X509 *server_cert) {
-        HostnameValidationResult result = MatchNotFound;
-        int i;
-        int san_names_nb = -1;
-        STACK_OF(GENERAL_NAME) *san_names = NULL;
-
-        // Try to extract the names within the SAN extension from the certificate
-        san_names = (STACK_OF(GENERAL_NAME)*)X509_get_ext_d2i((X509 *) server_cert, NID_subject_alt_name, NULL, NULL);
-        if (san_names == NULL) {
-                return NoSANPresent;
-        }
-        san_names_nb = sk_GENERAL_NAME_num(san_names);
-
-        // Check each name within the extension
-        for (i=0; i<san_names_nb; i++) {
-                const GENERAL_NAME *current_name = sk_GENERAL_NAME_value(san_names, i);
-
-                if (current_name->type == GEN_DNS) {
-                        // Current name is a DNS name, let's check it
-                        char *dns_name = (char *) ASN1_STRING_data(current_name->d.dNSName);
-
-                        // Make sure there isn't an embedded NUL character in the DNS name
-                        if ((size_t)ASN1_STRING_length(current_name->d.dNSName) != strlen(dns_name)) {
-                                result = MalformedCertificate;
-                                break;
-                        }
-                        else { // Compare expected hostname with the DNS name
-                                if (tls_certificate_valid_subject_name((uint8_t*)dns_name, hostname)==0) {
-                                        result = MatchFound;
-                                        break;
-                                }
-                        }
-                }
-        }
-        sk_GENERAL_NAME_pop_free(san_names, GENERAL_NAME_free);
-
-        return result;
-}
-
-
-/**
-* Validates the server's identity by looking for the expected hostname in the
-* server's certificate. As described in RFC 6125, it first tries to find a match
-* in the Subject Alternative Name extension. If the extension is not present in
-* the certificate, it checks the Common Name instead.
-*
-* Returns MatchFound if a match was found.
-* Returns MatchNotFound if no matches were found.
-* Returns MalformedCertificate if any of the hostnames had a NUL character embedded in it.
-* Returns Error if there was an error.
-*/
-static bool validate_hostname(const char *hostname, const X509 *server_cert) {
-        HostnameValidationResult result;
-
-        if((hostname == NULL) || (server_cert == NULL))
-                return false;
-
-        // First try the Subject Alternative Names extension
-        result = matches_subject_alternative_name(hostname, server_cert);
-        if (result == NoSANPresent) {
-                // Extension was not found: try the Common Name
-                result = matches_common_name(hostname, server_cert);
-        }
-
-        return (result==MatchFound);
 }
 #endif
 #endif

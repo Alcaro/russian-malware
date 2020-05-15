@@ -1,11 +1,6 @@
 #include "json.h"
 #include "stringconv.h"
-#ifdef __SSE2__
-#include <emmintrin.h>
-#endif
-#ifdef _MSC_VER
-#error test, especially whether msvc uses __SSE2__
-#endif
+#include "simd.h"
 
 // TODO: find some better place for this
 // if input is 0, undefined behavior

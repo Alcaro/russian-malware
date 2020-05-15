@@ -132,13 +132,13 @@ public:
 	INIT_ONCE once = INIT_ONCE_STATIC_INIT;
 	static BOOL CALLBACK wrap(INIT_ONCE* once, void* param, void** context)
 	{
-		(*(function<void()>*)context)();
+		(*(function<void()>*)param)();
 		return TRUE;
 	}
 public:
 	void run(function<void()> fn)
 	{
-		InitOnceExecuteOnce(&once, wrap, NULL, (void**)&fn);
+		InitOnceExecuteOnce(&once, wrap, (void**)&fn, NULL); // parameter order is wrong in MSDN, check Wine sourcce before refactoring
 	}
 #else
 	enum { st_uninit, st_busy, st_done };

@@ -4,6 +4,7 @@
 static int log2(uint32_t in)
 {
 #ifdef __GNUC__
+	static_assert(sizeof(uint32_t) == sizeof(unsigned));
 	// keep it as ^ despite - making more sense, gcc optimizes 31^clz way better than 31-clz
 	return 31 ^ __builtin_clz(in);
 #else

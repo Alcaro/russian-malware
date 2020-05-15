@@ -1,14 +1,17 @@
 #include "socket.h"
+#include "../test.h"
 
 //based on http://wayback.archive.org/web/20100528130307/http://www.coastrd.com/c-schannel-smtp
 //but heavily rewritten for stability and compactness
 
 #ifdef ARLIB_SSL_SCHANNEL
-#include "../thread.h"
+//#include "../thread.h"
+#include "../bytepipe.h"
 #ifndef _WIN32
 #error SChannel only exists on Windows
 #endif
 
+#undef socket
 #define SECURITY_WIN32
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +22,7 @@
 #include <schannel.h>
 #include <security.h>
 #include <sspi.h>
+#define socket socket_t
 
 namespace {
 
@@ -40,19 +44,15 @@ static CredHandle cred;
 #define SEC_Entry WINAPI
 #endif
 
-RUN_ONCE_FN(initialize)
+oninit()
 {
-	//linking a DLL is easy, but when there's only one exported function, spending the extra effort is worth it
-	HMODULE secur32 = LoadLibraryA("secur32.dll");
-	typedef PSecurityFunctionTableA SEC_Entry (*InitSecurityInterfaceA_t)(void);
-	InitSecurityInterfaceA_t InitSecurityInterfaceA = (InitSecurityInterfaceA_t)GetProcAddress(secur32, SECURITY_ENTRYPOINT_ANSIA);
 	SSPI = InitSecurityInterfaceA();
 	
 	SCHANNEL_CRED SchannelCred = {};
 	SchannelCred.dwVersion = SCHANNEL_CRED_VERSION;
 	SchannelCred.dwFlags = SCH_CRED_NO_DEFAULT_CREDS | SCH_USE_STRONG_CRYPTO;
 	// fun fact: IE11 doesn't use SCH_USE_STRONG_CRYPTO. I guess it favors accepting outdated servers over rejecting evil ones.
-	SchannelCred.grbitEnabledProtocols = SP_PROT_TLS1_2_CLIENT; // Microsoft recommends setting this to zero, but that makes it use TLS 1.0.
+	SchannelCred.grbitEnabledProtocols = SP_PROT_TLS1_2_CLIENT; // MS recommends setting this to zero, but that makes it use TLS 1.0.
 	//howsmyssl expects session ticket support for the Good rating, but that's only supported on windows 8, according to
 	// https://connect.microsoft.com/IE/feedback/details/997136/internet-explorer-11-on-windows-7-does-not-support-tls-session-tickets
 	//and I can't find which flag enables that, anyways
@@ -61,59 +61,37 @@ RUN_ONCE_FN(initialize)
 	                                NULL, &SchannelCred, NULL, NULL, &cred, NULL);
 }
 
-class socketssl_impl : public socket {
+class socketssl_schannel : public socket {
 public:
-	socket* sock;
+	socket* inner;
 	CtxtHandle ssl;
 	SecPkgContext_StreamSizes bufsizes;
 	
-	BYTE* recv_buf;
-	size_t recv_buf_len;
-	BYTE* ret_buf;
-	size_t ret_buf_len;
+	bytepipe recv_crypt;
+	bytepipe recv_plain;
+	bytepipe send_crypt;
 	
 	bool in_handshake;
 	bool permissive;
 	
-	void fetch(bool block)
+	function<void()> cb_read;
+	function<void()> cb_write;
+	
+	MAKE_DESTRUCTIBLE_FROM_CALLBACK();
+	
+	void fetch()
 	{
-		array<uint8_t> retbytes;
-		int ret = sock->recv(retbytes, block);
-		if (ret<0) return error();
-		
-		recv_buf = realloc(recv_buf, recv_buf_len + ret + 1024);
-		memcpy(recv_buf+recv_buf_len, retbytes.ptr(), ret);
-		recv_buf_len += ret;
+		arrayvieww<uint8_t> bytes = recv_crypt.push_buf(1024);
+		int ret = inner->recv(bytes);
+		if (ret < 0) return error();
+		recv_crypt.push_done(ret);
 	}
-	
-	void fetch() { fetch(true); }
-	void fetchnb() { fetch(false); }
-	
-	
-	void ret_realloc(int bytes)
-	{
-		if (bytes > 0)
-		{
-			ret_buf_len += bytes;
-			if (ret_buf_len > 1024)
-			{
-				ret_buf = realloc(ret_buf, ret_buf_len + 1024);
-			}
-		}
-	}
-	
-	
-	BYTE* tmpptr()
-	{
-		return recv_buf + recv_buf_len;
-	}
-	
 	
 	void error()
 	{
 		SSPI->DeleteSecurityContext(&ssl);
-		delete sock;
-		sock = NULL;
+		delete inner;
+		inner = NULL;
 		in_handshake = false;
 	}
 	
@@ -121,7 +99,8 @@ public:
 	{
 		if (!in_handshake) return;
 		
-		SecBuffer InBuffers[2] = { { recv_buf_len, SECBUFFER_TOKEN, recv_buf }, { 0, SECBUFFER_EMPTY, NULL } };
+		SecBuffer InBuffers[2] = { { (uint32_t)recv_crypt.size(), SECBUFFER_TOKEN, (void*)recv_crypt.pull_buf_full().ptr() },
+		                           { 0, SECBUFFER_EMPTY, NULL } };
 		SecBufferDesc InBufferDesc = { SECBUFFER_VERSION, 2, InBuffers };
 		
 		SecBuffer OutBuffer = { 0, SECBUFFER_TOKEN, NULL };
@@ -141,12 +120,7 @@ public:
 		{
 			if (OutBuffer.cbBuffer != 0 && OutBuffer.pvBuffer != NULL)
 			{
-				if (sock->send(arrayview<uint8_t>((BYTE*)OutBuffer.pvBuffer, OutBuffer.cbBuffer)) < 0)
-				{
-					SSPI->FreeContextBuffer(OutBuffer.pvBuffer);
-					error();
-					return;
-				}
+				send_crypt.push(arrayview<uint8_t>((BYTE*)OutBuffer.pvBuffer, OutBuffer.cbBuffer));
 				SSPI->FreeContextBuffer(OutBuffer.pvBuffer);
 			}
 		}
@@ -156,6 +130,7 @@ public:
 		if (scRet == SEC_E_OK)
 		{
 			in_handshake = false;
+			SSPI->QueryContextAttributes(&ssl, SECPKG_ATTR_STREAM_SIZES, &bufsizes);
 		}
 		
 		if (FAILED(scRet))
@@ -168,11 +143,10 @@ public:
 		// we don't support that, just ignore it
 		
 		if (InBuffers[1].BufferType == SECBUFFER_EXTRA)
-		{
-			memmove(recv_buf, recv_buf + (recv_buf_len - InBuffers[1].cbBuffer), InBuffers[1].cbBuffer);
-			recv_buf_len = InBuffers[1].cbBuffer;
-		}
-		else recv_buf_len = 0;
+			recv_crypt.pull_done(recv_crypt.size() - InBuffers[1].cbBuffer);
+		else recv_crypt.reset();
+		
+		if (scRet == SEC_E_OK) set_child_cb();
 	}
 	
 	bool handshake_first(const char * domain)
@@ -190,42 +164,38 @@ public:
 		
 		if (OutBuffer.cbBuffer != 0)
 		{
-			if (sock->send(arrayview<uint8_t>((BYTE*)OutBuffer.pvBuffer, OutBuffer.cbBuffer)) < 0)
-			{
-				SSPI->FreeContextBuffer(OutBuffer.pvBuffer);
-				error();
-				return false;
-			}
+			send_crypt.push(arrayview<uint8_t>((BYTE*)OutBuffer.pvBuffer, OutBuffer.cbBuffer));
+			process();
 			SSPI->FreeContextBuffer(OutBuffer.pvBuffer); // Free output buffer.
 		}
 		
 		in_handshake = true;
-		while (in_handshake) { fetch(); handshake(); }
 		return true;
 	}
 	
-	bool init(socket* parent, const char * domain, bool permissive)
+	bool init(socket* inner, const char * domain, bool permissive, runloop* loop)
 	{
-		if (!parent) return false;
+		if (!inner) return false;
 		
-		this->sock = parent;
-		this->fd = parent->get_fd();
-		this->recv_buf = malloc(2048);
-		this->recv_buf_len = 0;
-		this->ret_buf = malloc(2048);
-		this->ret_buf_len = 0;
-		
+		this->inner = inner;
 		this->permissive = permissive;
 		
 		if (!handshake_first(domain)) return false;
-		SSPI->QueryContextAttributes(&ssl, SECPKG_ATTR_STREAM_SIZES, &bufsizes);
+		set_child_cb();
 		
-		return (sock);
+		return (this->inner);
 	}
 	
 	void process()
 	{
 		handshake();
+		
+		if (send_crypt)
+		{
+			int ret = inner->send(send_crypt.pull_buf());
+			if (ret < 0) return error();
+			send_crypt.pull_done(ret);
+		}
 		
 		bool again = true;
 		
@@ -234,73 +204,68 @@ public:
 			again = false;
 			
 			SecBuffer Buffers[4] = {
-				{ recv_buf_len, SECBUFFER_DATA,  recv_buf },
-				{ 0,            SECBUFFER_EMPTY, NULL },
-				{ 0,            SECBUFFER_EMPTY, NULL },
-				{ 0,            SECBUFFER_EMPTY, NULL },
+				{ (uint32_t)recv_crypt.size(), SECBUFFER_DATA,  (void*)recv_crypt.pull_buf_full().ptr() },
+				{ 0,                           SECBUFFER_EMPTY, NULL },
+				{ 0,                           SECBUFFER_EMPTY, NULL },
+				{ 0,                           SECBUFFER_EMPTY, NULL },
 			};
 			SecBufferDesc Message = { SECBUFFER_VERSION, 4, Buffers };
 			
 			SECURITY_STATUS scRet = SSPI->DecryptMessage(&ssl, &Message, 0, NULL);
 			if (scRet == SEC_E_INCOMPLETE_MESSAGE) return;
-			else if (scRet == SEC_I_RENEGOTIATE)
-			{
-				in_handshake = true;
-			}
-			else if (scRet != SEC_E_OK)
-			{
-				error();
-				return;
-			}
+			else if (scRet == SEC_I_RENEGOTIATE) in_handshake = true;
+			else if (scRet != SEC_E_OK) return error();
 			
-			recv_buf_len = 0;
-			
-			// Locate data and (optional) extra buffers.
+			bool do_reset = true;
 			for (int i=0;i<4;i++)
 			{
 				if (Buffers[i].BufferType == SECBUFFER_DATA)
 				{
-					memcpy(ret_buf+ret_buf_len, Buffers[i].pvBuffer, Buffers[i].cbBuffer);
-					ret_realloc(Buffers[i].cbBuffer);
+					recv_plain.push(arrayview<uint8_t>((uint8_t*)Buffers[i].pvBuffer, Buffers[i].cbBuffer));
 					again = true;
 				}
 				if (Buffers[i].BufferType == SECBUFFER_EXTRA)
 				{
-					memmove(recv_buf, Buffers[i].pvBuffer, Buffers[i].cbBuffer);
-					recv_buf_len = Buffers[i].cbBuffer;
+					do_reset = false;
+					recv_crypt.pull_done(recv_crypt.size() - Buffers[i].cbBuffer);
+					again = true;
 				}
 			}
+			if (do_reset) recv_crypt.reset();
 		}
+		
+		set_child_cb();
 	}
 	
-	int recv(arrayvieww<uint8_t> data, bool block = false)
+	int recv(arrayvieww<uint8_t> data) override
 	{
-		if (!sock) return -1;
+		if (inner)
+		{
+			fetch();
+			process();
+		}
+		else if (!recv_plain) return -1;
 		
-		fetch(block);
-		process();
-		
-		size_t bytes_ret = ret_buf_len;
-		if (bytes_ret > data.size()) bytes_ret = data.size();
-		memcpy(data.ptr(), ret_buf, bytes_ret);
-		memmove(ret_buf, ret_buf+bytes_ret, ret_buf_len-bytes_ret);
-		ret_buf_len -= bytes_ret;
-		return bytes_ret;
+		arrayview<uint8_t> ret = recv_plain.pull_buf();
+		size_t n = min(ret.size(), data.size());
+		memcpy(data.ptr(), ret.ptr(), n);
+		recv_plain.pull_done(n);
+		return n;
 	}
 	
-	int sendp(arrayview<uint8_t> bytes, bool block = true)
+	int send(arrayview<uint8_t> bytes) override
 	{
-		if (!sock) return -1;
+		if (!inner) return -1;
+		if (in_handshake) return 0;
 		
-		const byte* data = bytes.ptr();
-		unsigned int len = bytes.size();
+		const uint8_t * data = bytes.ptr();
+		uint32_t len = bytes.size();
 		
-		fetchnb();
-		process();
+		fetch();
 		
-		BYTE* sendbuf = tmpptr(); // let's reuse this
+		BYTE sendbuf[0x1000];
 		
-		unsigned int maxmsglen = 0x1000 - bufsizes.cbHeader - bufsizes.cbTrailer;
+		unsigned int maxmsglen = sizeof(sendbuf) - bufsizes.cbHeader - bufsizes.cbTrailer;
 		if (len > maxmsglen) len = maxmsglen;
 		
 		memcpy(sendbuf+bufsizes.cbHeader, data, len);
@@ -313,26 +278,54 @@ public:
 		SecBufferDesc Message = { SECBUFFER_VERSION, 4, Buffers };
 		if (FAILED(SSPI->EncryptMessage(&ssl, 0, &Message, 0))) { error(); return -1; }
 		
-		if (sock->send(arrayview<uint8_t>(sendbuf, Buffers[0].cbBuffer + Buffers[1].cbBuffer + Buffers[2].cbBuffer)) < 0) error();
-		
+		send_crypt.push(arrayview<uint8_t>(sendbuf, Buffers[0].cbBuffer + Buffers[1].cbBuffer + Buffers[2].cbBuffer));
+		process();
 		return len;
 	}
 	
-	~socketssl_impl()
+	/*private*/ void set_child_cb()
+	{
+		if (inner)
+		{
+			inner->callback(bind_this(&socketssl_schannel::on_readable), send_crypt ? bind_this(&socketssl_schannel::on_writable) : NULL);
+		}
+	}
+	
+	/*private*/ void do_cbs()
+	{
+		while (cb_read  && (recv_plain    || !inner)) RETURN_IF_CALLBACK_DESTRUCTS(cb_read( ));
+		while (cb_write && (!in_handshake || !inner)) RETURN_IF_CALLBACK_DESTRUCTS(cb_write());
+		
+		set_child_cb();
+	}
+	
+	// TODO: clean this up
+	/*private*/ void on_readable() { fetch(); process(); do_cbs(); }
+	/*private*/ void on_writable() { fetch(); process(); do_cbs(); }
+	void callback(function<void()> cb_read, function<void()> cb_write)
+	{
+		this->cb_read = cb_read;
+		this->cb_write = cb_write;
+	}
+	
+	~socketssl_schannel()
 	{
 		error();
-		free(recv_buf);
-		free(ret_buf);
 	}
 };
 
 }
 
-socketssl* socketssl::create(socket* parent, cstring domain, bool permissive)
+socket* socket::wrap_ssl_raw(socket* inner, cstring domain, runloop* loop)
 {
-	initialize();
-	socketssl_impl* ret = new socketssl_impl();
-	if (!ret->init(parent, domain, permissive)) { delete ret; return NULL; }
+	socketssl_schannel* ret = new socketssl_schannel();
+	if (!ret->init(inner, domain.c_str(), false, loop)) { delete ret; return NULL; }
+	else return ret;
+}
+socket* socket::wrap_ssl_raw_noverify(socket* inner, runloop* loop)
+{
+	socketssl_schannel* ret = new socketssl_schannel();
+	if (!ret->init(inner, "example.com", true, loop)) { delete ret; return NULL; }
 	else return ret;
 }
 #endif

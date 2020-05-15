@@ -91,6 +91,8 @@ class jsonwriter {
 	void comma()
 	{
 		if (m_comma) m_data += ',';
+		m_comma = true;
+		
 		if (UNLIKELY(m_indent_block == 0))
 		{
 			if (m_indent_is_value)
@@ -108,7 +110,6 @@ class jsonwriter {
 				}
 			}
 		}
-		m_comma = true;
 	}
 	
 public:
@@ -141,6 +142,7 @@ public:
 		else m_indent_block++;
 	}
 	
+	// Can only be called once.
 	string finish() { return std::move(m_data); }
 };
 
@@ -271,7 +273,7 @@ public:
 	ALLINTS(JSONOPS)
 #undef JSONOPS
 	
-	//these technically aren't JSONw, but they act like them
+	//these technically aren't JSONw, but they have same binary representation so close enough
 	JSONw& operator[](int n) { return operator[]((size_t)n); }
 	JSONw& operator[](size_t n)
 	{

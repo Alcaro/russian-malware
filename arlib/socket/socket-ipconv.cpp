@@ -1,18 +1,24 @@
 #ifdef ARLIB_SOCKET
+#include "socket.h"
+#include "../stringconv.h"
+
+#undef socket
 #ifdef __unix__
 #include <arpa/inet.h>
 #define USE_INET_NTOP // should be disabled for testing
 #endif
-
-#include "socket.h"
-#include "../stringconv.h"
+#ifdef _WIN32
+#include <winsock2.h> // sockaddr_in, sockaddr_storage
+#include <ws2ipdef.h> // sockaddr_in6
+#endif
+#define socket socket_t
 
 #ifdef USE_INET_NTOP
 string socket::ip_to_string(arrayview<uint8_t> ip)
 {
 	char ret[INET6_ADDRSTRLEN];
 	int af = (ip.size() == 4 ? AF_INET : ip.size() == 16 ? AF_INET6 : AF_UNSPEC);
-//if (af == AF_INET6) return ""; // TODO: enable
+if (af == AF_INET6) return ""; // TODO: test
 	return inet_ntop(af, ip.ptr(), ret, INET6_ADDRSTRLEN);
 }
 #else
@@ -80,20 +86,29 @@ which IPs should be rendered as v4? ::ffff:0.0.0.0/96 only probably
 }
 #endif
 
-
-array<uint8_t> socket::string_to_ip(cstring str)
+static_assert(sizeof(sockaddr_storage) >= sizeof(sockaddr_in6));
+bool socket::ip_to_sockaddr(struct sockaddr_storage * sa, arrayview<uint8_t> bytes)
 {
-	uint8_t out[16];
-	return array<uint8_t>(out, string_to_ip(out, str));
+	if (bytes.size() == 4)
+	{
+		sockaddr_in* sa4 = (sockaddr_in*)sa;
+		memset(sa4, 0, sizeof(sockaddr_in));
+		sa4->sin_family = AF_INET;
+		memcpy(&sa4->sin_addr.s_addr, bytes.ptr(), 4);
+		return true;
+	}
+	if (bytes.size() == 16)
+	{
+		sockaddr_in6* sa6 = (sockaddr_in6*)sa;
+		memset(sa6, 0, sizeof(sockaddr_in6));
+		sa6->sin6_family = AF_INET6;
+		memcpy(&sa6->sin6_addr.s6_addr, bytes.ptr(), 16);
+		return true;
+	}
+	return false;
 }
 
-int socket::string_to_ip(arrayvieww<uint8_t> out, cstring str)
-{
-	if (out.size() < 16) abort();
-	if (string_to_ip4(out, str)) return 4;
-	if (string_to_ip6(out, str)) return 16;
-	return 0;
-}
+
 
 #ifdef USE_INET_NTOP
 bool socket::string_to_ip4(arrayvieww<uint8_t> out, cstring str)
@@ -110,6 +125,8 @@ return false; // TODO: enable
 #else
 bool socket::string_to_ip4(arrayvieww<uint8_t> out, cstring str)
 {
+	if (str.contains_nul()) return false;
+	
 	const char* inp = (char*)str.bytes().ptr();
 	const char* inpe = inp + str.length();
 	
@@ -137,9 +154,25 @@ bool socket::string_to_ip4(arrayvieww<uint8_t> out, cstring str)
 //TODO: implement
 bool socket::string_to_ip6(arrayvieww<uint8_t> out, cstring str)
 {
+	if (str.contains_nul()) return false;
+	
 	return false;
 }
 #endif
+
+array<uint8_t> socket::string_to_ip(cstring str)
+{
+	uint8_t out[16];
+	return array<uint8_t>(out, string_to_ip(out, str));
+}
+
+int socket::string_to_ip(arrayvieww<uint8_t> out, cstring str)
+{
+	if (out.size() < 16) abort();
+	if (string_to_ip4(out, str)) return 4;
+	if (string_to_ip6(out, str)) return 16;
+	return 0;
+}
 
 #include "../test.h"
 test("IP conversion", "array,string", "ipconv")
@@ -159,8 +192,8 @@ test("IP conversion", "array,string", "ipconv")
 	assert_bad("127.0.0");
 	assert_bad("1");
 	assert_bad("16777217");
-	assert_eq(tostringhex(socket::string_to_ip(arrayview<uint8_t>((uint8_t*)"1.1.1.1\0", 8))), "");
-	assert_eq(tostringhex(socket::string_to_ip(arrayview<uint8_t>((uint8_t*)"::1.1.1.1\0", 10))), "");
+	assert_eq(tostringhex(socket::string_to_ip("1.1.1.1"+string::nul())), "");
+	assert_eq(tostringhex(socket::string_to_ip("::1.1.1.1"+string::nul())), "");
 	
 	assert_eq(socket::ip_to_string(socket::string_to_ip("127.0.0.1")), "127.0.0.1");
 	

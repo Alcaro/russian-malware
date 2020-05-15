@@ -21,19 +21,18 @@ static void socket_test_httpfail(socket* sock, bool xfail, runloop* loop)
 		"Connection: close\r\n" // but the response is valid HTTP and that's all we care about
 		"\r\n";
 	
-	if (!xfail)
-		assert_eq(sock->send(http_get.bytes()), http_get.length());
-	else
-		assert_eq(sock->send(http_get.bytes()), http_get.length());
+	assert_eq(sock->send(http_get.bytes()), http_get.length());
 	
 	uint8_t buf[8];
 	size_t n_buf = 0;
 	
 	bool inside = false; // reject recursion
-	bool exited = false; // and calls after loop->exit()
+	bool exited = false; // and excessive calls after loop->exit()
+	int exit_calls = 0;
 	sock->callback(bind_lambda([&]()
 		{
 			assert(!exited);
+			if (exited) assert_lt(exit_calls++, 5);
 			assert(!inside);
 			
 			if (n_buf < 8)
@@ -46,6 +45,9 @@ static void socket_test_httpfail(socket* sock, bool xfail, runloop* loop)
 				if (xfail)
 				{
 					assert_lt(bytes, 0);
+					delete sock;
+					sock = NULL;
+					
 					loop->exit();
 					exited = true;
 				}
@@ -55,13 +57,16 @@ static void socket_test_httpfail(socket* sock, bool xfail, runloop* loop)
 					n_buf += bytes;
 				}
 			}
-			if (n_buf >= 8)
+			else if (n_buf >= 8)
 			{
 				uint8_t discard[4096];
 				
 				inside = true;
 				if (sock->recv(discard) < 0)
 				{
+					inside = false;
+					delete sock;
+					sock = NULL;
 					loop->exit();
 					exited = true;
 					return;
@@ -74,6 +79,9 @@ static void socket_test_httpfail(socket* sock, bool xfail, runloop* loop)
 	if (!xfail) assert_eq(string(arrayview<uint8_t>(buf)), "HTTP/1.1");
 	
 	loop->raw_timer_remove(timer);
+	
+	delete sock;
+	sock = NULL;
 }
 
 void socket_test_http(socket* sock, runloop* loop) { socket_test_httpfail(sock, false, loop); }
@@ -88,8 +96,8 @@ static void clienttest(cstring target, int port, bool ssl, bool xfail = false, b
 	auto creator = socket::create;
 	if (ssl)
 		creator = socket::create_ssl;
-	if (unsafe) 
-#ifdef ARLIB_SSL_OPENSSL
+	if (unsafe)
+#if defined(ARLIB_SSL_OPENSSL) || defined(ARLIB_SSL_SCHANNEL)
 		creator = [](cstring domain, int port, runloop* loop) -> socket*
 			{
 				return socket::wrap(socket::wrap_ssl_raw_noverify(socket::create(domain, port, loop), loop), loop);
@@ -97,7 +105,7 @@ static void clienttest(cstring target, int port, bool ssl, bool xfail = false, b
 #else
 		test_skip_force("unsafe SSL not implemented");
 #endif
-	autoptr<socket> sock = creator(target, port, loop);
+	socket* sock = creator(target, port, loop);
 	assert(sock);
 	
 	socket_test_httpfail(sock, xfail, loop);
@@ -203,4 +211,35 @@ test("SSL serialization")
 }
 */
 #endif
+
+test("TCP listen", "tcp", "")
+{
+	runloop* loop = runloop::global();
+	
+	uintptr_t timer = loop->raw_set_timer_once(1000, bind_lambda([&]() { loop->exit(); assert_unreachable(); }));
+	
+	int port = time(NULL)%3600 + 10000; // running tests twice quickly fails due to TIME_WAIT unless port varies
+	
+	autoptr<socket> a;
+	autoptr<socket> b;
+	autoptr<socketlisten> lst = socketlisten::create(port, loop, [&](autoptr<socket> s) { b = std::move(s); loop->exit(); });
+	
+	assert(lst);
+	a = socket::create("localhost", port, loop);
+	assert(a);
+	loop->enter();
+	assert(b);
+	
+	a->send(cstring("hello").bytes());
+	b->send(cstring("world").bytes());
+	
+	// not supposed to call recv outside a runloop, but it works in practice and compactness is better than correctness in tests.
+	uint8_t tmp[6] = {0};
+	b->recv(tmp);
+	assert_eq(cstring((char*)tmp), "hello");
+	a->recv(tmp);
+	assert_eq(cstring((char*)tmp), "world");
+	
+	loop->raw_timer_remove(timer);
+}
 #endif

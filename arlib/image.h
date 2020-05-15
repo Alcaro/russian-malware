@@ -5,13 +5,13 @@
 #include "endian.h"
 
 enum imagefmt {
-	// the manipulation functions are only implemented for ?rgb8888 formats; others are for storage only
+	// the manipulation functions are only implemented for ?rgb8888 formats, others are for storage only
 	
 	ifmt_none,
 	
 	// for these, 'pixels' is an array of u8s
 	ifmt_rgb888_by,
-	ifmt_rgba8888_by,
+	ifmt_rgba8888_by, // these four require 4-alignment
 	ifmt_argb8888_by,
 	ifmt_abgr8888_by,
 	ifmt_bgra8888_by,
@@ -19,7 +19,7 @@ enum imagefmt {
 	// for these, 'pixels' is an array of native-endian u16 or u32, highest bit listed first
 	ifmt_xrgb8888,
 	ifmt_0rgb8888,
-	// ifmt_argb8888,
+	// ifmt_argb8888, // same as one of the _by formats
 	ifmt_bargb8888, //'boolean argb'; like argb8888, but only a=00 and a=FF are allowed, anything else is undefined behavior
 	
 	ifmt_rgb565,
@@ -29,11 +29,12 @@ enum imagefmt {
 	// ifmt_bargb1555 = ifmt_argb1555, // there are only two possible alphas for 1555, so argb and bargb are the same
 	
 	// alias formats are down here because C enums are 'special'
-	ifmt_argb8888 = (ENDIAN == END_LITTLE ? ifmt_bgra8888_by : ifmt_argb8888_by),
+	ifmt_argb8888 = (END_LITTLE ? ifmt_bgra8888_by : ifmt_argb8888_by),
 	ifmt_bargb1555 = ifmt_argb1555,
 	
 	//an image is considered 'degenerate' if the full power of the format isn't used
 	//for example, an argb with all a=1 is a degenerate xrgb (and a degenerate bargb), and the format can safely be set to xrgb
+	
 	//TODO: find a way to ensure unused formats are optimized out
 };
 

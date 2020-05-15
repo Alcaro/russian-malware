@@ -69,6 +69,9 @@ public:
 	}
 	
 	//Can return less than remaining().
+	//You can cast the return value of the pull family to mutable.
+	//If you do, subsequent pulls will return the altered data; other than that, no harm done.
+	//In particular, if you immediately acknowledge it, it's safe.
 	arrayview<uint8_t> pull_buf()
 	{
 		try_swap();
@@ -167,7 +170,9 @@ public:
 		else return line.slice(0, line.size()-1);
 	}
 	
-	size_t remaining() { return buf1end-buf1st+buf2end; }
+	operator bool() { return size(); }
+	
+	size_t size() { return buf1end-buf1st+buf2end; }
 	void reset()
 	{
 		buf1.resize(1024);

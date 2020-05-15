@@ -16,14 +16,14 @@ static void push(bytepipe& p, size_t& t_written, size_t request, size_t push)
 static void pull(bytepipe& p, size_t& t_read, size_t& t_written, bool all, size_t expect, size_t use)
 {
 	arrayview<uint8_t> tmp = (all ? p.pull_buf_full() : p.pull_buf());
-	assert_eq(p.remaining(), t_written-t_read);
+	assert_eq(p.size(), t_written-t_read);
 	assert_eq(tmp.size(), expect);
 	for (size_t i=0;i<use;i++)
 	{
 		assert_eq(tmp[i], (++t_read) % 253);
 	}
 	p.pull_done(use);
-	assert_eq(p.remaining(), t_written-t_read);
+	assert_eq(p.size(), t_written-t_read);
 }
 
 test("bytepipe", "array", "bytepipe")

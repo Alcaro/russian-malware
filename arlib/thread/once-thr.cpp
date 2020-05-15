@@ -95,11 +95,12 @@ void runonce::run(function<void()> fn)
 #endif
 
 // numbers must be high, Valgrind's scheduler is unpredictable at best
-#define US_DELAYSTART  500000
-#define US_INIT       1000000
-#define US_TOLERANCE   400000
-static_assert(US_TOLERANCE < US_DELAYSTART);
-static_assert(US_TOLERANCE < US_INIT - US_DELAYSTART);
+#define US_DELAYSTART     500000
+#define US_INIT          1000000
+#define US_TOLERANCE      400000
+#define US_TOLERANCE_NEG   10000 // Windows scheduler is screwy
+static_assert(US_TOLERANCE+US_TOLERANCE_NEG < US_DELAYSTART);
+static_assert(US_TOLERANCE+US_TOLERANCE_NEG < US_INIT - US_DELAYSTART);
 
 test("thread runonce","","thread")
 {
@@ -116,22 +117,22 @@ test("thread runonce","","thread")
 		thread_create([&sem, &once, &t,thread_id]() {
 			assert_range(t.us(), 0, US_TOLERANCE);
 			usleep(US_DELAYSTART);
-			assert_range(t.us(), US_DELAYSTART, US_DELAYSTART+US_TOLERANCE);
+			assert_range(t.us(), US_DELAYSTART-US_TOLERANCE_NEG, US_DELAYSTART+US_TOLERANCE);
 			once.run([](){ assert_unreachable(); });
-			assert_range(t.us(), US_INIT, US_INIT+US_TOLERANCE);
+			assert_range(t.us(), US_INIT-US_TOLERANCE_NEG, US_INIT+US_TOLERANCE);
 			sem.release();
 		});
 	}
 	once.run([&t](){
 		assert_range(t.us(), 0, US_TOLERANCE);
 		usleep(US_INIT);
-		assert_range(t.us(), US_INIT, US_INIT+US_TOLERANCE);
+		assert_range(t.us(), US_INIT-US_TOLERANCE_NEG, US_INIT+US_TOLERANCE);
 	});
 	once.run([](){ assert_unreachable(); });
 	
 	for (int thread_id=0;thread_id<4;thread_id++)
 		sem.wait();
-	assert_range(t.us(), US_INIT, US_INIT+US_TOLERANCE);
 	
+	assert_range(t.us(), US_INIT-US_TOLERANCE_NEG, US_INIT+US_TOLERANCE);
 	}
 }

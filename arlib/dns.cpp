@@ -1,18 +1,66 @@
 #ifdef ARLIB_SOCKET
 #include "dns.h"
+#include "bytestream.h"
 #include "set.h"
-#include "endian.h"
 #include "stringconv.h"
 
+#ifdef _WIN32
+#include <winsock2.h>
+#include <iphlpapi.h>
+#endif
+
+// could swap this entire object for DnsQueryEx, but that needs windows 8
 string DNS::default_resolver()
 {
-	//TODO: on Windows, https://stackoverflow.com/questions/2916675/programmatically-obtain-dns-servers-of-host
-	//or figure out where Windows DNS Client Service is listening, can probably be hardcoded
-	//(though there's a fair chance it doesn't speak UDP... maybe not even DNS...)
-	//there is a native async dns handler https://msdn.microsoft.com/en-us/library/hh447188(v=vs.85).aspx
-	//but it requires 8+, and some funky dll that probably usually isn't used
-	//also check what ifdef (if any) controls DnsQuery_UTF8 https://msdn.microsoft.com/en-us/library/ms682016(v=vs.85).aspx
+#ifdef __unix__
 	return ("\n"+file::readall("/etc/resolv.conf")).split<1>("\nnameserver ")[1].split<1>("\n")[0];
+#else
+	// TODO: figure out why this fails
+	/*
+	uint8_t buf[16384];
+	array<uint8_t> buf_dyn;
+	
+	ULONG bufsize = sizeof(buf);
+	IP_ADAPTER_ADDRESSES* ipaa = (IP_ADAPTER_ADDRESSES*)buf;
+	
+again:
+	ULONG flags = GAA_FLAG_SKIP_UNICAST | GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_FRIENDLY_NAME;
+	ULONG status = GetAdaptersAddresses(AF_UNSPEC, flags, NULL, ipaa, &bufsize);
+	if (status == ERROR_BUFFER_OVERFLOW)
+	{
+		buf_dyn.resize(bufsize);
+		ipaa = (IP_ADAPTER_ADDRESSES*)buf_dyn.ptr();
+		goto again;
+	}
+	if (status != ERROR_SUCCESS) return "";
+	
+puts("a");
+printf("%lx\n",status);
+printf("%p\n",ipaa);
+printf("%p\n",ipaa->FirstDnsServerAddress);
+printf("%p\n",ipaa->FirstDnsServerAddress->Address);
+	SOCKET_ADDRESS* rawaddr = &ipaa->FirstDnsServerAddress->Address;
+	puts("=="+socket::ip_to_string(arrayview<uint8_t>((uint8_t*)rawaddr->lpSockaddr, rawaddr->iSockaddrLength)));
+	exit(42);
+	/*/
+	FIXED_INFO info;
+	ULONG info_size = sizeof(info);
+	DWORD status = GetNetworkParams(&info, &info_size);
+	if (status == ERROR_BUFFER_OVERFLOW)
+	{
+		array<byte> buf;
+		buf.resize(info_size);
+		if (GetNetworkParams(&info, &info_size) == ERROR_SUCCESS)
+		{
+			FIXED_INFO* info2 = (FIXED_INFO*)buf.ptr();
+			return info2->DnsServerList.IpAddress.String;
+		}
+		else return "";
+	}
+	if (status == ERROR_SUCCESS) return info.DnsServerList.IpAddress.String;
+	else return "";
+	//*/
+#endif
 }
 
 void DNS::init(cstring resolver, int port, runloop* loop)
@@ -21,7 +69,12 @@ void DNS::init(cstring resolver, int port, runloop* loop)
 	this->sock = socket::create_udp(resolver, port, loop);
 	sock->callback(bind_this(&DNS::sock_cb), NULL);
 	
+#ifdef __unix__
 	for (string line : file::readallt("/etc/hosts").split("\n"))
+#else
+	hosts_txt.insert("localhost", "127.0.0.1"); // commented out and hardcoded in default hosts file
+	for (string line : file::readallt("C:/Windows/System32/drivers/etc/hosts").split("\n"))
+#endif
 	{
 		auto classify = [](char ch) -> int {
 			if (ch == '\0' || ch == '\r' || ch == '\n' || ch == '#') return 0;
@@ -43,7 +96,7 @@ void DNS::init(cstring resolver, int port, runloop* loop)
 			while (classify(line[i]) == 2) i++;
 			if (domstart == i) continue;
 			
-			hosts_txt.insert(addr, line.substr(domstart, i));
+			hosts_txt.insert(line.substr(domstart, i), addr);
 		}
 	}
 }
@@ -57,6 +110,10 @@ void DNS::resolve(cstring domain, unsigned timeout_ms, function<void(string doma
 	
 	string* hosts_result = hosts_txt.get_or_null(domain);
 	if (hosts_result) return callback(domain, *hosts_result);
+	
+#ifdef ARLIB_TEST
+	assert_ne(domain, "localhost"); // must be resolved from hosts file
+#endif
 	
 	bytestreamw packet;
 	

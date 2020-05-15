@@ -1,11 +1,10 @@
 #pragma once
 #include "socket.h"
-#include "bytestream.h"
 
+class bytestream;
 //This is a fairly primitive DNS client. It doesn't retry, it doesn't try multiple resolvers, it doesn't support recursion.
 //But it works in practice on all plausible systems.
 //(TODO: lift some of those limits maybe)
-//(TODO: windows support maybe)
 class DNS {
 	autoptr<socket> sock;
 	runloop* loop;

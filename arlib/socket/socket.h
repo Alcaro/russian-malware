@@ -16,7 +16,7 @@
 //  probably not possible without c++2a coroutines - keep it until then
 
 #define socket socket_t
-class socket : nocopy {
+class socket : nomove {
 public:
 	//Always succeeds immediately, doing the real work asynchronously.
 	//If the server doesn't exist or doesn't respond, reports a broken connection.
@@ -101,18 +101,42 @@ public:
 	static int string_to_ip(arrayvieww<uint8_t> out, cstring str);
 	static bool string_to_ip4(arrayvieww<uint8_t> out, cstring str);
 	static bool string_to_ip6(arrayvieww<uint8_t> out, cstring str);
+	
+	static bool ip_to_sockaddr(struct sockaddr_storage * sa, arrayview<uint8_t> bytes);
+};
+
+class socketlisten : nomove {
+#ifdef __unix__
+	socketlisten(int fd, runloop* loop, function<void(autoptr<socket>)> callback);
+	int fd;
+#endif
+	
+#ifdef _WIN32
+	socketlisten(intptr_t sock, runloop* loop, function<void(autoptr<socket>)> callback);
+	
+	intptr_t fd;
+	HANDLE waiter = CreateEvent(NULL, true, false, NULL);
+#endif
+	
+	runloop* loop;
+	function<void(socket*)> callback;
+	
+public:
+	static socketlisten* create(cstring ip, int port, runloop* loop, function<void(autoptr<socket>)> callback);
+	static socketlisten* create(int port, runloop* loop, function<void(autoptr<socket>)> callback);
+	
+	~socketlisten();
 };
 
 //SSL feature matrix:
-//                      | OpenSSL | SChannel | GnuTLS | BearSSL | TLSe | Comments
-//Basic functionality   | Yes     | No       | No     | Yes     | No   | Many are bitrotted (likely easy to fix)
-//Nonblocking           | Yes     | ?        | Yes    | Yes     | Yes  | OpenSSL supports nonblocking, but not blocking
-//Permissive (expired)  | Yes     | ?        | Yes    | No      | No
-//Permissive (bad root) | Yes     | ?        | Yes    | Yes     | No
-//Permissive (bad name) | Yes     | ?        | Yes    | No      | No
-//Serialize             | No      | No       | No     | Yes*    | No*  | TLSe claims to support it, but seems to be server-only
-//                                                                     | BearSSL is homemade and will need rewrites if upstream changes
-//Server                | No      | No       | No     | No      | No   | Likely possible on everything, I'm just lazy
-//Reputable author      | Yes     | Yes      | Yes    | Yes     | No   | Not saying TLSe is bad, just that I don't know
-//Binary size           | 4       | 2.5      | 4      | 80      | 169  | In kilobytes, estimated; DLLs not included
+//                      | OpenSSL | SChannel | GnuTLS | BearSSL | Comments
+//Basic functionality   | Yes     | No       | No     | Yes     | Many are bitrotted (likely easy to fix)
+//Nonblocking           | Yes     | ?        | Yes    | Yes     | OpenSSL supports nonblocking, but not blocking
+//Permissive (expired)  | Yes     | ?        | Yes    | No      |
+//Permissive (bad root) | Yes     | ?        | Yes    | Yes     |
+//Permissive (bad name) | Yes     | ?        | Yes    | No      |
+//Serialize             | No      | No       | No     | Yes*    | BearSSL is homemade and will need rewrites if upstream changes
+//Server                | No      | No       | No     | No      | Likely possible on everything, I'm just lazy
+//Reputable author      | Yes     | Yes      | Yes    | Yes     |
+//Binary size           | 4       | 2.5      | 4      | 80      | In kilobytes, estimated; DLLs not included
 #endif

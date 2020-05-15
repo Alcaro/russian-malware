@@ -136,7 +136,7 @@ string tostring_float(T f)
 		if (parsed != f)
 		{
 			// For a few numbers, like 5.960464477539063e-8 and 1.262177448e-29f, rounding to N digits parses as the previous float,
-			// but incrementing the last digit parses correctly.
+			// but incrementing the last digit parses as the desired number.
 			Ti f_i;
 			memcpy(&f_i, &f, sizeof(f_i));
 			Ti parsed_i;
@@ -260,7 +260,7 @@ test("string conversion", "", "string")
 	testcall(testundec<double>("-inf", -HUGE_VAL));
 	testcall(testundec<float>("2.5", 2.5));
 	testcall(testundec<float>("2.5e+1", 25));
-#ifndef _WIN32 // some of these fail on Windows (Wine is more accurate than Windows)
+#ifndef _WIN32 // some of these fail on Windows (Wine is more accurate than Windows, but not perfect)
 	testcall(testundec<float>("33554446", 33554448.0)); // should round to even mantissa
 #endif
 	testcall(testundec<float>("33554450", 33554448.0));
@@ -520,7 +520,6 @@ test("string conversion", "", "string")
 #endif
 	assert_eq(tostring(340282346638528859811704183484516925440.0f), "3.4028235e+38"); // max possible float
 	assert_eq(tostring(340282326356119256160033759537265639424.0f), "3.4028233e+38"); // second largest
-	assert_eq(tostring(7.038531e-26f), "7.038531e-26"); // closest float != float closest to closest double
 #ifndef _WIN32 // this one is nasty - Windows turns it into 1e-42, which is a different number.
 	assert_eq(tostring(9.99e-43f), "9.99e-43"); // I think it only happens on subnormals...
 #endif
