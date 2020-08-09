@@ -34,6 +34,7 @@ EOF
 cat > .gitignore <<-EOF
 	obj/
 	$program
+	$program.exe
 EOF
 
 cat > Makefile <<-EOF
@@ -41,6 +42,7 @@ cat > Makefile <<-EOF
 	#valid values: exe (executable), dll (shared library), hybrid (usable as both exe and dll, named as if it's an exe)
 	ARTYPE = exe
 	ARGUI = 0
+	ARGAME = 0
 	AROPENGL = 0
 	ARTHREAD = 0
 	ARWUTF = 0
@@ -54,7 +56,7 @@ cat > Makefile <<-EOF
 	include arlib/Makefile
 EOF
 
-#windows hasn't really been supported for years...
+#while Windows is supported, these batch files aren't relevant to my current workflow
 #cat > z0_run.bat <<-EOF
 #	goto q
 #	:h

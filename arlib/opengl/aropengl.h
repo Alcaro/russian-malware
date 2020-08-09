@@ -1,6 +1,8 @@
 #pragma once
 #include "../global.h"
+#ifndef ARGUI_NONE
 #include "../gui/window.h"
+#endif
 
 #if !defined(_WIN32) || __has_include(<GL/glext.h>)
 #include <GL/gl.h>
@@ -18,12 +20,18 @@
 #endif
 #endif
 
-//This isn't the object you want. Use aropengl instead, it contains all OpenGL functions as function pointer members, so you can do
+class aropengl;
+//This object contains a bunch of documentation, but shouldn't be instantiated directly.
+//Use aropengl instead, it contains all OpenGL functions as function pointer members, so you can do
 //aropengl gl;
 //gl.create(widget_viewport*, aropengl::t_ver_3_3);
 //gl.ClearColor(0,0,0,0);
 //gl.Clear(GL_COLOR_BUFFER_BIT);
 //All members on this object are available as well.
+
+//WARNING: This object is designed to be used as a global variable. libGL has some global variables too,
+// whose dtors run before the main program's and delete all libGL state, so this object's dtor does nothing.
+//The real destructor is called .destroy(), and must be used if this object is allocated on stack or heap.
 class aropengl_base : nocopy {
 public:
 	enum {
@@ -64,19 +72,19 @@ public:
 #  undef AROPENGL_D3DSYNC
 # endif
 #endif
+		
+#ifndef ARGUI_NONE
+		t_resizable = 0x01000000,
+#endif
 	};
 	
 	// TODO: add query VRAM feature, using GLX_MESA_query_renderer
 	// there doesn't seem to be any equivalent in WGL; there is one in D3D (DXGI_ADAPTER_DESC), but it requires opening a D3D context
-	// TODO: make GL work without the GUI, going for straight GLX and ignoring GTK
-	// probably requires rewriting the runloop system, definitely requires XAddConnectionWatch (XCB can't GL, and manually is even worse)
-	// probably easier on Windows first, but that definitely requires a runloop rewrite
-	// for X, requires deciding who's responsible for XOpenDisplay, and how to pass it to the other side (needed to process other events)
 	class context : nocopy {
 	public:
 		//this is basically the common subset of WGL/GLX/etc
 		//you want the outer class, as it offers proper extension/symbol management
-		static context* create(uintptr_t parent, uintptr_t* window, uint32_t flags);
+		static context* create(uint32_t width, uint32_t height, uintptr_t parent, uintptr_t* window, uint32_t flags);
 		
 		virtual void makeCurrent(bool make) = 0; // If false, releases the context. The context is current on creation.
 		virtual void swapInterval(int interval) = 0;
@@ -100,40 +108,41 @@ public:
 	
 	//These functions exist, public and without symNames/symDest parameters, on aropengl objects.
 	//Constructors also exist, taking the same parameters.
+	//The ones taking a viewport or window ID will spawn a child window; the ones without that will spawn a toplevel.
+	//Only some of them exist, depending on whether the GUI feature is enabled. All of them will use the global runloop.
 protected:
 	bool create(context* core, const char * symNames, funcptr* symDest);
 	
-	bool create(uintptr_t parent, uintptr_t* window, uint32_t flags, const char * symNames, funcptr* symDest)
+	// This one is not recommended, other than for internal use. It may change arbitrarily, including platform-specific rules.
+	// On X11, this creates an unmapped window; you must use XMapWindow before anything shows up.
+	bool create(uint32_t width, uint32_t height, uintptr_t parent, uintptr_t* window, uint32_t flags,
+	            const char * symNames, funcptr* symDest)
 	{
-		return create(context::create(parent, window, flags), symNames, symDest);
+		return create(context::create(width, height, parent, window, flags), symNames, symDest);
 	}
 	
+#ifndef ARGUI_NONE
 	bool create(widget_viewport* port, uint32_t flags, const char * symNames, funcptr* symDest)
 	{
 		uintptr_t newwindow;
-		if (!create(port->get_parent(), &newwindow, flags, symNames, symDest)) return false;
+		if (!create(1, 1, port->get_parent(), &newwindow, flags, symNames, symDest)) return false;
 		this->port = port;
 		port->set_child(newwindow,
 		                bind_ptr(&aropengl_base::context::notifyResize, this->core),
 		                bind_ptr(&aropengl_base::destroy, this));
 		return true;
 	}
+#endif
 	
 public:
-	//Must be called after the window is resized. If created from a viewport, this is configured automatically.
-	//Make sure to also call gl.Viewport(0, 0, width, height), or OpenGL will do something ridiculous.
-	void notifyResize(unsigned int width, unsigned int height)
-	{
-		core->notifyResize(width, height);
-	}
-	
-	aropengl_base() { core = NULL; port = NULL; }
+#ifndef ARGUI_NONE
+	//If the object is created via window IDs, this must be called after the window is resized.
+	//If created from a viewport or gameview, this is configured automatically, and not necessary.
+	//In both cases, make sure to also call gl.Viewport(0, 0, width, height) (or disable resizing), or OpenGL will do something weird.
+	void notifyResize(unsigned int width, unsigned int height) { core->notifyResize(width, height); }
+#endif
 	explicit operator bool() { return core != NULL; }
-	
-	~aropengl_base()
-	{
-		destroy();
-	}
+	//~aropengl_base() { destroy(); }
 	
 	//Arlib usually uses underscores, but since OpenGL doesn't, this object follows suit.
 	//To ensure no collisions, Arlib-specific functions start with a lowercase (or are C++-only, like operator bool),
@@ -156,11 +165,13 @@ public:
 	//Not needed if the object is created from a viewport.
 	void destroy()
 	{
+#ifndef ARGUI_NONE
 		if (port)
 		{
 			port->set_child(0, NULL, NULL);
 			port = NULL;
 		}
+#endif
 		delete core;
 		core = NULL;
 	}
@@ -174,8 +185,10 @@ public:
 	//https://michaldrobot.com/2014/04/01/gcn-execution-patterns-in-full-screen-passes/
 	
 private:
-	context* core;
-	widget_viewport* port;
+	context* core = NULL;
+#ifndef ARGUI_NONE
+	widget_viewport* port = NULL;
+#endif
 };
 
 #ifndef AROPENGL_SLIM

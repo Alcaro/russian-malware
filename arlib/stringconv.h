@@ -91,24 +91,18 @@ bool fromstringhex(cstring s, array<uint8_t>& val);
 	x(bool)
 
 
-//Same as fromstring, but can't report failure; in exchange, it also tries T::operator=(cstring).
-template<typename T>
-typename std::enable_if_t<
-	std::is_assignable_v<T, string>>
-try_fromstring(cstring s, T& out)
+//Same as fromstring, but can't report failure. May be easier to use.
+template<typename T> T try_fromstring(cstring s)
 {
-	out = s;
+	T tmp;
+	fromstring(s, tmp);
+	return tmp;
 }
-
-template<typename T>
-typename std::enable_if_t<
-	std::is_same_v<
-		decltype(fromstring(std::declval<cstring>(), std::declval<T&>())),
-		bool // it returning bool isn't necessary, but I couldn't find a std::can_call
-	> && !std::is_assignable_v<T, string>> // extra is_assignable test so try_fromstring(cstring,string&) isn't ambiguous
-try_fromstring(cstring s, T& out)
+template<typename T> T try_fromstring(cstring s, T&& def)
 {
-	fromstring(s, out);
+	T tmp;
+	if (fromstring(s, tmp)) return tmp;
+	else return def;
 }
 
 

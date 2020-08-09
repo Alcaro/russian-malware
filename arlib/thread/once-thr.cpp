@@ -94,11 +94,11 @@ void runonce::run(function<void()> fn)
 #define usleep(n) Sleep((n)/1000)
 #endif
 
-// numbers must be high, Valgrind's scheduler is unpredictable at best
+// numbers must be high, Valgrind's and Windows' schedulers are unpredictable at best
 #define US_DELAYSTART     500000
 #define US_INIT          1000000
 #define US_TOLERANCE      400000
-#define US_TOLERANCE_NEG   10000 // Windows scheduler is screwy
+#define US_TOLERANCE_NEG   10000
 static_assert(US_TOLERANCE+US_TOLERANCE_NEG < US_DELAYSTART);
 static_assert(US_TOLERANCE+US_TOLERANCE_NEG < US_INIT - US_DELAYSTART);
 

@@ -301,7 +301,7 @@ goto fail;
 				// Clang optimizes abs(x) = (x^(x<0)) - (x<0) to real abs (with -mssse3), but it can't comprehend this one
 				// (GCC doesn't do anything useful with either)
 				return _mm_max_epi16(a, _mm_sub_epi16(_mm_setzero_si128(), a)); 
-			}; 
+			};
 #endif
 			// ignore simding the other filters; Paeth is the most common, and also the most expensive per pixel
 			// it can only be SIMDed to a degree of filter_bpp, so ignore filter_bpp=1
@@ -309,7 +309,7 @@ goto fail;
 			//    one 1px ahead of the one below, but the required data structures would be quite annoying,
 			//    and combining the bytes would be annoying too)
 			// macro instead of lambda is 7% faster
-#define SIMD_PAETH(filter_bpp) \
+#define SIMD_PAETH(filter_bpp) do { \
 					uint32_t a32 = *(uint32_t*)(defilter_out+x                  -filter_bpp);            \
 					uint32_t b32 = *(uint32_t*)(defilter_out+x-defilter_out_line           );            \
 					uint32_t c32 = *(uint32_t*)(defilter_out+x-defilter_out_line-filter_bpp);            \
@@ -338,11 +338,13 @@ goto fail;
 					uint32_t out32 = _mm_cvtsi128_si32(out);                                             \
 					if (filter_bpp == 3)                                                                 \
 						out32 = (out32&0xFFFFFF00) | (*outp&0x000000FF);                                 \
-					*outp = out32;
+					*outp = out32;                                                                       \
+				} while(0)
 			if (filter_bpp == 3)
 			{
-				//three bytes at the time, no need for a scalar tail loop
+				//one pixel at the time, no need for a scalar tail loop
 				//shift one byte to the left, so we don't overflow the malloc at the last scanline
+				//we don't actually change that byte, but it's UB anyways
 				defilter_out--;
 				for (size_t x=0;x<filter_width;x+=3)
 				{
@@ -359,8 +361,7 @@ goto fail;
 				break;
 			}
 			
-			// not SIMD_LOOP_TAIL, since 1byte-per-pixel (common with palettes) isn't manually vectorized
-			// (but if I can't vectorize it, there's no way gcc can either)
+			// not SIMD_LOOP_TAIL, the below runs for filter_bpp=1 aka palette
 #endif
 			for (size_t x=0;x<filter_width;x++)
 			{

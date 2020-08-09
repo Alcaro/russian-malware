@@ -6,7 +6,7 @@
 // however, flattening MSVC/GCC differences, and offering some debug tools, is a useful endeavor
 
 #if defined(_MSC_VER)
-# error find a better test
+# error check whether that test works
 // && defined(_M_AMD64)
 # define __SSE2__
 #endif

@@ -499,12 +499,12 @@ void convert_scanline_rgb888_nrgb8888(uint32_t* out, const uint8_t* in, size_t n
 		
 		__m128i pix1 = _mm_unpacklo_epi8(pix, _mm_setzero_si128());
 		__m128i pix2 = _mm_unpackhi_epi8(pix, _mm_setzero_si128());
-		pix1 = _mm_shufflelo_epi16(pix1, _MM_SHUFFLE(0,1,2,3)); // 0rgb -> bgr0
-		pix1 = _mm_shufflehi_epi16(pix1, _MM_SHUFFLE(3,0,1,2)); // rgb0 -> bgr0
-		pix2 = _mm_shufflelo_epi16(pix2, _MM_SHUFFLE(0,1,2,3)); // 0rgb -> bgr0
-		pix2 = _mm_shufflehi_epi16(pix2, _MM_SHUFFLE(3,0,1,2)); // rgb0 -> bgr0
+		pix1 = _mm_shufflelo_epi16(pix1, _MM_SHUFFLE(0,1,2,3)); // 0rgb -> 0bgr
+		pix1 = _mm_shufflehi_epi16(pix1, _MM_SHUFFLE(3,0,1,2)); // rgb0 -> 0bgr
+		pix2 = _mm_shufflelo_epi16(pix2, _MM_SHUFFLE(0,1,2,3)); // Xrgb -> Xbgr
+		pix2 = _mm_shufflehi_epi16(pix2, _MM_SHUFFLE(3,0,1,2)); // rgb0 -> 0bgr
 		pix = _mm_packus_epi16(pix1, pix2);
-		//pix = u8*16 { 0bgr0bgr0bgr0bgr }
+		//pix = u8*16 { 0bgr0bgrXbgr0bgr }
 		
 		if (newalpha == 0xFF000000)
 			pix = _mm_or_si128(pix, _mm_set1_epi32(0xFF000000));
@@ -517,7 +517,7 @@ void convert_scanline_rgb888_nrgb8888(uint32_t* out, const uint8_t* in, size_t n
 #endif
 	// Clang can vectorize this, but it emits some quite terrible code, so keep the SSE2 anyways
 	// (actually, Clang flattens the above all the way to a single pshufb, if -mssse3)
-	// gcc does nothing useful whatsoever
+	// gcc vector handling is poor; it doesn't vectorize the below, nor do anything interesting to the above
 	while (x < npx)
 	{
 		uint8_t* src = (uint8_t*)in + x*3;

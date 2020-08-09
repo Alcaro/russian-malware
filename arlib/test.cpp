@@ -323,7 +323,7 @@ static testlist* list_reverse(testlist* list)
 #include <sys/resource.h>
 #endif
 
-#undef main // the real main is #define'd to something stupid on test runs
+#undef main // the real main is #define'd to something else on test runs
 int main(int argc, char* argv[])
 {
 	setvbuf(stdout, NULL, _IONBF, 0);
@@ -331,9 +331,10 @@ int main(int argc, char* argv[])
 	bool run_twice = false;
 	
 #ifdef __linux__
-	struct rlimit rlim = { 500*1024*1024, RLIM_INFINITY };
-	setrlimit(RLIMIT_AS, &rlim);
-	setrlimit(RLIMIT_DATA, &rlim);
+	struct rlimit rlim_as = { 4096ull*1024*1024, RLIM_INFINITY };
+	struct rlimit rlim_data = { 512ull*1024*1024, RLIM_INFINITY };
+	setrlimit(RLIMIT_AS, &rlim_as);
+	setrlimit(RLIMIT_DATA, &rlim_data);
 #endif
 	
 	int n_filtered_tests = 0;

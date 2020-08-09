@@ -21,7 +21,7 @@
 #  elif _WIN32_WINNT <= 0x0600 // don't replace with _WIN32_WINNT_LONGHORN, windows.h isn't included yet
 #    undef _WIN32_WINNT
 #    define _WIN32_WINNT _WIN32_WINNT_WS03 // _WIN32_WINNT_WINXP excludes SetDllDirectory, so I need to put it at 0x0502
-#    define NTDDI_VERSION NTDDI_WS03 // actually NTDDI_WINXPSP2, but MinGW sddkddkver.h gets angry about that
+#    define NTDDI_VERSION NTDDI_WS03 // actually NTDDI_WINXPSP2, but mingw sddkddkver.h gets angry about that
 #    define _WIN32_IE _WIN32_IE_IE60SP2
 #  endif
 #  define WIN32_LEAN_AND_MEAN
@@ -81,21 +81,22 @@ long double strtold_arlib(const char * str, char** str_end);
 typedef void(*funcptr)();
 
 #define using(obj) if(obj;true)
-template<typename T> class using_holder {
+template<typename T> class defer_holder {
 	T fn;
 	bool doit;
 public:
-	using_holder(T fn) : fn(std::move(fn)), doit(true) {}
-	using_holder(const using_holder&) = delete;
-	using_holder(using_holder&& other) : fn(std::move(other.fn)), doit(true) { other.doit = false; }
-	~using_holder() { if (doit) fn(); }
+	defer_holder(T fn) : fn(std::move(fn)), doit(true) {}
+	defer_holder(const defer_holder&) = delete;
+	defer_holder(defer_holder&& other) : fn(std::move(other.fn)), doit(true) { other.doit = false; }
+	~defer_holder() { if (doit) fn(); }
 };
 template<typename T>
-using_holder<T> using_bind(T&& f)
+defer_holder<T> defer_create(T&& f)
 {
 	return f;
 }
-#define using_fn(ct,dt) if(auto USING = using_bind((ct, [&](){ dt; }));true)
+// Useful for implementing context manager macros like test_nomalloc, but should not be used directly.
+#define contextmanager(begin_expr,end_expr) using(auto DEFER=defer_create(((begin_expr),[&](){ end_expr; })))
 
 #define JOIN_(x, y) x ## y
 #define JOIN(x, y) JOIN_(x, y)
@@ -115,6 +116,16 @@ using_holder<T> using_bind(T&& f)
 #define MAYBE_UNUSED
 #define KEEP_OBJECT
 #define __GNUC__ 0
+#endif
+
+#ifndef __has_builtin
+#define __has_builtin(x) 0
+#endif
+
+#if __has_builtin(__builtin_unpredictable)
+#define UNPREDICTABLE(expr) __builtin_unpredictable(!!(expr))
+#else
+#define UNPREDICTABLE(expr) (expr)
 #endif
 
 using std::nullptr_t;
@@ -253,6 +264,7 @@ void malloc_fail(size_t size);
 inline anyptr malloc_check(size_t size)
 {
 	_test_malloc();
+	if (size >= 0x80000000) malloc_fail(size);
 	void* ret = malloc(size);
 	if (size && !ret) malloc_fail(size);
 	return ret;
@@ -264,6 +276,7 @@ inline anyptr realloc_check(anyptr ptr, size_t size)
 {
 	if ((void*)ptr) _test_free();
 	if (size) _test_malloc();
+	if (size >= 0x80000000) malloc_fail(size);
 	void* ret = realloc(ptr, size);
 	if (size && !ret) malloc_fail(size);
 	return ret;
@@ -302,33 +315,6 @@ template<typename T, typename... Args> static T max(const T& a, Args... args)
 	if (a < b) return b;
 	else return a;
 }
-
-
-
-//too reliant on non-ancient compilers
-////some SFINAE shenanigans to call T::create if it exists, otherwise new() - took an eternity to google up
-////don't use this template yourself, use generic_create/destroy instead
-//template<typename T> class generic_create_core {
-//	template<int G> class int_eater {};
-//public:
-//	template<typename T2> static T* create(T2*, int_eater<sizeof(&T2::create)>*) { return T::create(); }
-//	static T* create(T*, ...) { return new T(); }
-//	
-//	template<typename T2> static void destroy(T* obj, T2*, int_eater<sizeof(&T2::release)>*) { obj->release(); }
-//	static void destroy(T* obj, T*, ...) { delete obj; }
-//};
-//template<typename T> T* generic_create() { return generic_create_core<T>::create((T*)NULL, NULL); }
-//template<typename T> void generic_delete(T* obj) { generic_create_core<T>::destroy(obj, (T*)NULL, NULL); }
-//
-//template<typename T> T* generic_create() { return T::create(); }
-//template<typename T> T* generic_new() { return new T; }
-//template<typename T> void generic_delete(T* obj) { delete obj; }
-//template<typename T> void generic_release(T* obj) { obj->release(); }
-//
-//template<typename T> void* generic_create_void() { return (void*)generic_create<T>(); }
-//template<typename T> void* generic_new_void() { return (void*)generic_new<T>(); }
-//template<typename T> void generic_delete_void(void* obj) { generic_delete((T*)obj); }
-//template<typename T> void generic_release_void(void* obj) { generic_release((T*)obj); }
 
 
 
@@ -405,6 +391,7 @@ class refcount {
 	
 public:
 	refcount() { inner = new inner_t(); inner->refcount = 1; }
+	refcount(nullptr_t) { inner = NULL; }
 	refcount(const refcount<T>& other) { inner = other.inner; inner->refcount++; }
 	refcount(refcount<T>&& other) { inner = other.inner; other.inner = NULL; }
 	refcount<T>& operator=(T* ptr) = delete;
@@ -415,6 +402,7 @@ public:
 	const T& operator*() const { return inner->item; }
 	operator T*() { return &inner->item; }
 	operator const T*() const { return &inner->item; }
+	bool unique() const { return inner->refcount == 1; }
 	~refcount() { if (inner && --inner->refcount == 0) delete inner; }
 };
 
@@ -541,12 +529,12 @@ template<typename T> static inline T bitround(T in)
 #define COMMON_INST(T) extern template class T
 #endif
 
-//For cases where Gcc thinks a variable is used uninitialized, but it isn't in practice.
+//For cases where gcc thinks a variable is used uninitialized, but it isn't in practice.
 //Usage: int foo KNOWN_INIT(0)
 #define KNOWN_INIT(x) = x
 
 //Attach this attribute to the tail loop after a SIMD loop, so the compiler won't try to vectorize something with max 4 iterations.
-//(Neither compiler seems to acknowledge 'don't unroll' as 'don't vectorize', and Gcc doesn't have a 'don't vectorize' at all.)
+//(Neither compiler seems to acknowledge 'don't unroll' as 'don't vectorize', and gcc doesn't have a 'don't vectorize' at all.)
 #ifdef __clang__
 #define SIMD_LOOP_TAIL _Pragma("clang loop unroll(disable) vectorize(disable)")
 #elif __GNUC__ >= 8
@@ -576,8 +564,7 @@ public:
                    static void JOIN(ondeinit,__LINE__)()
 #endif
 
-#define container_of(ptr, outer_t, member) \
-	((outer_t*)((uint8_t*)(ptr) - (offsetof(outer_t,member))))
+#define container_of(ptr, outer_t, member) ((outer_t*)((uint8_t*)(ptr) - (offsetof(outer_t,member))))
 
 class range_iter_t {
 	size_t n;
@@ -599,6 +586,29 @@ public:
 };
 static inline range_t range(size_t stop) { return range_t(0, stop, 1); }
 static inline range_t range(size_t start, size_t stop, size_t step = 1) { return range_t(start, stop, step); }
+
+// WARNING: Hybrid EXE/DLL is not supported by the OS. If it's ran as an EXE, it's a perfectly normal EXE,
+//  other than its nonempty exports section; however, if used as a DLL, it's subject to several limitations:
+// - It's not supported by the OS; it relies on a bunch of implementation details and ugly tricks that may break in newer OSes.
+// - The program must call arlib_hybrid_dll_init() at the top of every DLLEXPORT function.
+//     (It's safe to call it multiple times, including multithreaded, as long as the first one has returned before the second enters.)
+//     (It's also safe to call it if it's ran as an EXE, and on OSes other than Windows. It'll just do nothing.)
+//     (Only the first call to arlib_hybrid_dll_init() does anything, so it's safe to omit it in
+//       exported functions guaranteed to not be the first one called, though not recommended.)
+// - It is poorly tested. __builtin_cpu_supports does not function properly, and I don't know what else is broken.
+// - DLLEXPORTed variables may not have constructors - the ctors are only called in arlib_hybrid_dll_init().
+// - On XP, global variables' destructors will never run, and dependent DLLs are never unloaded. It's a memory leak.
+//     On Vista and higher, it's untested.
+//     Note that parts of Arlib contains global constructors.
+// - If a normal DLL imports a symbol that doesn't exist, LoadLibrary's caller gets an error.
+//     If this one loads a symbol that doesn't exist, it'll crash.
+// - The program may not use compiler-supported thread-local variables from a DLL path.
+//     TlsAlloc()/etc is fine, but since destructors are unreliable, it's not recommended.
+#ifdef ARLIB_HYBRID_DLL
+void arlib_hybrid_dll_init();
+#else
+#define arlib_hybrid_dll_init() // null
+#endif
 
 //If an interface defines a function to set some state, and a callback for when this state changes,
 // calling that function will not trigger the state callback.

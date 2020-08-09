@@ -125,39 +125,6 @@ MAYBE_UNUSED static void append_certs_pem_x509(array<uint8_t> certs_pem)
 	}
 }
 
-//old version, ~9x slower (9ms->82ms) due to running the base64 decoder as a state machine
-//MAYBE_UNUSED static void append_certs_pem_x509(arrayview<uint8_t> certs_pem)
-//{
-//	br_pem_decoder_context pc;
-//	br_pem_decoder_init(&pc);
-//	array<uint8_t> cert_this;
-//	
-//	while (certs_pem)
-//	{
-//		size_t tlen = br_pem_decoder_push(&pc, certs_pem.ptr(), certs_pem.size());
-//		certs_pem = certs_pem.skip(tlen);
-//		
-//		//what a strange API, does it really need both event streaming and a callback?
-//		switch (br_pem_decoder_event(&pc)) {
-//		case BR_PEM_BEGIN_OBJ:
-//			cert_this.reset();
-//			if (!strcmp(br_pem_decoder_name(&pc), "CERTIFICATE"))
-//				br_pem_decoder_setdest(&pc, bytes_append, &cert_this);
-//			else
-//				br_pem_decoder_setdest(&pc, NULL, NULL);
-//			break;
-//		
-//		case BR_PEM_END_OBJ:
-//			if (cert_this) append_cert_x509(cert_this);
-//			break;
-//		
-//		case BR_PEM_ERROR:
-//			certs.reset();
-//			return;
-//		}
-//	}
-//}
-
 #ifdef _WIN32
 //crypt32.dll seems to be the only way to access the Windows cert store
 #include <wincrypt.h>

@@ -2,10 +2,6 @@
 #include "endian.h"
 #include <new>
 
-#if __FLT_EVAL_METHOD__ != 0
-#warning "platform-specific floating-point rounding detected; consider adding -ffloat-store, -mfpmath=sse, or similar"
-#endif
-
 // trigger a warning if it doesn't stay disabled
 #define __USE_MINGW_ANSI_STDIO 0
 
@@ -34,8 +30,7 @@ double strtod_arlib(const char * str, char** str_end)
 	return ret;
 }
 // gcc doesn't acknowledge scanf("%Lf") as legitimate
-// I can agree that long double is creepy, I'll just leave it like this
-// (needs testing, of course - maybe it just needs a #pragma diagnostic, like stringconv)
+// I can agree that long double is creepy, I'll just leave it commented out until (if) I use ld
 //long double strtold_arlib(const char * str, char** str_end)
 //{
 //	int n;
@@ -70,7 +65,7 @@ void operator delete(void* p, std::size_t n) noexcept { operator delete(p); }
 
 #ifdef __MINGW32__
 extern "C" void __cxa_pure_virtual(); // predeclaration for -Wmissing-declarations
-extern "C" void __cxa_pure_virtual() { puts("__cxa_pure_virtual"); abort(); }
+extern "C" void __cxa_pure_virtual() { __builtin_trap(); }
 #endif
 
 #include "test.h"
@@ -124,16 +119,17 @@ test("test_nomalloc", "", "")
 static int x;
 static int y()
 {
-	using_fn(x=1, x=2)
+	x = 0;
+	contextmanager(x=1, x=2)
 	{
 		assert_eq(x, 1);
 		return 42;
 	}
 }
-test("using_fn", "", "")
+test("contextmanager", "", "")
 {
 	x = 0;
-	using_fn(x=1, x=2)
+	contextmanager(x=1, x=2)
 	{
 		assert_eq(x, 1);
 	}

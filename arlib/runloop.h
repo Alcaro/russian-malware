@@ -30,9 +30,11 @@
 //     for example, if a HTTP handler reads only half of the output from a SSL socket, its ready callback must run again immediately
 //     this is currently SSL's responsibility, and the exact rules are pretty subtle - I doubt I did it right everywhere
 //   proposed solution: sockets have an is_ready() function, and runloop loops that as necessary
+//                      would also allow removing the gameview::tmp_step lamehack
 // - decide if I want the runloop in a thread local variable, instead of passing it around and calling runloop::global everywhere
 //   advantages: less boilerplate; no need to store runloop pointers everywhere; DECL_TIMER becomes trivial
-//   disadvantages: TLS is tricky, especially regarding destructors; it's a global variable; may complicate testing
+//   disadvantages: TLS is tricky, especially regarding destructors; it's a global variable (though runloop::global is global already);
+//                  may complicate testing; explicit is better
 //   (if yes, use a global object's constructor to assign the GUI runloop to the main thread)
 
 //A runloop keeps track of a number of file descriptors, calling their handlers whenever the relevant operation is available.
@@ -46,7 +48,8 @@ protected:
 public:
 	//The global runloop handles GUI events, in addition to whatever fds it's told to track.
 	//The global runloop belongs to the main thread. Don't delete it, or call this function from any other thread.
-	//This function always returns the same object.
+	//This function always returns the same object. It may be called on non-main threads,
+	// but only if prepare_submit() has already been called.
 	static runloop* global();
 	
 	//For non-primary threads. Using multiple runloops per thread is generally a bad idea.
@@ -83,7 +86,7 @@ public:
 	//prepare_submit() must be called on the owning thread before submit() is allowed.
 	//There is no way to 'unprepare' submit(), other than deleting the runloop.
 	//It is safe to call prepare_submit() multiple times, even concurrently with submit(),
-	// as long as the first one has finished before the first submit() or second prepare_submit() starts.
+	// as long as the first prepare_submit() has finished before the first submit() starts.
 	virtual void prepare_submit() = 0;
 #endif
 	

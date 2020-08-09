@@ -151,20 +151,6 @@ public:
 #define RUN_ONCE(fn) do { static runonce once; once.run(fn); } while(0);
 #define RUN_ONCE_FN(name) static void name##_core(); static void name() { RUN_ONCE(name##_core); } static void name##_core()
 
-//A more read-focused runonce. 
-#ifdef __unix__
-class runonce_rcu : nomove {
-	typedef void (*once_fn_t)(void);
-	pthread_once_t once = PTHREAD_ONCE_INIT;
-public:
-	void run(once_fn_t fn) { pthread_once(&once, fn); }
-};
-#else
-#define runonce_rcu runonce
-#endif
-#define RUN_ONCE_RCU(fn) do { static runonce_rcu once; once.run(fn); } while(0);
-#define RUN_ONCE_RCU_FN(name) static void name##_core(); static void name() { RUN_ONCE_RCU(name##_core); } static void name##_core()
-
 
 //void thread_sleep(unsigned int usec);
 

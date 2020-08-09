@@ -27,7 +27,7 @@
 #define REG_ARG4 "esi"
 #define REG_ARG5 "edi"
 #define REG_ARG6 "ebp"
-#define SYSCALL_INSTR "int 0x80"
+#define SYSCALL_INSTR "int {$|}0x80"
 #define REG_RET "eax"
 #endif
 

@@ -18,7 +18,7 @@ exit
  */
 
 /* feel free to replace with port 99 if you want to test in firefox or something */
-/* (no idea why they'd block the port specifically defined to not parse your data) */
+/* while 9 is Discard Protocol, it's also Wake-on-LAN, which is generally not a desirable port to let browsers poke */
 #ifndef PORTNR
 #define PORTNR 9
 #endif

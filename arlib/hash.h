@@ -21,7 +21,7 @@ static inline size_t hash(const char * val, size_t n)
 	size_t hash = 5381;
 	while (n--)
 	{
-		hash = hash*31 ^ *val;
+		hash = (hash ^ *val) * 31;
 		val++;
 	}
 	return hash;
@@ -38,11 +38,11 @@ template<typename T, typename... Tnext> static inline size_t hashall(T first, Tn
 {
 	size_t tail = hash(first);
 	size_t heads = hashall(next...);
-	return (heads*16777619) ^ tail;
+	return (heads ^ tail) * 16777619;
 }
 
 
-//these two are reversible, but I never implemented the reversal because lazy.
+//these two are reversible, but I have no usecase for a reverser so I didn't implement one
 inline uint32_t hash_shuffle(uint32_t val)
 {
 	//https://code.google.com/p/smhasher/wiki/MurmurHash3

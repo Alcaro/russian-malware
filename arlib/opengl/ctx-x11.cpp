@@ -1,17 +1,21 @@
 #ifdef ARGUIPROT_X11
 #include "aropengl.h"
+#ifdef ARGUI_NONE
+#include "../game.h"
+#endif
 
 //I could use GtkGLArea, its GTK integration may yield slightly better results.
-//but probably not much. and it's fairly different from GLX and WGL:
-//(1) it's a GtkWidget rather than X11 Window, which would make the widget_viewport implementation somewhat different
+//but probably not much. and it's quite different from GLX and WGL:
+//- it's a GtkWidget rather than X11 Window, which would make the widget_viewport implementation somewhat different
 //  maybe make it a GtkGrid with one or zero children?
-//(2) not only does it have an equivalent of gl.outputFramebuffer(), but it doesn't even export the actual framebuffer name -
-//    only gtk_gl_area_attach_buffers(), which attaches it.
-//  but on the other hand, could always go behind Gtk - glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &GLint)
-//  gtk_gl_area_attach_buffers() also configures the framebuffer, but that's pointless, fbo config remains if unbound.
-//(3) it very strongly recommends drawing only from some dumb "render" signal callback, rather than where I want
-//  it's unclear if it's possible to ignore that, it's unclear if it'll work in the future, and it's unclear how that interacts with vblank
-//conclusion: it's intended for animations and other simple stuff, gaming is uncomfortable. it's too different. it's not worth the effort.
+//- not only does it have an equivalent of gl.outputFramebuffer(), but it doesn't even export the actual framebuffer name -
+//    only gtk_gl_area_attach_buffers(), which attaches it (and does some seemingly-irrelevant configuration)
+//  could be worked around by going behind Gtk, via glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &GLint)
+//- it very strongly recommends drawing only from some weird "render" signal callback, rather than where I want
+//  it's unclear if it's possible to ignore that, it's unclear if it'll work in the future, and
+//    it's unclear how that interacts with vblank
+//conclusion: it's intended for animations and other simple stuff, or maybe programs built from the ground up around gtk.
+//  gaming is uncomfortable. it's too different. it's not worth the effort.
 
 #include <GL/gl.h>
 #include <GL/glext.h>
@@ -77,7 +81,7 @@ public:
 	Window win;
 	bool current;
 	
-	/*private*/ bool init(Window parent, Window* window_, uint32_t flags)
+	/*private*/ bool init(uint32_t width, uint32_t height, uintptr_t parent, uintptr_t* window_, uint32_t flags)
 	{
 		ctx = None;
 		win = None;
@@ -118,20 +122,15 @@ public:
 		swa.colormap = XCreateColormap(window_x11.display, parent, vi->visual, AllocNone);
 		swa.background_pixmap = None;
 		swa.border_pixel      = 0;
-		swa.event_mask        = // StructureNotifyMask | // doesn't seem needed (anymore?)
-		                        ExposureMask; // to make runloop->step(true) break if someone moves a window on top of ours
-		                                      // this works if our caller redraws the window every time runloop returns
-		                                      // (TODO: add 'redraw this' callback, to avoid pointless redraws)
+		swa.event_mask        = ExposureMask; // to make runloop->step(true) break if someone moves a window on top of ours
 		
-		win = XCreateWindow(window_x11.display, parent, 0, 0, 1, 1, 0,
+		win = XCreateWindow(window_x11.display, parent, 0, 0, width, height, 0,
 		                    vi->depth, InputOutput, vi->visual, CWBorderPixel|CWColormap|CWEventMask, &swa);
 		if (!win) return false;
 		
 		*window_ = win;
 		XFreeColormap(window_x11.display, swa.colormap);
 		XFree(vi);
-		
-		XMapWindow(window_x11.display, win);
 		
 		PFNGLXCREATECONTEXTATTRIBSARBPROC glXCreateContextAttribsARB =
 			(PFNGLXCREATECONTEXTATTRIBSARBPROC)glx.GetProcAddress((const GLubyte*)"glXCreateContextAttribsARB");
@@ -145,13 +144,12 @@ public:
 			None
 		};
 		
-		ctx = glXCreateContextAttribsARB(window_x11.display, fbc, 0, True, context_attribs);
+		ctx = glXCreateContextAttribsARB(window_x11.display, fbc, 0, true, context_attribs);
 		if (!ctx) return false;
-		
-		XSync(window_x11.display, False);
-		
 		makeCurrent(true);
+		
 		glx.SwapIntervalSGI = (PFNGLXSWAPINTERVALSGIPROC)glx.GetProcAddress((const GLubyte*)"glXSwapIntervalSGI");
+		
 		return true;
 	}
 	
@@ -195,10 +193,10 @@ public:
 
 }
 
-aropengl::context* aropengl::context::create(uintptr_t parent, uintptr_t* window, uint32_t flags)
+aropengl::context* aropengl::context::create(uint32_t width, uint32_t height, uintptr_t parent, uintptr_t* window, uint32_t flags)
 {
 	aropengl_x11* ret = new aropengl_x11();
-	if (ret->init((Window)parent, (Window*)window, flags)) return ret;
+	if (ret->init(width, height, parent, window, flags)) return ret;
 	
 	delete ret;
 	return NULL;

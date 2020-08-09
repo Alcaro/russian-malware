@@ -2,8 +2,12 @@
 
 bool aropengl_base::create(context* core, const char * symNames, funcptr* symDest)
 {
+	destroy();
+	
 	this->core = core;
+#ifndef ARGUI_NONE
 	this->port = NULL;
+#endif
 	if (!core) return false;
 	
 	while (*symNames)

@@ -556,6 +556,7 @@ void widget_viewport::set_child(uintptr_t windowhandle,
 	m->onresize = onresize;
 	m->ondestroy = ondestroy;
 	viewport_submit_resize(m);
+	XMapWindow(window_x11.display, windowhandle);
 }
 
 //void widget_viewport::get_position(int * x, int * y, unsigned int * width, unsigned int * height)

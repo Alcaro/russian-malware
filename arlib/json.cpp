@@ -23,17 +23,12 @@ static inline int ctz32(uint32_t in)
 #endif
 }
 
-static bool l_isspace(char ch)
-{
-	return (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n');
-}
-
 uint8_t jsonparser::nextch()
 {
 again: ;
 	uint8_t ret = *(m_data++);
 	if (ret >= 33) return ret;
-	if (l_isspace(ret)) goto again;
+	if (isspace(ret)) goto again;
 	if (m_data > m_data_end)
 	{
 		m_data--;

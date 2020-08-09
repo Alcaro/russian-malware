@@ -803,7 +803,6 @@ typedef struct _XDisplay Display;
 struct window_x11_info {
 	Display* display;
 	int screen;
-	unsigned long root; //The real type is Window aka XID.
 };
 extern struct window_x11_info window_x11;
 #endif

@@ -15,6 +15,14 @@
 //TODO: simplify and delete this one
 //should use bytestream, possibly via something serialize.h-like
 
+static inline uint8_t  end_swap(uint8_t  n) { return n;  }
+static inline uint16_t end_swap(uint16_t n) { return __builtin_bswap16(n); }
+static inline uint32_t end_swap(uint32_t n) { return __builtin_bswap32(n); }
+static inline uint64_t end_swap(uint64_t n) { return __builtin_bswap64(n); }
+static inline int8_t  end_swap(int8_t  n) { return (int8_t )end_swap((uint8_t )n); }
+static inline int16_t end_swap(int16_t n) { return (int16_t)end_swap((uint16_t)n); }
+static inline int32_t end_swap(int32_t n) { return (int32_t)end_swap((uint32_t)n); }
+static inline int64_t end_swap(int64_t n) { return (int64_t)end_swap((uint64_t)n); }
 
 //Given class U, where U supports operator T() and operator=(T), intwrap<U> enables all the integer operators.
 //Most are already supported by casting to the integer type, but this one adds the assignment operators too.

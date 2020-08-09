@@ -298,6 +298,8 @@ test("sandbox", "process", "sandbox")
 	//	loop->set_timer_once(10000, bind_lambda([&]() { abort(); }));
 	//	loop->enter();
 	//}
+	
+	assert(!"make sandbox loader setup ");
 }
 #endif
 #endif

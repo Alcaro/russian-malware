@@ -1,5 +1,4 @@
 #ifdef __linux__
-#include "../endian.h"
 #include "thread.h"
 
 // pretty much same as the generic implementation, except I can use futex instead of the linked list - much easier

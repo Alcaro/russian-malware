@@ -12,15 +12,22 @@
 // replace contents, replace/append streaming, rw random
 // the above six but async
 // mmap read, mmap rw
-// read all and flock()
+//  no need for mmap partial; it'd make sense on 32bit, but 32bit is no longer useful
+// read all and flock() - also allows replacing contents
+//  actually, this should be the one with replace contents
 //
 // read all should, as now, be a single function, but implemented in the backend
 //  since typical usecase is passing return value to e.g. JSON::parse, it should return normal array<uint8_t> or string
-// replace should also be a backend function, but it should be atomic, initially writing to filename+".swptmp" (remember to fsync)
-//  ideally, it'd be open(O_TMPFILE)+linkat(O_REPLACE), but kernel doesn't allow that
-// mmap shouldn't be in the file object either, but take a filename and return an arrayview(w)<byte> child with a dtor
+// mmap shouldn't be in the file object either, but take a filename and return an arrayview(w)<uint8_t> child with a dtor
 // read-and-lock should also be a function, also returning an arrayview<uint8_t> child with a dtor
-//  this one should also have a 'replace contents' member, still atomic (flock the new one before renaming)
+//  this one should also have a 'replace contents' member, initially writing to filename+".swptmp" (remember to fsync)
+//   the standard recommendation is using unique names; the advantage is no risk that two programs use the temp name simultaneously,
+//    but the drawback is a risk of leaving trash around that will never be cleaned
+//    such overlapping writes are unsafe anyways - if two programs simultaneously update a file using unique names,
+//     one will be reverted, after telling program it succeeded
+//   ideally, it'd be open(O_TMPFILE)+linkat(O_REPLACE), but kernel doesn't allow that
+//   alternatively ioctl(FISWAPRANGE) https://lwn.net/Articles/818977/
+//   for Windows, just go for ReplaceFile(), and don't even try to not create temp files (fsync() is FlushFileBuffers())
 // async can be ignored for now; it's rarely useful, async local file needs threads on linux, and async without coroutines is painful
 // the other four combinations belong in the file object; replace/append streaming is useful for logs
 //  they should use seek/read/size as primitives, not pread
@@ -281,8 +288,8 @@ public:
 	static array<string> listdir(cstring path); // Returns all items in the given directory. All outputs are prefixed with the input.
 	static bool mkdir(cstring path); // Returns whether that's now a directory. If it existed already, returns true; if a file, false.
 	static bool unlink(cstring filename); // Returns whether the file is now gone. If the file didn't exist, returns true.
-	static string dirname(cstring path){ return path.rsplit<1>("/")[0]+"/"; } //If the input path is a directory, the basename is blank.
-	static string basename(cstring path) { return path.rsplit<1>("/")[1]; }
+	static cstring dirname(cstring path){ return path.substr(0, path.lastindexof("/")+1); } // If the input path is a directory, the basename is blank.
+	static cstring basename(cstring path) { return path.substr(path.lastindexof("/")+1, ~0); }
 	static string change_ext(cstring path, cstring new_ext); // new_ext should be ".bin" (can be blank)
 	
 	//Arlib does not recognize backslashes in filenames as legitimate.

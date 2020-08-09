@@ -395,6 +395,9 @@ const char * * find_env(const char * * envp, const char * name)
 	return NULL;
 }
 
+static const char * const execveat_gate = (char*)0x00007FFFFFFFEFFF;
+static const char * const execveat_gate_page = (char*)((long)execveat_gate&~0xFFF);
+
 static inline int execveat(int dirfd, const char * pathname, char * const * argv, char * const * envp, int flags)
 {
 	if (dirfd != AT_FDCWD) return -ENOSYS;
@@ -427,8 +430,6 @@ static inline int execveat(int dirfd, const char * pathname, char * const * argv
 	int fd = do_broker_req(&req);
 	if (fd<0) return -ENOMEM;
 	
-	const char * execveat_gate = (char*)0x00007FFFFFFFEFFF;
-	const char * execveat_gate_page = (char*)((long)execveat_gate&~0xFFF);
 	intptr_t mmap_ret = (intptr_t)mmap((void*)execveat_gate_page, 4096, PROT_READ, MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED, -1, 0);
 	if (mmap_ret<0) return mmap_ret;
 	
@@ -656,12 +657,11 @@ static void sa_sigsys(int signo, siginfo_t* info, void* context)
 
 extern "C" void preload_action(char** argv, char** envp)
 {
-	//what's this flag for?
-	//answer: kernel usually blocks the currently-executing signal, to avoid infinite recursion
+	//kernel usually blocks the currently-executing signal, to avoid infinite recursion
 	// (for example, if the SIGSEGV handler segfaults, running it again probably won't help)
 	//a good idea most of the time, but not for us; we know this one doesn't recurse,
 	// and we don't always return from this signal handler, sometimes we execveat() instead
-	//so we pass SA_NODEFER to disable this self-blocking
+	//so we need a SA_NODEFER to disable this self-blocking
 	set_sighand(SIGSYS, sa_sigsys, SA_NODEFER); 
 	
 	progname = argv[1];
@@ -669,6 +669,9 @@ extern "C" void preload_action(char** argv, char** envp)
 	const char * * env_pwd = find_env((const char**)envp, "PWD=");
 	if (env_pwd) chdir(*env_pwd + strlen("PWD="));
 	else chdir("/@CWD");
+	
+	// reserve this page early, reduces the risk of something randomly ending up there
+	mmap((void*)execveat_gate_page, 4096, PROT_READ, MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED, -1, 0);
 }
 
 extern "C" void preload_error(const char * why)

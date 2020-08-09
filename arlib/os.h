@@ -72,6 +72,18 @@ public:
 #define DECL_DYLIB_T(name, ...) DECL_DYLIB_PREFIX_T(name, , __VA_ARGS__)
 //which is just the above without the second argument.
 
+// This one is like the above two, but caller is expected to initialize it,
+//  probably because caller needs it initialized via something other than a dylib.
+// raw_names() and raw_target() are valid arguments to dylib::sym_multi(), but caller is welcome to pass them someone else.
+// Note that unlike DECL_DYLIB_T, the member function pointers are not set to NULL by default.
+#define DECL_DYLIB_RAW_T(name, prefix, ...) \
+	class name { \
+	public: \
+		PPFOREACH_A(DECL_DYLIB_MEMB, prefix, __VA_ARGS__); \
+		const char * raw_names() { return PPFOREACH_A(DECL_DYLIB_NAME, prefix, __VA_ARGS__); } \
+		funcptr * raw_target() { return (funcptr*)this; } \
+	}
+
 
 //If the program is run under a debugger, this triggers a breakpoint. If not, does nothing.
 //Returns whether it did something. The other three do too, but they always do something, if they return at all.
@@ -130,7 +142,7 @@ class benchmark {
 	timer t;
 	
 	uint32_t iterations = 0;
-	uint32_t us = 1000000;
+	uint32_t us = 500000;
 public:
 	benchmark() {}
 	benchmark(uint32_t us) : us(us) {}
@@ -138,10 +150,10 @@ public:
 	operator bool()
 	{
 		iterations++;
-		if (!(iterations & (iterations-1)))
+		if (!(iterations & (iterations-1))) // for really fast-running things, fetching the time is a bottleneck; do it rarely
 		{
 			uint32_t us_actual = t.us();
-			if (us_actual > us || (iterations == 1024 && us_actual > 50000))
+			if (us_actual > us)
 			{
 				us = us_actual;
 				return false;

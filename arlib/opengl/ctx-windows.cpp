@@ -1,7 +1,7 @@
 #ifdef _WIN32
 #include "aropengl.h"
 
-// https://www.opengl.org/registry/specs/NV/DX_interop.txt
+// https://www.khronos.org/registry/OpenGL/extensions/NV/WGL_NV_DX_interop.txt
 // https://github.com/halogenica/WGL_NV_DX/blob/master/SharedResource.cpp
 // https://msdn.microsoft.com/en-us/library/windows/desktop/bb174336(v=vs.85).aspx
 
@@ -19,6 +19,7 @@
 #include "../deps/wglext.h"
 
 #ifdef AROPENGL_D3DSYNC
+#include "../os.h"
 # include <D3D9.h>
 # ifndef D3DPRESENT_FORCEIMMEDIATE
 #  define D3DPRESENT_FORCEIMMEDIATE 0x00000100L
@@ -170,7 +171,7 @@ public:
 	bool vsync;
 #endif
 	
-	/*private*/ bool init(HWND parent, HWND* window_, uint32_t flags)
+	/*private*/ bool init(uint32_t width, uint32_t height, HWND parent, HWND* window_, uint32_t flags)
 	{
 		DWORD glwndflags = WS_CHILD | WS_VISIBLE;
 #ifdef AROPENGL_D3DSYNC
@@ -178,7 +179,7 @@ public:
 		if (this->d3dsync) glwndflags &= ~WS_VISIBLE;
 #endif
 		
-		this->GL_hwnd = CreateWindow("arlib", NULL, glwndflags, 0, 0, 1, 1, parent, NULL, NULL, NULL);
+		this->GL_hwnd = CreateWindow("arlib", NULL, glwndflags, 0, 0, width, height, parent, NULL, NULL, NULL);
 		
 		*window_ = this->GL_hwnd;
 		this->GL_hdc = GetDC(this->GL_hwnd);
@@ -190,7 +191,7 @@ public:
 #ifdef AROPENGL_D3DSYNC
 		if (this->d3dsync)
 		{
-			this->D3D_hwnd = CreateWindow("arlib", NULL, WS_CHILD | WS_VISIBLE, 0, 0, 1, 1, parent, NULL, NULL, NULL);
+			this->D3D_hwnd = CreateWindow("arlib", NULL, WS_CHILD | WS_VISIBLE, 0, 0, width, height, parent, NULL, NULL, NULL);
 			*window_ = this->D3D_hwnd;
 			D3D_sharehandle = NULL;
 			D3D_sharetexture = NULL;
@@ -240,7 +241,7 @@ public:
 			pfd.dwFlags &= ~PFD_DOUBLEBUFFER;
 #endif
 		pfd.iLayerType = PFD_MAIN_PLANE;
-		SetPixelFormat(this->GL_hdc, ChoosePixelFormat(this->GL_hdc, &pfd), &pfd);
+		if (!SetPixelFormat(this->GL_hdc, ChoosePixelFormat(this->GL_hdc, &pfd), &pfd)) return false;
 		this->GL_hglrc = wgl.CreateContext(this->GL_hdc);
 		if (!this->GL_hglrc) return false;
 		
@@ -321,11 +322,11 @@ public:
 		                               D3DCREATE_HARDWARE_VERTEXPROCESSING,
 		                               &parameters, NULL, &this->D3D_device)) &&
 		    FAILED(d3d->CreateDeviceEx(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, this->D3D_hwnd,
-		                               D3DCREATE_MIXED_VERTEXPROCESSING, // I don't care what type of vertex processing, just do something
-		                               &parameters, NULL, &this->D3D_device)) &&
+		                               D3DCREATE_MIXED_VERTEXPROCESSING, // I don't care what type of vertex processing,
+		                               &parameters, NULL, &this->D3D_device)) && // just do something
 		    FAILED(d3d->CreateDeviceEx(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, this->D3D_hwnd,
 		                               D3DCREATE_SOFTWARE_VERTEXPROCESSING,
-		                               &parameters, NULL, &this->D3D_device)) &&)
+		                               &parameters, NULL, &this->D3D_device)))
 		{
 			return false;
 		}
@@ -429,24 +430,27 @@ public:
 		{
 			wgl.DXUnlockObjectsNV(D3D_sharehandle, 1, &this->GL_htexture);
 			this->D3D_device->StretchRect(this->D3D_GLtarget, NULL, this->D3D_backbuf, NULL, D3DTEXF_NONE);
-			this->D3D_device->PresentEx(NULL, NULL, NULL, NULL, (vsync ? 0 : D3DPRESENT_FORCEIMMEDIATE|D3DPRESENT_DONOTWAIT));
+			uint32_t presentflags = (vsync ? 0 : D3DPRESENT_FORCEIMMEDIATE|D3DPRESENT_DONOTWAIT);
+			HRESULT err = this->D3D_device->PresentEx(NULL, NULL, NULL, NULL, presentflags);
 			
-#error figure out why PresentEx is called twice
-			HRESULT err = this->D3D_device->PresentEx(NULL, NULL, NULL, NULL, D3DPRESENT_FORCEIMMEDIATE);
 			if (err == D3DERR_DEVICELOST || err == D3DERR_DEVICEHUNG)
 			{
-				//WARNING: Untested, stolen from https://github.com/mudlord/einweggerat/commit/07dc0cb74f76c8cde890f4bbf290bad1d56975d9
-				debug_or_print();
-				
+				// TODO: I can't provoke this condition, so I can't test it, or know what behavior would be appropriate
+				// according to https://github.com/mudlord/einweggerat/commit/07dc0cb74f76c8cde890f4bbf290bad1d56975d9,
+				// it's enough to
+				/*
 				DeallocRenderTarget();
 				D3DPRESENT_PARAMETERS parameters = PresentParams();
 				err = this->D3D_device->ResetEx(&parameters, NULL);
 				if (err == D3DERR_DEVICELOST || err == D3DERR_DEVICEHUNG)
 				{
-					// WARNING: Not tested by mudlord either
+					// ???
 					debug_or_abort();
 				}
 				AllocRenderTarget();
+				*/
+				// but I think it'd require reinitializing the GL resources too
+				debug_or_print();
 			}
 			
 			wgl.DXLockObjectsNV(D3D_sharehandle, 1, &this->GL_htexture);
@@ -509,10 +513,10 @@ public:
 
 }
 
-aropengl::context* aropengl::context::create(uintptr_t parent, uintptr_t* window, uint32_t flags)
+aropengl::context* aropengl::context::create(uint32_t width, uint32_t height, uintptr_t parent, uintptr_t* window, uint32_t flags)
 {
 	aropengl_windows* ret = new aropengl_windows();
-	if (ret->init((HWND)parent, (HWND*)window, flags)) return ret;
+	if (ret->init(width, height, (HWND)parent, (HWND*)window, flags)) return ret;
 	
 	delete ret;
 	return NULL;

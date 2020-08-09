@@ -2145,7 +2145,7 @@ void HTML::all_entities()
 		ptr += strlen(ptr)+1;
 		ptr += strlen(ptr)+1;
 	}
-	set_entities(entities, ARRAY_SIZE(entities));
+	HTML::set_entities(entities, ARRAY_SIZE(entities));
 }
 
 #include "test.h"

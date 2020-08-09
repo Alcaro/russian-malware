@@ -2,7 +2,6 @@
 #ifdef ARGUI_GTK3
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 #include <gtk/gtk.h>
 #ifdef ARGUIPROT_X11
 #include <gdk/gdkx.h>

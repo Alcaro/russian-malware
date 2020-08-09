@@ -735,10 +735,10 @@ Killing the other threads is also tricky. (Threads aren't implemented yet, but t
 
 But, again, it's possible: A list of threads can be found in /proc/getpid()/task/ and fetched by the
  namespace init, and we could send a custom signal that causes any recipient thread to terminate
- itself. SIGSYS, for example, we already have a SIGSYS handler. Signals can be blocked, but only if
- sigprocmask() can get past seccomp, which it can't. And exec in multithreaded programs at all is
- rare - even if a multithreaded program wants to exec something, it usually does fork() first, which
- only clones the calling thread.
+ itself. SIGSYS, for example, we already have a SIGSYS handler. Signals can be blocked, but worst
+ case, that'll just make the process break itself. And exec in multithreaded programs at all is rare
+ - even if a multithreaded program wants to exec something, it usually does fork() first, which only
+ clones the calling thread.
 
 (A complication would be avoiding races between cloexec and open() in another thread; easy to fix,
  just kill the threads first. Another issue is races between clone() and thread killing; to fix that
@@ -809,7 +809,7 @@ The namespaces are used to restrict user ID in auxv, to enforce the termination 
  processes upon sandbox exit, to grant access to chroot(), and possibly a few other operations. (I
  also want to add cgroup support, but that seems to require real root.)
 
-To remove namespaces without compromising security, the above must be restricted in another way.
+To remove namespaces without compromising security, the above must be performed in another way.
 auxv can only be cleaned post-execveat(), at which point code execution cannot be trusted, so that
  syscall must be banned or emulated. The latter is (as discussed above) impossible without
  namespaces, so a namespace-less sandbox would be unable to run a significant fraction of programs.
@@ -823,7 +823,7 @@ Terminating grandchildren is also necessary, and must be emulated somehow. Not o
  if said code always runs - and since the broker cannot be assumed crash-free, that's an
  unacceptably big 'if'. This leaves only one option - disable fork(), further restricting the set of
  runnable children.
-chroot is only used to disable the filesystem so execveat .INTERP doesn't do anything strange, and
+chroot is only used to disable the filesystem so execveat .interp doesn't do anything strange, and
  since execveat() must be banned for other reasons, no further consideration is needed. It is one
  less layer of defense-in-depth, but one solid layer is enough anyways.
 

@@ -198,9 +198,21 @@ public:
 	explicit operator bool() const { return isTrue(); }
 	bool operator!() const { return !isTrue(); }
 	
+private:
+	struct unsafe_binding {
+		bool safe;
+		Tfp fp;
+		void* ctx;
+		operator bool() { return safe; }
+	};
+	struct binding {
+		Tfp fp;
+		void* ctx;
+	};
+public:
 	//Splits a function object into a function pointer and a context argument.
 	//Calling the pointer, with the context as first argument, is equivalent to calling the function object directly
-	// (modulo a few move constructor calls).
+	// (possibly modulo a few move constructor calls).
 	//
 	//WARNING: If the object owns memory, it must remain alive during any use of ctx.
 	//This function assumes you don't want to keep this object alive.
@@ -209,25 +221,17 @@ public:
 	//The function object owns memory if it refers to a lambda binding more than sizeof(void*) bytes.
 	//In typical cases (a member function, or a lambda binding 'this' or nothing), this is safe.
 	//If you want to decompose but keep the object alive, use try_decompose.
-private:
-	struct binding {
-		bool safe;
-		Tfp fp;
-		void* ctx;
-		operator bool() { return safe; }
-	};
-public:
 	binding decompose()
 	{
 		if (ref) __builtin_trap();
-		return { !ref, func, ctx };
+		return { func, ctx };
 	}
 	
 	//Like the above, but assumes you will keep the object alive, so it always succeeds.
 	//Potentially useful to skip a level of indirection when wrapping a C callback into an Arlib
 	// class, but should be avoided under most circumstances. Direct use of a C API can know what's
 	// being bound, and can safely use the above instead.
-	binding try_decompose()
+	unsafe_binding try_decompose()
 	{
 		return { !ref, func, ctx };
 	}
