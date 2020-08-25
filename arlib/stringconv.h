@@ -49,9 +49,7 @@ inline string tostring(bool val) { return val ? "true" : "false"; }
 inline string tostring(const char * s) { return s; } // only exists as tostring, fromstring would be a memory leak
 
 template<typename T>
-typename std::enable_if_t<
-	sizeof((string)std::declval<T>()) != 0
-	, string>
+typename std::enable_if_t<sizeof((string)std::declval<T>()) != 0, string>
 tostring(const T& val)
 {
 	return (string)val;
@@ -73,6 +71,10 @@ bool fromstring(cstring s, unsigned long long & out);
 bool fromstring(cstring s, float& out);
 bool fromstring(cstring s, double& out);
 bool fromstring(cstring s, bool& out);
+void tostring(bytesr) = delete;
+void tostring(bytesw) = delete;
+void tostring(bytearray) = delete;
+template<typename T, size_t n> void tostring(const T(&)[n]) = delete;
 
 bool fromstringhex(cstring s, unsigned char & out);
 bool fromstringhex(cstring s, unsigned short & out);
@@ -108,6 +110,7 @@ template<typename T> T try_fromstring(cstring s, T&& def)
 
 template<typename T>
 string tostring_dbg(const T& item) { return tostring(item); }
+
 template<typename T>
 string tostring_dbg(const arrayview<T>& item)
 {
@@ -115,6 +118,9 @@ string tostring_dbg(const arrayview<T>& item)
 }
 template<typename T> string tostring_dbg(const arrayvieww<T>& item) { return tostring_dbg((arrayview<T>)item); }
 template<typename T> string tostring_dbg(const array<T>& item) { return tostring_dbg((arrayview<T>)item); }
+template<typename T, size_t size> string tostring_dbg(T(&item)[size]) { return tostring_dbg(arrayview<T>(item)); }
+template<size_t size> string tostring_dbg(const char(&item)[size]) { return item; }
+
 template<typename Tkey, typename Tvalue>
 string tostring_dbg(const map<Tkey,Tvalue>& item)
 {

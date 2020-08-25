@@ -2,7 +2,7 @@
 
 //Inspired by
 // http://www.codeproject.com/Articles/136799/ Lightweight Generic C++ Callbacks (or, Yet Another Delegate Implementation)
-//but rewritten using C++11 features, to remove code duplication and 6-arg limits, and improve error messages
+//but rewritten using C++11 (and later C++17) features, to remove code duplication and 6-arg limits, and improve error messages
 
 #include <stddef.h>
 #include <string.h>
@@ -33,8 +33,10 @@ class function<Tr(Ta...)> {
 		void(*destruct)(void* ctx);
 	};
 	
-	Tfp func;
+	// context first, so a buffer overflow into this object can't redirect the function without resetting the context
+	// I think that's the order that makes exploitation harder, though admittedly I don't have any numbers on that
 	void* ctx;
+	Tfp func;
 	refcount* ref;
 	
 	class dummy {};
@@ -53,7 +55,7 @@ class function<Tr(Ta...)> {
 		if (LIKELY(!ref)) return;
 		if (!--ref->count)
 		{
-			bool do_del = ((void*)ref != ctx);
+			bool do_del = ((void*)ref != ctx); // ref==ctx happens if binding a lambda capturing a lot
 			ref->destruct(ctx);
 			if (do_del)
 				delete ref;
@@ -128,8 +130,8 @@ class function<Tr(Ta...)> {
 	
 public:
 	function() { init_free(NULL); }
-	function(const function& rhs) : func(rhs.func), ctx(rhs.ctx), ref(rhs.ref) { add_ref(); }
-	function(function&& rhs)      : func(rhs.func), ctx(rhs.ctx), ref(rhs.ref) { rhs.ref = NULL; }
+	function(const function& rhs) : ctx(rhs.ctx), func(rhs.func), ref(rhs.ref) { add_ref(); }
+	function(function&& rhs)      : ctx(rhs.ctx), func(rhs.func), ref(rhs.ref) { rhs.ref = NULL; }
 	function& operator=(const function& rhs)
 		{ unref(); func = rhs.func; ctx = rhs.ctx; ref = rhs.ref; add_ref(); return *this; }
 	function& operator=(function&& rhs)
@@ -310,7 +312,7 @@ bind_lambda(Tl&& l)
 	return bind_lambda_core<Tl>(std::move(l), &Tl::operator());
 }
 
-//I could make this a compile error if the lambda can't safely destructure, but no need. it'll be immediately caught at runtime anyways
+//I could make this a compile error if the lambda can't safely decompose, but no need. it'll be immediately caught at runtime anyways
 //I could also create a swapped decompose function, userdata at end rather than start, but that'd have to
 // copy half of the function template, and the only one needing userdata at end is GTK which can swap by itself anyways.
 template<typename Tl>

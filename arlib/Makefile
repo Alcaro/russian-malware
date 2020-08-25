@@ -166,8 +166,8 @@ ifeq ($(OS),linux)
     EXESUFFIX = .so
   endif
   ifeq ($(ARTYPE),hybrid)
-    CONF_CFLAGS += -fpie
-    CONF_LFLAGS += -pie -rdynamic
+    CONF_CFLAGS += -fPIC
+    CONF_LFLAGS += -rdynamic
   endif
   ifeq ($(ARTHREADS),1)
     CONF_CFLAGS += -pthread

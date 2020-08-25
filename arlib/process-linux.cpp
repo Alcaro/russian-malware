@@ -51,7 +51,7 @@
 //  parent writes a byte and closes only once the PID is added to the list
 //
 //
-//conclusion: signal handlers suck and should be deleted as soon as possible
+//conclusion: signal handlers are difficult and should be deleted as soon as possible
 //  i.e. kernel 5.3 (september 2019), so I can use pidfd instead
 //
 //see also

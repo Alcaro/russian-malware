@@ -23,11 +23,6 @@ public:
 		cstring value; // or error message
 		               // putting error first would be cleaner in the parser,
 		               // but reader clarity is more important, and this name is better
-		
-		//these constructors are because MSVC2013 can't parse (event){ enter, "foo", "bar" }
-		event(int action) : action(action) {}
-		event(int action, cstring name) : action(action), name(name) {}
-		event(int action, cstring name, cstring value) : action(action), name(name), value(value) {}
 	};
 	
 	//It is not allowed to try to stream data into this object.
@@ -79,7 +74,7 @@ public:
 	void exit();
 	void linebreak();
 	void comment(cstring text);
-	void node(cstring name, cstring val, mode m = ianon); // Equivalent to enter()+exit(), except it supports inline nodes.
+	void node(cstring name, cstring val, mode m = ianon); // Equivalent to enter()+exit(), except it supports inline modes.
 	
 	//TODO: inline nodes on multilines? They're ridiculously ugly, but there are a few cases where they're useful.
 	//I'll decide what to do once I actually need a multiline with children. Maybe add mode imultiline or something.

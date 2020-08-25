@@ -25,7 +25,7 @@ class DNS {
 	{
 		while (true)
 		{
-			uint16_t n = rand(); // rand() sucks on windows, don't care
+			uint16_t n = rand(); // rand() gives bad results on windows, don't care
 			if (!queries.contains(n)) return n;
 		}
 	}

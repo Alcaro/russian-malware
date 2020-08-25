@@ -3,7 +3,7 @@
 #include "stringconv.h"
 #include "file.h"
 
-// TODO: huge parts of this thing can't x
+// TODO: I don't think this thing optimizes out properly
 
 class argparse {
 	class arg_base {
@@ -235,7 +235,7 @@ private:
 	
 public:
 	//The handler should not return; if it does, the default handler (print error to stderr and terminate) is called.
-	//If you want to do something else, throw.
+	//If you want to do something else, throw an exception.
 	void onerror(function<void(cstring error)> handler)
 	{
 		m_onerror = handler;
@@ -251,15 +251,15 @@ public:
 	friend void _arlib_init_gui(argparse& args, char** argv);
 };
 
-//This must be the first Arlib function called in main(), other than argparse setup. Be careful with static initializers too.
-//Give it argv, and a descriptor of the arguments supported by this program.
-//Automatically adds support for a few arguments, like --help, and --display on Linux if GUI is enabled.
-//NULL means no arguments supported (if any present, throws error; still supports --help and --display).
-
+// Most of Arlib is safe to call before initialization, but anything runloop-related is unsafe, as is libc rand() (it's unseeded).
+// Call exactly one of those three. Arlib will automatically parse a few arguments, like --display on Linux if GUI is enabled.
 void arlib_init(argparse& args, char** argv);
-void arlib_init(nullptr_t, char** argv);
+void arlib_init(nullptr_t, char** argv); // Shorthand if your program takes no arguments. Will complain if any are given.
+// In case you want to handle arguments yourself. Arlib will still handle --display if argc/argv are given, but it's safe to pass NULLs.
+void arlib_init_manual_args(int* argc, char*** argv);
 
 
 //Called by arlib_init(). Don't use it yourself.
-void _arlib_init_gui(char** argv); // If the program takes no arguments.
 void _arlib_init_gui(argparse& args, char** argv);
+void _arlib_init_gui(char** argv); // corresponds to the null version
+void _arlib_init_gui_manual_args(int* argc, char*** argv);

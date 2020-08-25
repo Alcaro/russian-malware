@@ -169,6 +169,18 @@ public:
 	
 	const T* begin() const { return this->items; }
 	const T* end() const { return this->items+this->count; }
+	
+	
+	static const bool serialize_as_array = true;
+	template<typename Ts>
+	std::enable_if_t<Ts::serializing>
+	serialize(Ts& s)
+	{
+		for (size_t i=0;i<size();i++)
+		{
+			s.item(items[i]);
+		}
+	}
 };
 
 //size: two pointers
@@ -230,7 +242,7 @@ public:
 		memcpy(this->items+b, tmp, sizeof(T));
 	}
 	
-	//unstable sort - default because equivalent-but-nonidentical states are extremely rare
+	//unstable sort - default because equivalent-but-nonidentical states are rare
 	template<typename Tless>
 	void sort(const Tless& less)
 	{
@@ -302,6 +314,16 @@ public:
 	const T* end() const { return this->items+this->count; }
 	T* begin() { return this->items; }
 	T* end() { return this->items+this->count; }
+	
+	
+	template<typename Ts>
+	void serialize(Ts& s)
+	{
+		for (size_t i=0;i<this->count;i++)
+		{
+			s.item(this->items[i]);
+		}
+	}
 };
 
 //size: two pointers, plus one T per item
@@ -420,7 +442,7 @@ public:
 	}
 	T& insert(size_t index, const T& item)
 	{
-		char tmp[sizeof(T)]; // in case 'item' points into the current array
+		char tmp[sizeof(T)];
 		new(&tmp) T(item);
 		
 		resize_grow_noinit(this->count+1);
@@ -592,6 +614,21 @@ public:
 		this->count = 0;
 		return ret;
 	}
+	
+	
+	template<typename Ts>
+	void serialize(Ts& s)
+	{
+		if constexpr (Ts::serializing)
+		{
+			arrayview<T>::serialize(s);
+		}
+		else
+		{
+			while (s.has_item())
+				s.item(append());
+		}
+	}
 };
 
 template<typename T> template<typename T2>
@@ -629,7 +666,7 @@ public:
 
 template<> class array<bool> {
 protected:
-	//extra variable to shut up gcc
+	//extra variable to silence a warning
 	//  division 'sizeof (uint8_t* {aka unsigned char*}) / sizeof (uint8_t {aka unsigned char})'
 	//  does not compute the number of array elements [-Wsizeof-pointer-div]
 	static const size_t ptr_size = sizeof(uint8_t*);
@@ -822,7 +859,6 @@ extern template class array<cstring>;
 class string;
 extern template class array<string>;
 
-// TODO: find better names - I can't use bytes, lots of objects use that as a function name
 using bytesr = arrayview<uint8_t>;
 using bytesw = arrayvieww<uint8_t>;
 using bytearray = array<uint8_t>;

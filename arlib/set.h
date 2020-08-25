@@ -281,6 +281,25 @@ public:
 //}
 //puts("---");
 //}
+	
+	static const bool serialize_as_array = true;
+	template<typename Ts> void serialize(Ts& s)
+	{
+		if constexpr (Ts::serializing)
+		{
+			for (const T& child : *this)
+				s.item(child);
+		}
+		else
+		{
+			while (s.has_item())
+			{
+				T tmp;
+				s.item(tmp);
+				add(std::move(tmp));
+			}
+		}
+	}
 };
 
 
@@ -479,21 +498,24 @@ public:
 	iterwrap<v_iterator> values() { return iterwrap<v_iterator>(items.begin(), items.end()); }
 	iterwrap<cv_iterator> values() const { return iterwrap<cv_iterator>(items.begin(), items.end()); }
 	
-	template<typename T>
-	void serialize(T& s)
+	template<typename Ts>
+	void serialize(Ts& s)
 	{
-		if (s.serializing)
+		if constexpr (Ts::serializing)
 		{
 			for (node& p : *this)
 			{
-				s.item(tostring(p.key), p.value);
+				s.item(tostring(p.key), p.value); // stringconv.h isn't included at this point, but somehow it works
 			}
 		}
 		else
 		{
-			Tkey tmpk;
-			if (fromstring(s.next(), tmpk))
-				s.item_next(items.get_create(tmpk).value);
+			while (s.has_item())
+			{
+				Tkey tmpk;
+				if (fromstring(s.name(), tmpk))
+					s.item(get_create(tmpk));
+			}
 		}
 	}
 };

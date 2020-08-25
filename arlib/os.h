@@ -141,9 +141,10 @@ public:
 class benchmark {
 	timer t;
 	
-	uint32_t iterations = 0;
-	uint32_t us = 500000;
 public:
+	uint32_t iterations = 0; // Callers are allowed to read, but not write, these two.
+	uint32_t us = 500000;
+	
 	benchmark() {}
 	benchmark(uint32_t us) : us(us) {}
 	

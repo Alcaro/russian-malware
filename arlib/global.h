@@ -171,7 +171,7 @@ template<typename T> typename std::enable_if<sizeof(T)==0, T&>::type ARRAY_SIZE_
 //#define STRING(x) const char * x##_string = #x;
 //PPFOREACH(STRING, foo, bar, baz)
 //limited to 365 entries, but that's enough.
-#define PPFOREACH(f, ...)        PPFE_EVAL(PPFE_MAP1(f,        __VA_ARGS__, ()()(), ()()(), ()()(), 0))
+#define PPFOREACH(f, ...)        PPFE_EVAL(PPFE_MAP1(f,       __VA_ARGS__, ()()(), ()()(), ()()(), 0))
 // Same as the above, but the given macro takes two arguments, of which the first is 'arg' here.
 #define PPFOREACH_A(f, arg, ...) PPFE_EVAL(PPFE_MAP1A(f, arg, __VA_ARGS__, ()()(), ()()(), ()()(), 0))
 

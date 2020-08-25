@@ -505,10 +505,7 @@ public:
 	string(const char * str) : cstring(noinit()) { init_from(str); }
 	string(cstring other) : cstring(noinit()) { init_from(other); }
 	string(arrayview<uint8_t> bytes) : cstring(noinit()) { init_from(bytes); }
-	string(arrayview<char> chars) : cstring(noinit())
-	{
-		init_from(chars.reinterpret<uint8_t>());
-	}
+	string(arrayview<char> chars) : cstring(noinit()) { init_from(chars.reinterpret<uint8_t>()); }
 	string(array<uint8_t>&& bytes);
 	string(nullptr_t) : cstring(noinit()) { init_empty(); }
 	string& operator=(const string& other) { reinit_from(other); return *this; }

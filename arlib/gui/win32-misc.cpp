@@ -85,7 +85,7 @@ bool window_console_attach() { return window_console(true); }
 #if 0
 file* file::create(const char * filename)
 {
-	//sorry Windows, no fancy features for you, you suck
+	//sorry Windows, no fancy features for you
 	return create_fs(filename);
 }
 

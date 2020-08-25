@@ -641,7 +641,7 @@ template<size_t id, typename finish, typename... stones> struct bridge;
 // A stone is a rule that either matches or doesn't, no backtracking needed, i.e. one of
 //     literal, char_class, capture_edge, backreference, anchor, word_boundary, lookahead, backup
 //   (while lookahead can backtrack internally, you can't backtrack into it, so it's still a stone)
-//   (TODO: investigate how often choices contain only literal or char_class; if common, and codegen sucks, treat that as a stone)
+//   (TODO: investigate how often choices contain only literal or char_class; if common, and codegen is poor, treat that as a stone)
 // A backup instruction stores a bridge ID, and the current character under consideration, to a stack.
 //   TODO: use machine stack first and check performance; return predictor probably means manual stack is slower, but worth trying
 // On matching failure, the most recent backup is popped from the stack.

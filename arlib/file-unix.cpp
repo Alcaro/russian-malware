@@ -196,9 +196,13 @@ array<string> file::listdir(cstring path)
 		}
 		
 		string childpath = path + ent->d_name;
-		struct stat st;
-		stat(childpath, &st);
-		if (S_ISDIR(st.st_mode)) childpath += "/";
+		if (ent->d_type == DT_UNKNOWN)
+		{
+			struct stat st;
+			stat(childpath, &st);
+			if (S_ISDIR(st.st_mode)) childpath += "/";
+		}
+		else if (ent->d_type == DT_DIR) childpath += "/";
 		ret.append(std::move(childpath));
 	}
 	closedir(dir);

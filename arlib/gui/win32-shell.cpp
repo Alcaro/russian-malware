@@ -449,9 +449,9 @@ window_win32(widget_base* contents)
 	
 	this->contents=(widget_base*)contents;
 	this->contents->measure();
-	//the 6 and 28 are arbitrary; we'll set ourselves to a better size later. Windows' default placement algorithm sucks, anyways.
-	//const char * xpmsg="Do not submit bug reports. Windows XP is unsupported by Microsoft, and unsupported by me.";
-	this->hwnd=CreateWindow("arlib", /*isxp?xpmsg:*/"", WS_NONRESIZ, CW_USEDEFAULT, CW_USEDEFAULT,
+	//the 6 and 28 are arbitrary; we'll set ourselves to a better size later.
+	//Windows' default placement algorithm doesn't really care about window size, anyways.
+	this->hwnd=CreateWindow("arlib", "", WS_NONRESIZ, CW_USEDEFAULT, CW_USEDEFAULT,
 	                        this->contents->width+6, this->contents->height+28, NULL, NULL, GetModuleHandle(NULL), NULL);
 	SetWindowLongPtr(this->hwnd, GWLP_USERDATA, (LONG_PTR)this);
 	SetWindowLongPtr(this->hwnd, GWLP_WNDPROC, (LONG_PTR)WindowProc);

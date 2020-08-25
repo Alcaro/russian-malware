@@ -194,6 +194,15 @@ void arlib_init(argparse& args, char** argv)
 #endif
 }
 
+void arlib_init_manual_args(int* argc, char*** argv)
+{
+	arlib_init_shared();
+	
+#ifndef ARGUI_NONE
+	_arlib_init_gui_manual_args(argc, argv);
+#endif
+}
+
 void arlib_init(nullptr_t, char** argv)
 {
 	arlib_init_shared();

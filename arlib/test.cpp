@@ -330,7 +330,7 @@ int main(int argc, char* argv[])
 	printf("Initializing Arlib...");
 	bool run_twice = false;
 	
-#ifdef __linux__
+#if defined(__linux__) && !defined(__SANITIZE_ADDRESS__)
 	struct rlimit rlim_as = { 4096ull*1024*1024, RLIM_INFINITY };
 	struct rlimit rlim_data = { 512ull*1024*1024, RLIM_INFINITY };
 	setrlimit(RLIMIT_AS, &rlim_as);

@@ -3,6 +3,8 @@
 #include "crc32.h"
 #include "simd.h"
 
+// TODO: write my own deflate handler
+// high level format overview: http://www.codersnotes.com/notes/elegance-of-deflate/
 #define MINIZ_HEADER_FILE_ONLY
 #include "deps/miniz.c"
 
@@ -41,9 +43,7 @@ bool image::init_decode_png(arrayview<uint8_t> pngdata)
 			
 			if (ret.len >= 0x80000000 || remaining() < 4 + ret.len + 4) return ret;
 			
-//verify=false;
 			uint32_t crc32_actual = crc32(peekbytes(4+ret.len));
-			//uint32_t crc32_actual = mz_crc32(MZ_CRC32_INIT, peekbytes(4+ret.len).ptr(), 4+ret.len);
 			
 			ret.type = u32b();
 			ret.init(bytes(ret.len));
@@ -98,8 +98,8 @@ bool image::init_decode_png(arrayview<uint8_t> pngdata)
 	if (width == 0 || height == 0 || width >= 0x80000000 || height >= 0x80000000) goto fail;
 	if (bits_per_sample >= 32 || color_type > 6 || comp_meth != 0 || filter_meth != 0 || interlace_meth > 1) goto fail;
 	if (bits_per_sample > 8) goto fail; // bpp=16 is allowed by the png standard, but not by this program
-	static const uint32_t bpp_allowed[7] = { 0x00010116, 0x00000000, 0x00010100, 0x00000116, 0x00010100, 0x00000000, 0x00010100 };
-	if (((bpp_allowed[color_type]>>bits_per_sample)&1) == false) goto fail; // this also rejects types 1 and 5
+	static const uint32_t bpp_allowed[7] = { 0x977F7FFF, 0xFFFFFFFF, 0xFF7F7FFF, 0x977FFFFF, 0xFF7F7FFF, 0xFFFFFFFF, 0xFF7F7FFF };
+	if ((bpp_allowed[color_type]<<bits_per_sample)&0x80000000) goto fail; // set bit - invalid bpp (this also rejects types 1 and 5)
 	
 	uint32_t palette[256];
 	unsigned palettelen = 0;

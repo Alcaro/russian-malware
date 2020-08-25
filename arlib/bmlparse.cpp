@@ -296,7 +296,7 @@ bmlparser::event bmlparser::next()
 	if (m_exit)
 	{
 		m_exit = false;
-		return event(exit);
+		return { exit };
 	}
 	
 	if (m_inlines)
@@ -308,13 +308,13 @@ bmlparser::event bmlparser::next()
 			m_exit = true;
 			return ev;
 		}
-		else if (ev.value) return event(error, "", ev.value);
+		else if (ev.value) return { error, "", ev.value };
 		//else fall through
 	}
 	
 	if (!m_thisline && m_data)
 	{
-		if (!getline(true)) return event(error, "", "Mixed tabs and spaces");
+		if (!getline(true)) return { error, "", "Mixed tabs and spaces" };
 	}
 	
 	if (m_indent_step.size() > m_indent.length())
@@ -326,20 +326,20 @@ bmlparser::event bmlparser::next()
 			// but only if the document contains mix-tab-space and this error already.
 			if (m_indent_step.size() > m_indent.length()) m_indent += m_indent[0];
 			else m_indent = m_indent.substr(0, ~1);
-			return event(error, "", "Invalid indentation depth");
+			return { error, "", "Invalid indentation depth" };
 		}
 		
 		int lasttrue = m_indent_step.size()-2; // -1 for [size()] being OOB, -1 to skip the true at [size()-1] and discard it
 		while (lasttrue>=0 && m_indent_step[lasttrue]==false) lasttrue--;
 		
 		m_indent_step.resize(lasttrue+1);
-		return event(exit);
+		return { exit };
 	}
 	
 	if (!m_thisline)
 	{
 		if (m_indent_step.size()) goto handle_indent;
-		return event(finish);
+		return { finish };
 	}
 	
 	m_inlines = m_thisline;
@@ -351,35 +351,35 @@ bmlparser::event bmlparser::next()
 	if (!bml_parse_inline_node(m_inlines, node, hasvalue, value))
 	{
 		//m_inlines can't be empty here, we've called getline()
-		return event(error, "", value);
+		return { error, "", value };
 	}
 	
 	size_t indentlen = m_indent.length(); // changed by getline
 	//multilines
 	if (!hasvalue)
 	{
-		if (!getline(false)) return event(error, "", "Mixed tabs and spaces");
+		if (!getline(false)) return { error, "", "Mixed tabs and spaces" };
 		if (m_thisline[0] == ':')
 		{
 			size_t inner_indent = m_indent.length();
 			m_tmp_value = m_thisline.substr(1, ~0);
-			if (!getline(false)) return event(error, "", "Mixed tabs and spaces");
+			if (!getline(false)) return { error, "", "Mixed tabs and spaces" };
 			while (m_thisline[0] == ':')
 			{
-				if (inner_indent != m_indent.length()) return event(error, "", "Multi-line values must have constant indentation");
+				if (inner_indent != m_indent.length()) return { error, "", "Multi-line values must have constant indentation" };
 				m_tmp_value += "\n" + m_thisline.substr(1, ~0);
-				if (!getline(false)) return event(error, "", "Mixed tabs and spaces");
+				if (!getline(false)) return { error, "", "Mixed tabs and spaces" };
 			}
 			
 			if (m_indent.length() != inner_indent)
 			{
 				if (m_indent.length() > inner_indent)
 				{
-					return event(error, "", "Can't change indentation after a multi-line value");
+					return { error, "", "Can't change indentation after a multi-line value" };
 				}
 				if (m_indent.length() > indentlen && !m_indent_step.get_or(m_indent.length(), false))
 				{
-					return event(error, "", "Invalid indentation depth");
+					return { error, "", "Invalid indentation depth" };
 				}
 			}
 			
@@ -388,7 +388,7 @@ bmlparser::event bmlparser::next()
 	}
 	
 	m_indent_step.set_resize(indentlen, true);
-	return event(enter, node, value);
+	return { enter, node, value };
 }
 
 

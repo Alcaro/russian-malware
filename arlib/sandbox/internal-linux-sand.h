@@ -13,7 +13,7 @@
 //[5.2 / july 2019] clone(CLONE_PIDFD)
 //[5.3 / september 2019] select() on pidfd, and reading exit status
 //  these three would allow deleting the SIGCHLD handler, killing some nasty code and likely fixing a few corner cases
-//[unmerged?] close_range() / close_from() / nextfd()
+//[5.9 / september 2020] close_range() / close_from() / nextfd()
 //  simplifies my closefrom(), current one is pretty ugly
 //[unmerged?] CLONE_WAIT_PID
 //  makes waitpid(-1) not care about that child, allowing use of GSubprocess

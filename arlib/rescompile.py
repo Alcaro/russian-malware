@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-#(works in python 2 too)
 
 import os
 
-#TODO: use global variables instead, so resources can be added and deleted without rebuilding
+# TODO: use global variables instead, so resources can be added and deleted without rebuilding
+# TODO: switch to std::embed once it exists
 
 use_incbin = True  # Massively speeds up build times if resources are big, but may reduce portability.
 # use_incbin = False  # TODO: autodetect target output format, disable if not ELF or not GCC
@@ -86,7 +86,7 @@ for fn in sorted(os.listdir("resources/")):
 		asm += 'ASM_INCLUDE("'+asmname+'", '+str(filesize)+', "resources/'+fn+'")\n'
 	else:
 		with open(fullfn, "rb") as f:
-			b = bytearray(f.read())  # pointless bytearray conversion because in python2, bytes is str and indexing that is str, not int
+			b = f.read()
 			body += "const uint8_t resources::"+varname_raw+"["+str(len(b))+"] = { "
 			body += ",".join(str(n) for n in b)
 			body += " };\n"
