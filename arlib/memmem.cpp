@@ -50,9 +50,9 @@ static inline __m128i load_sse2_small(const uint8_t * src, size_t len)
 		// if an extended read would inappropriately hit the next page, copy it to the stack, then do an unaligned read
 		// going via memory is ugly, but the better instruction (_mm_alignr_epi8) only exists with constant offset
 		// machine-wise, it'd be safe to shrink tmp to 16 bytes, putting return address or whatever in the high bytes,
-		//  but that saves nothing, and gcc could optimize the UB
+		//  but that saves nothing, and would give gcc wider license to deem it UB and optimize it out
 		uint8_t tmp[32] __attribute__((aligned(16)));
-		__asm__("" : "+r"(src), "=m"(tmp)); // reading uninitialized variables is UB, confuse gcc some more
+		__asm__("" : "+r"(src), "=m"(tmp)); // reading uninitialized variables is UB too, confuse gcc some more
 		_mm_store_si128((__m128i*)tmp, _mm_load_si128((__m128i*)(~15&(uintptr_t)src)));
 		return _mm_loadu_si128((__m128i*)(tmp+(15&(uintptr_t)src)));
 	}

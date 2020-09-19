@@ -293,16 +293,10 @@ template<typename T> void testundec(const char * S, T V)
 {
 	T a;
 	assert_eq(fromstring(S, a), true);
-	if (a != V) puts("ERROR: expected "+tostring(V)+", got "+tostring(a));
-	//assert_eq(a, V);
+	test_nothrow { assert_eq(a, V); }
 }
 test("string conversion", "", "string")
 {
-	//uint8_t ggg[4];
-	//tostring_dbg(ggg);
-	//bytearray gggg;
-	//tostring_dbg(gggg);
-	
 	testcall(testundec<int>("123", 123));
 	testcall(testundec<int>("0123", 123)); // no octal allowed
 	testcall(testundec<int>("00123", 123));
@@ -419,10 +413,6 @@ test("string conversion", "", "string")
 	assert(!fromstring("INF", f));
 	assert(!fromstring("-INF", f));
 	assert( fromstring("nan", d)); assert(isnan(d));
-	
-	// TODO: uncomment if I find a real usecase for try_fromstring, else delete
-	//try_fromstring("123", i32); // just to ensure they compile
-	//try_fromstring("123", s);
 	
 	// 0.0000000000000000000000000703853100000000000000000000000000000000 <- input
 	// 0.0000000000000000000000000703853069185120912085918801714030697411 <- float closest to the input

@@ -1,5 +1,8 @@
 #pragma once
 #include "global.h"
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 // TODO: rewrite this thing
 // - creating a socket should be async, this DNS-then-forward wrapper is silly (socks5 should be async too)

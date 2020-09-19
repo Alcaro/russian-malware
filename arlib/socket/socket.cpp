@@ -1,6 +1,7 @@
 #include "socket.h"
 #include "../bytepipe.h"
 #include "../dns.h"
+#include "../thread.h"
 
 #undef socket
 #ifdef _WIN32
@@ -34,17 +35,15 @@ static socketint_t mksocket(int domain, int type, int protocol) { return socket(
 
 namespace {
 
-static void initialize()
+#ifdef _WIN32
+RUN_ONCE_FN(initialize)
 {
-#ifdef _WIN32 // lol
-	static bool initialized = false;
-	if (initialized) return;
-	initialized = true;
-	
 	WSADATA wsaData;
-	WSAStartup(MAKEWORD(2, 2), &wsaData);
-#endif
+	WSAStartup(MAKEWORD(2, 2), &wsaData); // why
 }
+#else
+static void initialize() {}
+#endif
 
 static int fixret(int ret)
 {
@@ -285,14 +284,22 @@ public:
 	socket* i_connect(cstring domain, cstring ip, int port)
 	{
 		socket* ret = socket_raw::create(connect(ip, port), this->loop);
+#ifdef ARLIB_SSL
 		if (ret && this->ssl) ret = socket::wrap_ssl_raw(ret, domain, this->loop);
+#endif
 		return ret;
 	}
 	
-	socket_flex(cstring domain, int port, runloop* loop, bool ssl)
+	socket_flex(cstring domain, int port, runloop* loop
+#ifdef ARLIB_SSL
+, bool ssl = false
+#endif
+)
 	{
 		this->loop = loop;
+#ifdef ARLIB_SSL
 		this->ssl = ssl;
+#endif
 		child = i_connect(domain, domain, port);
 		if (!child)
 		{
@@ -305,7 +312,9 @@ public:
 	
 	autoptr<DNS> dns;
 	uint16_t port;
+#ifdef ARLIB_SSL
 	bool ssl;
+#endif
 	
 	runloop* loop = NULL;
 	autoptr<socket> child;
@@ -368,6 +377,8 @@ public:
 	function<void()> cb_read;
 	function<void()> cb_write;
 	
+	MAKE_DESTRUCTIBLE_FROM_CALLBACK();
+	
 	/*private*/ void cancel()
 	{
 		child = NULL;
@@ -376,8 +387,8 @@ public:
 	
 	/*private*/ void call_cb_immed()
 	{
-		if (cb_read) cb_read();
-		if (cb_write) cb_write();
+		if (cb_read)  RETURN_IF_CALLBACK_DESTRUCTS(cb_read( ));
+		if (cb_write) RETURN_IF_CALLBACK_DESTRUCTS(cb_write());
 		
 		set_loop();
 	}
@@ -442,13 +453,20 @@ public:
 
 socket* socket::create(cstring domain, int port, runloop* loop)
 {
-	return new socketbuf(new socket_flex(domain, port, loop, false), loop);
+	return new socketbuf(new socket_flex(domain, port, loop), loop);
 }
 
+socket* socket::create_raw(cstring domain, int port, runloop* loop)
+{
+	return new socket_flex(domain, port, loop);
+}
+
+#ifdef ARLIB_SSL
 socket* socket::create_ssl(cstring domain, int port, runloop* loop)
 {
 	return new socketbuf(new socket_flex(domain, port, loop, true), loop);
 }
+#endif
 
 socket* socket::create_udp(cstring domain, int port, runloop* loop)
 {
@@ -470,6 +488,7 @@ socket* socket::wrap(socket* inner, runloop* loop)
 	return new socketbuf(inner, loop);
 }
 
+#ifdef ARLIB_SSL
 socket* socket::wrap_ssl(socket* inner, cstring domain, runloop* loop)
 {
 	return wrap(wrap_ssl_raw(inner, domain, loop), loop);
@@ -479,6 +498,7 @@ socket* socket::create_sslmaybe(bool ssl, cstring domain, int port, runloop* loo
 {
 	return (ssl ? socket::create_ssl : socket::create)(domain, port, loop);
 }
+#endif
 
 
 static MAYBE_UNUSED socketint_t socketlisten_create_ip4(int port)
@@ -552,6 +572,7 @@ socketlisten::socketlisten(socketint_t fd, runloop* loop, function<void(autoptr<
 		this->callback(new socketbuf(socket_raw::create(nfd, this->loop), this->loop));
 	});
 #else
+	waiter = CreateEvent(NULL, true, false, NULL);
 	WSAEventSelect(fd, waiter, FD_ACCEPT);
 	loop->set_object(waiter, [this](HANDLE h) {
 		ResetEvent(this->waiter);

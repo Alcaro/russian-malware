@@ -47,23 +47,24 @@ virtual void tmp_step(bool wait) = 0;
 
 
 // same as libretro.h retro_key, except values 256-383 are shifted down to 128-255 (libretro defines nothing in 128-255)
+// there is no guarantee that the keys exist on anyone's keyboard
 enum key_t : uint8_t {
 	K_UNKNOWN        = 0,   K_FIRST          = 0,
 	K_BACKSPACE      = 8,   K_TAB            = 9,   K_CLEAR          = 12,  K_RETURN         = 13,  K_PAUSE          = 19,
-	K_ESCAPE         = 27,  K_SPACE          = 32,  K_EXCLAIM        = 33,  K_QUOTEDBL       = 34,  K_HASH           = 35,
-	K_DOLLAR         = 36,  K_AMPERSAND      = 38,  K_QUOTE          = 39,  K_LEFTPAREN      = 40,  K_RIGHTPAREN     = 41,
-	K_ASTERISK       = 42,  K_PLUS           = 43,  K_COMMA          = 44,  K_MINUS          = 45,  K_PERIOD         = 46,
-	K_SLASH          = 47,  K_0              = 48,  K_1              = 49,  K_2              = 50,  K_3              = 51,
-	K_4              = 52,  K_5              = 53,  K_6              = 54,  K_7              = 55,  K_8              = 56,
-	K_9              = 57,  K_COLON          = 58,  K_SEMICOLON      = 59,  K_LESS           = 60,  K_EQUALS         = 61,
-	K_GREATER        = 62,  K_QUESTION       = 63,  K_AT             = 64,  K_LEFTBRACKET    = 91,  K_BACKSLASH      = 92,
-	K_RIGHTBRACKET   = 93,  K_CARET          = 94,  K_UNDERSCORE     = 95,  K_BACKQUOTE      = 96,  K_a              = 97,
-	K_b              = 98,  K_c              = 99,  K_d              = 100, K_e              = 101, K_f              = 102,
-	K_g              = 103, K_h              = 104, K_i              = 105, K_j              = 106, K_k              = 107,
-	K_l              = 108, K_m              = 109, K_n              = 110, K_o              = 111, K_p              = 112,
-	K_q              = 113, K_r              = 114, K_s              = 115, K_t              = 116, K_u              = 117,
-	K_v              = 118, K_w              = 119, K_x              = 120, K_y              = 121, K_z              = 122,
-	K_LEFTBRACE      = 123, K_BAR            = 124, K_RIGHTBRACE     = 125, K_TILDE          = 126, K_DELETE         = 127,
+	K_ESCAPE         = 27,  K_SPACE          = ' ', K_EXCLAIM        = '!', K_QUOTEDBL       = '"', K_HASH           = '#',
+	K_DOLLAR         = '$', K_AMPERSAND      = '&', K_QUOTE          = '\'',K_LEFTPAREN      = '(', K_RIGHTPAREN     = ')',
+	K_ASTERISK       = '*', K_PLUS           = '+', K_COMMA          = ',', K_MINUS          = '-', K_PERIOD         = '.',
+	K_SLASH          = '/', K_0              = '0', K_1              = '1', K_2              = '2', K_3              = '3',
+	K_4              = '4', K_5              = '5', K_6              = '6', K_7              = '7', K_8              = '8',
+	K_9              = '9', K_COLON          = ':', K_SEMICOLON      = ';', K_LESS           = '<', K_EQUALS         = '=',
+	K_GREATER        = '>', K_QUESTION       = '?', K_AT             = '@', K_LEFTBRACKET    = '[', K_BACKSLASH      = '\\',
+	K_RIGHTBRACKET   = ']', K_CARET          = '^', K_UNDERSCORE     = '_', K_BACKQUOTE      = '`', K_a              = 'a',
+	K_b              = 'b', K_c              = 'c', K_d              = 'd', K_e              = 'e', K_f              = 'f',
+	K_g              = 'g', K_h              = 'h', K_i              = 'i', K_j              = 'j', K_k              = 'k',
+	K_l              = 'l', K_m              = 'm', K_n              = 'n', K_o              = 'o', K_p              = 'p',
+	K_q              = 'q', K_r              = 'r', K_s              = 's', K_t              = 't', K_u              = 'u',
+	K_v              = 'v', K_w              = 'w', K_x              = 'x', K_y              = 'y', K_z              = 'z',
+	K_LEFTBRACE      = '{', K_BAR            = '|', K_RIGHTBRACE     = '}', K_TILDE          = '~', K_DELETE         = 127,
 	
 	K_KP0            = 128, K_KP1            = 129, K_KP2            = 130, K_KP3            = 131, K_KP4            = 132,
 	K_KP5            = 133, K_KP6            = 134, K_KP7            = 135, K_KP8            = 136, K_KP9            = 137,

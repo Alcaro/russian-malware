@@ -95,7 +95,7 @@ public:
 	void sort(); // Sorts the internal files alphabetically.
 	void repack(); // Decompresses all files, then recompresses them. Keeps whichever version is smaller.
 	
-	//Deletes __MACOSX folders and other useless nonsense. Returns whether it did anything.
+	//Deletes __MACOSX folders and other OS caches. Returns whether it did anything.
 	bool clean();
 	
 private:

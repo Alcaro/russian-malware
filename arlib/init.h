@@ -97,7 +97,7 @@ private:
 		bool parse(bool has_value, cstring arg)
 		{
 			if (has_target) *has_target = true;
-			if (has_value) *target = file::sanitize_path(arg);
+			if (has_value) *target = file::sanitize_trusted_path(arg);
 			return true;
 		}
 	public:

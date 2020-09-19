@@ -641,8 +641,7 @@ static inline void set_sighand(int sig, void(*handler)(int, siginfo_t*, void*), 
 #define STR_(x) #x
 #define STR(x) STR_(x)
 __asm__(R"(
-#sigaction.sa_restorer takes its arguments from the stack, have to implement it in assembly
-#otherwise GCC could do something stupid, like set up a frame pointer
+#sigaction.sa_restorer takes its arguments from the stack, have to implement it in assembly so GCC doesn't set up a frame pointer
 restore_rt:
 mov %eax, )" STR(__NR_rt_sigreturn) R"(
 syscall

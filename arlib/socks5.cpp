@@ -119,11 +119,17 @@ socket* wrap_socks5(const socks5_par& param)
 	else { delete ret; return NULL; }
 }
 
-socket* socks5::connect(bool ssl, cstring domain, int port, runloop* loop)
+socket* socks5::connect(
+#ifdef ARLIB_SSL
+                        bool ssl,
+#endif
+                        cstring domain, int port, runloop* loop)
 {
 	socks5_par par = { loop, socket::create(m_host, m_port, loop), domain, (uint16_t)port };
 	socket* sock = wrap_socks5(par);
+#ifdef ARLIB_SSL
 	if (ssl) sock = socket::wrap_ssl(sock, domain, loop);
+#endif
 	return sock;
 }
 

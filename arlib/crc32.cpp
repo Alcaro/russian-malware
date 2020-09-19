@@ -114,6 +114,8 @@ static uint32_t crc32_pclmul(arrayview<uint8_t> data, uint32_t crc)
 	state = _mm_xor_si128(_mm_srli_si128(state, 4), _mm_clmulepi64_si128(_mm_and_si128(state, mask_low32), fold_32, 0x00));
 	
 	// Barrett reduction, using P(x) and µ from http://intel.ly/2ySEwL0, with bits backwards
+	// latter magic constant is the polynomial with an extra 1, but I have no idea what the former is
+	// it's called U_PRIME in some other implementation, but that doesn't help me
 	__m128i magic = _mm_set_epi64x(0x01f7011641, 0x01db710641);
 	__m128i magic2;
 	magic2 = _mm_clmulepi64_si128(_mm_and_si128(state,  mask_low32), magic, 0x10);
@@ -125,7 +127,7 @@ static uint32_t crc32_pclmul(arrayview<uint8_t> data, uint32_t crc)
 uint32_t crc32_update(arrayview<uint8_t> data, uint32_t crc)
 {
 #ifdef MAYBE_SSE2
-	if (data.size() >= 4 // mz_crc32 is slow per byte, but pclmul has a pretty high startup time; mz wins for size <= 4
+	if (data.size() >= 4 // mz_crc32 is slow per byte, but pclmul has a pretty high constant factor; mz wins for size <= 4
 #ifndef __PCLMUL__       // (mz_crc32 needs to exist for machines without pclmul support)
 		&& __builtin_cpu_supports("pclmul") // this should be optimized if -mpclmul, but isn't, so more ifdef
 #endif

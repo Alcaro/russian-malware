@@ -40,8 +40,7 @@ public:
 		t_ver_3_0 = 300, t_ver_3_1 = 310, t_ver_3_2 = 320, t_ver_3_3 = 330,
 		t_ver_4_0 = 400, t_ver_4_1 = 410, t_ver_4_2 = 420, t_ver_4_3 = 430, t_ver_4_4 = 440, t_ver_4_5 = 450, t_ver_4_6 = 460,
 		
-		t_opengl_es      = 0x001000, // Probably not supported.
-		t_debug_context  = 0x002000, // Requests a debug context. Doesn't actually enable debugging,
+		t_debug_context  = 0x00001000, // Requests a debug context. Doesn't actually enable debugging,
 		                             // use gl.enableDefaultDebugger or gl.DebugMessageControl/etc.
 		//WGL/GLX/etc allow attaching depth/stencil buffers to the output, but it's special cased in all kinds of ways.
 		//Therefore, it's not supported here. Create an FBO and stick them there.
@@ -56,30 +55,31 @@ public:
 		//- Requires Windows 7 or newer
 		//- May not work on all graphics cards and drivers
 		//- Poorly tested driver path, may be slow or buggy (in fact, I believe I found a Nvidia driver bug while creating it)
-		//- You may not render to the default framebuffer, 0; you must render to gl.defaultFramebuffer()
-		//    (if you don't use framebuffers, you can ignore this; defaultFramebuffer is bound on creation)
-		//- You must call gl.notifyResize() whenever the window is resized (whether by the application or the user),
-		//    in addition to gl.Viewport/etc (notifyResize is optional if created from an Arlib widget_viewport, gl.Viewport isn't)
+		//- You may not render to the default framebuffer, 0; you must render to gl.outputFramebuffer()
+		//    (if you don't use framebuffers, you can ignore this; outputFramebuffer is bound on creation)
 		//- Swap intervals other than 0 and 1 are not supported, not even -1
 		//- May be slightly slower, especially with vsync off; it does an extra render pass
 		//    (this pass contains only a single Direct3DDevice9Ex->StretchRect, so it's fast, but nonzero)
 		//The flag is ignored on non-Windows systems.
-		//It is safe to use gl.outputFramebuffer and gl.notifyResize on non-d3dsync objects, even outside Windows.
+		//It is safe to use gl.outputFramebuffer on non-d3dsync objects, even outside Windows.
 # ifdef _WIN32
-		t_direct3d_vsync = 0x004000,
+		t_direct3d_vsync = 0x00002000,
 # else
 		t_direct3d_vsync = 0,
 #  undef AROPENGL_D3DSYNC
 # endif
 #endif
 		
-#ifndef ARGUI_NONE
-		t_resizable = 0x01000000,
+#ifdef ARLIB_GAME
+		t_resizable = 0x00040000,
 #endif
 	};
 	
-	// TODO: add query VRAM feature, using GLX_MESA_query_renderer
-	// there doesn't seem to be any equivalent in WGL; there is one in D3D (DXGI_ADAPTER_DESC), but it requires opening a D3D context
+	// TODO: add query VRAM feature, using GLX_MESA_query_renderer; or, for windows, one of
+	//  GL extensions NVX_gpu_memory_info / ATI_meminfo (vendor specific, and it's unclear which number is relevant)
+	//  IDirect3DDevice9::GetAvailableTextureMem (returns bytes)
+	//  IDirect3DDevice9Ex::QueryInterface(IDXGIDevice) and DXGI_ADAPTER_DESC (not in Wine)
+	//  (latter two need d3dsync, but that one should be enabled in most programs anyways)
 	class context : nocopy {
 	public:
 		//this is basically the common subset of WGL/GLX/etc

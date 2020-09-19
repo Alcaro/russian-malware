@@ -34,7 +34,7 @@ bool got_event;
 
 struct atoms_t {
 #define ATOM(varname) Atom varname;
-X11_ATOMS
+	X11_ATOMS
 #undef ATOM
 } atoms;
 
@@ -111,7 +111,7 @@ gameview_x11(Window window, uint32_t width, uint32_t height, cstring title) : wi
 	Atom protocols[2] = { atoms.WM_DELETE_WINDOW, atoms._NET_WM_PING, };
 	XSetWMProtocols(display, window, protocols, ARRAY_SIZE(protocols));
 	
-	long pid = getpid(); // gotta love how X11 insists that long=32. the C builtin types are ridiculous
+	long pid = getpid(); // gotta love how X11 insists that long is 32 bits. the C builtin types are ridiculous
 	XChangeProperty(display, window, atoms._NET_WM_PID, XA_CARDINAL, 32, PropModeReplace, (uint8_t*)&pid, 1);
 	
 	XChangeProperty(display, window, atoms._NET_WM_NAME, atoms.UTF8_STRING, 8, PropModeReplace, title.bytes().ptr(), title.length());

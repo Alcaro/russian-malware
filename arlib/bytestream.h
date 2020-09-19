@@ -168,6 +168,7 @@ public:
 	forceinline double   f64() { return big_endian ? f64b() : f64l(); }
 };
 
+#ifndef STDOUT_ERROR
 #include "stringconv.h"
 #include "test.h"
 template<typename Tinner = bytestreame>
@@ -275,6 +276,7 @@ public:
 		abort();
 	}
 };
+#endif
 
 
 // TODO: create a bytestream whose output size is known beforehand, so it doesn't malloc

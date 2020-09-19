@@ -137,6 +137,20 @@ struct ser15 {
 		s.items("a", a, "b", ser_include_if(b, b), "c", ser_include_if(c, c), "d", d);
 	}
 };
+
+struct ser16 {
+	array<array<int>> a;
+	array<array<int>> b;
+	map<string,array<int>> c;
+	
+	template<typename T>
+	void serialize(T& s)
+	{
+		s.items("a", a,
+		        "b", ser_compact(b, 1),
+		        "c", ser_compact(c, 1));
+	}
+};
 }
 
 test("JSON serialization 2", "json", "serialize")
@@ -272,6 +286,25 @@ test("JSON serialization 2", "json", "serialize")
 	{
 		ser15 item = { 123, false, true, 456 };
 		assert_eq(jsonserialize(item), "{\"a\":123,\"c\":true,\"d\":456}");
+	}
+	
+	{
+		ser16 item;
+		item.a.resize(1);
+		item.a[0].append(1);
+		item.a[0].append(2);
+		item.b.resize(2);
+		item.b[0].append(2);
+		item.b[0].append(3);
+		item.b[1].append(4);
+		item.b[1].append(5);
+		item.c.get_create("a").append(3);
+		item.c.get_create("a").append(4);
+		item.c.get_create("b").append(5);
+		item.c.get_create("b").append(6);
+		assert_eq(jsonserialize<2>(item), "{\n  \"a\": [\n    [\n      1,\n      2]],"
+		                                   "\n  \"b\": [\n    [2,3],\n    [4,5]],"
+		                                   "\n  \"c\": {\n    \"b\": [5,6],\n    \"a\": [3,4]}}");
 	}
 	
 	{
@@ -493,6 +526,18 @@ test("JSON deserialization 2", "json", "serialize")
 			assert_eq(tostring_dbg(inner), "{b => 2, c => 3, a => 1}");
 		else
 			assert_eq(tostring_dbg(inner), "TODO: determine the current order");
+	}
+	
+	{
+		int calls = 0;
+		jsondeserialize("{\"a\":\"1\",\"a\":\"2\",\"a\":[[]],\"a\":\"3\"}",
+			[&](jsondeserializer& s) {
+				s.items(
+					"a", [&](cstring str) {
+						assert_eq(str, tostring(++calls));
+					});
+				});
+		assert_eq(calls, 3);
 	}
 }
 

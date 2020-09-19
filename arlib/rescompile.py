@@ -65,7 +65,7 @@ for fn in sorted(os.listdir("resources/")):
 		if not ext.endswith(".png"): 1/0
 		# bps.icon2-16.png
 		icoid,icosize = ext[4:].split("-")
-		icoid = int("0"+icoid)
+		icoid = int("0"+icoid) # "0"+ so blank becomes 0
 		icosize = int(icosize.rsplit(".",1)[0])
 		
 		if icoid in icon_names:

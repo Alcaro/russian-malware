@@ -292,12 +292,19 @@ public:
 	static cstring basename(cstring path) { return path.substr(path.lastindexof("/")+1, ~0); }
 	static string change_ext(cstring path, cstring new_ext); // new_ext should be ".bin" (can be blank)
 	
-	//Arlib does not recognize backslashes in filenames as legitimate.
+	// Takes a byte sequence supposedly representing a relative file path from an untrusted source (for example a ZIP file).
+	// If it's a normal, relative path, it's returned unchanged; if it contains anything weird, it's purged.
+	// Output is guaranteed to be a relative file path without .. or other surprises.
+	// Output may contain backslashes (Linux only) and spaces. foo/bar/../baz/ does not necessarily get transformed to foo/baz/.
+	static string sanitize_rel_path(string path);
+	
+	// Takes a byte sequence representing any file path from a trusted source (for example command line arguments),
+	//  and returns it in a form usable by Arlib.
 #ifdef _WIN32
-	static string sanitize_path(cstring path) { return path.replace("\\", "/"); }
+	static string sanitize_trusted_path(cstring path) { return path.replace("\\", "/"); }
 #else
-	static cstring sanitize_path(cstring path) { return path; }
-	static string sanitize_path(string path) { return path; }
+	static cstring sanitize_trusted_path(cstring path) { return path; }
+	static string sanitize_trusted_path(string path) { return path; }
 #endif
 	
 	//Returns whether the path is absolute.

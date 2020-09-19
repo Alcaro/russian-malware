@@ -110,6 +110,7 @@ ARSANDBOX ?= 0
 ARWUTF ?= 0
 ARSOCKET ?= 0
 ARSOCKET_SSL ?= openssl
+#ARTERMINAL ?= auto # leave it unset, there are some ?= further down
 
 OPT ?= 0
 ifeq ($(OPT),0)
@@ -119,6 +120,7 @@ else
 endif
 
 CCXXFLAGS = -fvisibility=hidden -Wall -Wmissing-declarations -Wimplicit-fallthrough -Wvla -pipe
+CONF_LFLAGS += -pipe
 #to silence for (size_t unused : range(42)) - delete this once gcc stops complaining
 CCXXFLAGS += -Wno-unused-variable
 ifeq ($(CC_FAMILY),gcc)
@@ -161,12 +163,12 @@ CONF_CXXFLAGS += $(CONF_CFLAGS)
 ifeq ($(OS),linux)
   CONF_LFLAGS += -ldl -Wl,-z,relro,-z,now,--as-needed,--no-undefined
   ifeq ($(ARTYPE),dll)
-    CONF_CFLAGS += -fPIC
+    CONF_CFLAGS += -fpic
     CONF_LFLAGS += -shared
     EXESUFFIX = .so
   endif
   ifeq ($(ARTYPE),hybrid)
-    CONF_CFLAGS += -fPIC
+    CONF_CFLAGS += -fpic
     CONF_LFLAGS += -rdynamic
   endif
   ifeq ($(ARTHREADS),1)
@@ -174,15 +176,6 @@ ifeq ($(OS),linux)
     CONF_LFLAGS += -pthread
   endif
   OBJNAME := $(OBJNAME)linux
-  TR = valgrind --num-callers=100 --leak-check=full
-  ifeq ($(ARGUI),1)
-    # Gtk leaves over 9000 'possibly lost' objects around. not interested
-    TR += --show-possibly-lost=no
-    #envs G_SLICE=always-malloc G_DEBUG=gc-friendly look useful, but don't make any difference in practice
-  endif
-endif
-ifeq ($(TR),gdb)
-  override TR = gdb --args
 endif
 
 ifeq ($(OS),windows)
@@ -193,15 +186,12 @@ ifeq ($(OS),windows)
   endif
   ifeq ($(ARTYPE),hybrid)
     DEFINES += ARLIB_HYBRID_DLL
+    CONF_CFLAGS += -fpic
+    CONF_LFLAGS += -Wl,--dynamicbase
     $(warning hybrid DLL is a poorly tested configuration, prepare for bugs)
   endif
-#  OBJ += obj/resource$(OBJNAME).o
-#  RC = windres
-#  RCFLAGS =
-#obj/resource$(OBJNAME).o: ico/*
-#	$(RC) $(RCFLAGS) ico/minir.rc obj/resource$(OBJNAME).o
   OBJNAME := $(OBJNAME)windows
-#surprisingly, this is still not default as of mingw 8.1.0 (to check, objdump -x | grep DllCharacteristics, 0x0100 bit is nxcompat)
+  #surprisingly, this is still not default as of mingw 8.1.0 (to check, objdump -x | grep DllCharacteristics, 0x0100 bit is nxcompat)
   CONF_LFLAGS += -Wl,--nxcompat
   ifeq ($(ARXPSUPPORT),1)
     DEFINES += _WIN32_WINNT=_WIN32_WINNT_WINXP
@@ -216,6 +206,7 @@ ifeq ($(OS),windows)
     # building non-windows binaries on a windows host is not supported (Cygwin or WSL compiling for themselves will probably work)
     # why would you do such a thing, anyways?
     $(warning non-cmd windows detected; if SHELL $(SHELL) is something other than sh.exe, makefile should check for that instead)
+    $(warning if MSYSTEM $(MSYSTEM) is nonempty, checking that may be valuable)
   endif
 endif
 
@@ -237,7 +228,7 @@ OPTFLAGS += -ffunction-sections
 #OPTFLAGS += -fdata-sections
 OPTFLAGS += -fno-ident
 OPTFLAGS += -DNDEBUG -DARLIB_OPT
-OPTFLAGS_CXX += -fno-threadsafe-statics
+CONF_CXXFLAGS += -fno-threadsafe-statics
 OPTLFLAGS := -Wl,--gc-sections,--build-id=none,--relax,--sort-common
 ifneq ($(OS),windows)
   OPTLFLAGS += -Wl,--hash-style=gnu
@@ -316,7 +307,8 @@ ifeq ($(ARGUI),1)
   SOURCES_ARLIB += arlib/gui/*.cpp
   ifeq ($(OS),windows)
     DEFINES += ARGUI_WINDOWS
-    CONF_LFLAGS += -lgdi32 -lcomctl32 -lcomdlg32 -mwindows
+    CONF_LFLAGS += -lgdi32 -lcomctl32 -lcomdlg32
+    ARTERMINAL_HASGUI = 1
   endif
   ifeq ($(OS),linux)
     DEFINES += ARGUI_GTK3 ARGUIPROT_X11
@@ -338,7 +330,8 @@ ifeq ($(ARGAME),1)
     $(error can't use ARGAME and ARGUI simultaneously)
   endif
   ifeq ($(OS),windows)
-    CONF_LFLAGS += -lgdi32 -mwindows
+    CONF_LFLAGS += -lgdi32
+    ARTERMINAL_HASGUI = 1
   endif
 endif
 
@@ -363,6 +356,25 @@ obj/glsym-slim.h: obj/glsym-slim-marker | obj
 ifneq ($(OPT),0)
   DEPS_DEFAULT += obj/glsym-slim.h
 endif
+endif
+
+ifeq ($(OS),windows)
+  ifeq ($(ARTERMINAL_HASGUI),1)
+    ARTERMINAL ?= error
+  else
+    ARTERMINAL ?= 1
+  endif
+  
+  ifeq ($(ARTERMINAL),0)
+    CONF_LFLAGS += -mwindows
+    DEFINES += STDOUT_DELETE
+  endif
+  
+  ifeq ($(ARTERMINAL),error)
+    CONF_LFLAGS += -mwindows
+    DEFINES += STDOUT_ERROR
+    CFLAGS_ARLIB += -D STDOUT_DELETE -U STDOUT_ERROR
+  endif
 endif
 
 ifeq ($(ARTHREAD),1)
@@ -392,31 +404,42 @@ ifeq ($(ARSOCKET),1)
     ifdef ARSOCKET_SSL_WINDOWS
       ARSOCKET_SSL := $(ARSOCKET_SSL_WINDOWS)
     endif
+    ARSOCKET_SSL ?= schannel
   endif
+  ARSOCKET_SSL ?= openssl
   
-  #TODO: allow using multiple at once, the tests could use that
   ifeq ($(ARSOCKET_SSL),no)
-    #no SSL
-    #socketssl will still be available at compile time, but fails linking
-  else ifeq ($(ARSOCKET_SSL),schannel)
-    CFLAGS_ARLIB += -DARLIB_SSL_SCHANNEL
-    #TODO: check if this is still needed
-    CONF_LFLAGS += -lsecur32
-  else ifeq ($(ARSOCKET_SSL),openssl)
-    CFLAGS_ARLIB += -DARLIB_SSL_OPENSSL
-    CONF_LFLAGS += -lssl -lcrypto
-  else ifeq ($(ARSOCKET_SSL),gnutls)
-    CFLAGS_ARLIB += -DARLIB_SSL_GNUTLS
-    CONF_LFLAGS += -lgnutls
-  else ifeq ($(ARSOCKET_SSL),bearssl)
-    CFLAGS_ARLIB += -DARLIB_SSL_BEARSSL
-    SOURCES_ARLIB += arlib/socket/bear-ser.c
-    #update make superclean if changing this
-    OBJS_LATE += arlib/deps/bearssl-0.6/build/libbearssl.a
-arlib/deps/bearssl-0.6/build/libbearssl.a:
-	$(MAKE) -C arlib/deps/bearssl-0.6/ CFLAGS='$(OPTFLAGS) -fpic' lib
+    ARSOCKET_SSL :=
   else
-    $(error unknown SSL library)
+    DEFINES += ARLIB_SSL
+  endif
+  ifneq ($(findstring schannel,$(ARSOCKET_SSL)),)
+    DEFINES += ARLIB_SSL_SCHANNEL
+    CONF_LFLAGS += -lsecur32
+  endif
+  ifneq ($(findstring openssl,$(ARSOCKET_SSL)),)
+    DEFINES += ARLIB_SSL_OPENSSL
+    CONF_LFLAGS += -lssl -lcrypto
+  endif
+  ifneq ($(findstring gnutls,$(ARSOCKET_SSL)),)
+    DEFINES += ARLIB_SSL_GNUTLS
+    CONF_LFLAGS += -lgnutls
+  endif
+  ifneq ($(findstring bearssl,$(ARSOCKET_SSL)),)
+    DEFINES += ARLIB_SSL_BEARSSL
+    SOURCES_ARLIB += arlib/socket/bear-ser.c
+    ifeq ($(OS),windows)
+      LFLAGS += -lcrypt32
+    endif
+    # update make superclean if changing this
+    # there's only one libbearssl.a per OS, not per OBJNAME; BearSSL rarely changes, there's no need to be more granular
+    OBJS_LATE += arlib/deps/bearssl-0.6/build-$(OS)/libbearssl.a
+    arlib/deps/bearssl-0.6/build-$(OS)/libbearssl.a:
+      # BearSSL detects mingw32-make as Unix; override some variables into something shell-neutral
+	  $(MAKE) -C arlib/deps/bearssl-0.6/ lib CFLAGS='$(OPTFLAGS) -fpic' BUILD=build-$(OS) OBJDIR=build-$(OS) CC=$(CC) MKDIR=mkdir
+  endif
+  ifneq ($(filter-out schannel openssl gnutls bearssl,$(ARSOCKET_SSL)),)
+    $(error unknown SSL backend)
   endif
 endif
 
@@ -449,18 +472,19 @@ TRUE_CFLAGS := -std=c99 $(CCXXFLAGS) $(CONF_CFLAGS) $(CFLAGS)
 #    it's fine if not every part of that language version is supported in that compiler version
 # If someone cares about older C++ versions, I will accept PRs and not intentionally break it, as long as
 # - it doesn't uglify anything too much; most modern C++ features aren't indispensable, but the lambdas are staying
-# - there is no performance penalty if compiled under modern C++; this may be accomplished with #if __cplusplus > 12345, if necessary
+# - there is no performance penalty if compiled under modern C++; this may be accomplished with #if __cplusplus > 12345, if necessary,
+#     though doing that without uglifying things may be difficult
 # - said someone maintains it, and does not expect me to; I will forget what's C++11 and what isn't at random intervals
 # The following features would be useful; if enough of them show up, I will switch:
 #   C++2a template lambdas (for the PNG decoder)
 #   C++2a designated initializers (foo_t foo = { .a = 42, .b = 123 })
 #   C++2a template string literals (for the regex parser, and so I can create a string formatting function)
-#   C++2a concepts (also for the regex parser)
+#   C++2a concepts (also for the regex parser, the errors are absurd)
 #   C++2a consteval (still for the regex parser - that template mess is terrible, I want it as normal code)
 #   C++2a down with typename http://wg21.link/p0634r3
 #   C++2a [[likely]]
 #   C++2a [[no_unique_address]]
-#   C++2a ban non-twos-complement signed - will probably enable various other C++ improvements
+#   C++2a ban non-twos-complement signed - will probably enable various other language improvements
 #   C++2a void foo(auto arg) (shorthand for template<typename T> void foo(T arg) - simplifies function::bind_member)
 #   C++2a coroutines, for runloop-related stuff
 #   C++17 <charconv>, to speed up tostring(float) (though I'll need to keep the current one around, for Windows)
@@ -477,6 +501,7 @@ TRUE_CFLAGS := -std=c99 $(CCXXFLAGS) $(CONF_CFLAGS) $(CFLAGS)
 #   Allow int x(int y=0); int x(int y=0) { return y*2; } (only if default value is identical on both ends, of course)
 #   Something to get rid of the unused variable warning from for (size_t n : range(42)) - Ranges TS, maybe?
 #   Overloading operator[] depending on whether it's a read or write access, int x = std::map[key_t] mutating is silly
+#     not sure if map[key].foo.bar() should count as read or write, but I can dream
 # The following may or may not be usable, depending on the exact details:
 #   C++2a modules (it's very easy to produce a bad module system, I don't know if this one avoids the pitfalls)
 # Other stuff I've seen proposed is uninteresting to me, though I haven't seen all proposals.
@@ -502,8 +527,7 @@ clean-prof:
 	rm -f obj/*.o
 
 superclean: clean
-	rm -f arlib/deps/bearssl-0.6/build/obj/*
-	rm -f arlib/deps/bearssl-0.6/build/libbearssl.a
+	-rm arlib/deps/bearssl-0.6/build*/*
 endif
 
 
@@ -531,7 +555,7 @@ ifeq ($(USE_AR_OPT),1)
  # .a are order sensitive, do not rearrange
  OBJS += obj/$(OBJNAME)-arlib.a
 endif
-OBJS += $(sort $(OBJS_LATE))
+OBJS += $(OBJS_LATE)
 
 arlib-default: $(OUTNAME)
 
@@ -563,6 +587,18 @@ ifneq ($(SELFTEST),)
 obj/arlibtest$(EXESUFFIX): $(OBJS)
 	$(ECHOQ) LD $@
 	$(Q)$(LD) $+ $(TRUE_LFLAGS) -o $@ -lm
+
+ifeq ($(OS),linux)
+  TR = valgrind --num-callers=100 --leak-check=full
+  ifeq ($(ARGUI),1)
+    # Gtk leaves over 9000 'possibly lost' objects around. not interested
+    TR += --show-possibly-lost=no
+    #envs G_SLICE=always-malloc G_DEBUG=gc-friendly look useful, but don't make any difference in practice
+  endif
+endif
+ifeq ($(TR),gdb)
+  override TR = gdb --args
+endif
 
 ifneq ($(TF),)
   TESTFILTER := --filter="$(TF)"

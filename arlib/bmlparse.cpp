@@ -283,8 +283,8 @@ null:
 		else goto null;
 	}
 	
-	int sharedindent = min(indentlen, m_indent.length());
-	bool badwhite = (memcmp(m_thisline.bytes().ptr(), m_indent.bytes().ptr(), sharedindent)!=0);
+	size_t sharedindent = min(indentlen, m_indent.length());
+	bool badwhite = (memcmp(m_thisline.bytes().ptr(), m_indent.bytes().ptr(), sharedindent) != 0);
 	
 	m_indent = cut(m_thisline, 0, indentlen, 0);
 	

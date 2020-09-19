@@ -4,7 +4,12 @@
 #include <unistd.h>
 #endif
 #if defined(_WIN32) && _WIN32_WINNT >= _WIN32_WINNT_WIN7
+#include <windows.h>
 #include <bcrypt.h>
+#endif
+#if defined(_WIN32) && _WIN32_WINNT < _WIN32_WINNT_WIN7
+#include <wincrypt.h>
+extern HCRYPTPROV rand_seed_prov;
 #endif
 
 // this is PCG-XSH-RR with 64-bit state and 32-bit output, adapted from wikipedia
@@ -43,7 +48,7 @@ public:
 
 //recommended use:
 //random_t rand;
-//return rand()%42;
+//int foo = rand()%42;
 //this is not biased towards lower results, rand() returns an object with overloaded operator%
 class random_t : public random_pcg {
 	class randresult {
@@ -56,7 +61,7 @@ class random_t : public random_pcg {
 		}
 		uint32_t operator%(int other)
 		{
-			return src.rand_mod((uint32_t)other); // blows up if given negative input. just ... don't do that
+			return src.rand_mod((uint32_t)other); // gives bad answers if given negative input, but there are no good answers for that
 		}
 		uint64_t operator%(uint64_t other)
 		{
@@ -69,18 +74,17 @@ public:
 	
 	// Max size is 256. Despite the return value, it always succeeds.
 	static bool get_seed(void* out, size_t n)
+	{
 #if defined(__linux__)
-	{
-		// cannot fail unless kernel < 3.17 (october 2014), bad pointer, or size > 256
-		return getentropy(out, n) == 0;
-	}
+		return getentropy(out, n) == 0; // cannot fail unless kernel < 3.17 (october 2014), bad pointer, or size > 256
 #elif defined(_WIN32) && _WIN32_WINNT >= _WIN32_WINNT_WIN7
-	{
 		return BCryptGenRandom(nullptr, (uint8_t*)out, n, BCRYPT_USE_SYSTEM_PREFERRED_RNG) == 0;
-	}
+#elif defined(_WIN32) && _WIN32_WINNT < _WIN32_WINNT_WIN7
+		return CryptGenRandom(rand_seed_prov, n, (uint8_t*)out);
 #else
-	;
+	#error unsupported
 #endif
+	}
 	
 	random_t()
 	{

@@ -225,9 +225,15 @@ newsock:
 			//lasthost.proto/domain/port never changes between requests
 			int defport;
 			if (lasthost.scheme == "http") defport = 80;
+#ifdef ARLIB_SSL
 			else if (lasthost.scheme == "https") defport = 443;
+#endif
 			else { RETURN_IF_CALLBACK_DESTRUCTS(resolve_err_v(0, rsp::e_bad_url)); goto newsock; }
-			sock = cb_mksock(defport==443, lasthost.domain, lasthost.port ? lasthost.port : defport, loop);
+			sock = cb_mksock(
+#ifdef ARLIB_SSL
+			                 defport==443,
+#endif
+			                 lasthost.domain, lasthost.port ? lasthost.port : defport, loop);
 		}
 		if (!sock) { RETURN_IF_CALLBACK_DESTRUCTS(resolve_err_v(0, rsp::e_connect)); goto newsock; }
 		sock->callback(bind_this(&HTTP::activity), NULL);

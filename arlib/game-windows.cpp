@@ -1,7 +1,7 @@
 #if defined(ARLIB_GAME) && defined(_WIN32)
 #include "game.h"
 #include "runloop.h"
-#include <windowsx.h> // for some absurd reason, GET_X_LPARAM isn't in the usual header
+#include <windowsx.h> // GET_X_LPARAM isn't in the usual header
 
 #define WS_BASE WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX // okay microsoft, did I miss anything?
 #define WS_RESIZABLE (WS_BASE|WS_MAXIMIZEBOX|WS_THICKFRAME)
@@ -22,8 +22,9 @@ gameview_windows(uint32_t width, uint32_t height, cstring windowtitle, uintptr_t
 	wc.lpfnWndProc = DefWindowProc;
 	wc.cbClsExtra = 0;
 	wc.cbWndExtra = 0;
-	wc.hInstance = GetModuleHandle(NULL);
-	wc.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(1));
+	GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+	                   (LPCSTR)(void*)s_WindowProc, &wc.hInstance); // gameview shouldn't be used from a dll path, but why not
+	wc.hIcon = LoadIcon(wc.hInstance, MAKEINTRESOURCE(0));
 	wc.hCursor = LoadCursor(NULL, IDC_ARROW);
 	wc.hbrBackground = GetSysColorBrush(COLOR_3DFACE);
 	wc.lpszMenuName = NULL;
@@ -71,22 +72,23 @@ function<void()> cb_exit = [this](){ stop(); };
 key_t vk_to_key(unsigned vk)
 {
 	static const uint8_t vk_to_key_raw[256] = { // there are only 256 vks, just hardcode it
-		0,   0,   0,   0,   0,   0,   0,   0,   0x08,0x09,0,   0,   0x0C,0x0D,0,   0,
-		0,   0,   0,   0x13,0xAD,0,   0,   0,   0,   0,   0,   0x1B,0,   0,   0,   0,
-		0x20,0x98,0x99,0x97,0x96,0x94,0x91,0x93,0x92,0,   0,   0,   0xBC,0x95,0x7F,0,
-		0x30,0x31,0x32,0x33,0x34,0x35,0x36,0x37,0x38,0x39,0,   0,   0,   0,   0,   0,
-		0,   0x61,0x62,0x63,0x64,0x65,0x66,0x67,0x68,0x69,0x6A,0x6B,0x6C,0x6D,0x6E,0x6F,
-		0x70,0x71,0x72,0x73,0x74,0x75,0x76,0x77,0x78,0x79,0x7A,0xB7,0xB8,0,   0,   0xC0,
-		0x80,0x81,0x82,0x83,0x84,0x85,0x86,0x87,0x88,0x89,0x8C,0x8E,0,   0x8D,0x8A,0x8B,
-		0x9A,0x9B,0x9C,0x9D,0x9E,0x9F,0xA0,0xA1,0xA2,0xA3,0xA4,0xA5,0xA6,0xA7,0xA8,0,
-		0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
-		0xAC,0xAE,0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
-		0xB0,0xAF,0xB2,0xB1,0xB4,0xB3,0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
-		0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0x2B,0x2C,0x2D,0x2E,0,
-		0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
-		0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
-		0,   0,   0xC3,0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
-		0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+		//x0   x1   x2   x3   x4   x5   x6   x7   x8   x9   xA   xB   xC   xD   xE   xF
+		0,   0,   0,   0,   0,   0,   0,   0,   0x08,0x09,0,   0,   0x0C,0x0D,0,   0,    // 0x
+		0,   0,   0,   0x13,0xAD,0,   0,   0,   0,   0,   0,   0x1B,0,   0,   0,   0,    // 1x
+		' ', 0x98,0x99,0x97,0x96,0x94,0x91,0x93,0x92,0,   0,   0,   0xBC,0x95,0x7F,0,    // 2x
+		'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 0,   0,   0,   0,   0,   0,    // 3x
+		0,   'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O',  // 4x
+		'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 0xB7,0xB8,0,   0,   0xC0, // 5x
+		0x80,0x81,0x82,0x83,0x84,0x85,0x86,0x87,0x88,0x89,0x8C,0x8E,0,   0x8D,0x8A,0x8B, // 6x
+		0x9A,0x9B,0x9C,0x9D,0x9E,0x9F,0xA0,0xA1,0xA2,0xA3,0xA4,0xA5,0xA6,0xA7,0xA8,0,    // 7x
+		0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,    // 8x
+		0xAC,0xAE,0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,    // 9x
+		0xB0,0xAF,0xB2,0xB1,0xB4,0xB3,0,   0,   0,   0,   0,   0,   0,   0,   0,   0,    // Ax
+		0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0x2B,0x2C,0x2D,0x2E,0,    // Bx
+		0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,    // Cx
+		0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,    // Dx
+		0,   0,   0xC3,0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,    // Ex
+		0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,    // Fx
 	};
 	return (key_t)vk_to_key_raw[vk];
 }
@@ -155,7 +157,7 @@ function<void(int x, int y, uint8_t buttons)> cb_mouse;
 /*public*/ void mouse_cb(function<void(int x, int y, uint8_t buttons)> cb)
 {
 	cb_mouse = cb;
-	SetWindowLongPtr(child, GWLP_USERDATA, (LONG_PTR)this); // can't do this in constructor, child is only set by ctx-windows.cpp
+	SetWindowLongPtr(child, GWLP_USERDATA, (LONG_PTR)this); // can't do this in constructor, child is only set by opengl/ctx-windows.cpp
 	SetWindowLongPtr(child, GWLP_WNDPROC, (LONG_PTR)s_WindowProc);
 }
 

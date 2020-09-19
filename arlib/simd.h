@@ -42,13 +42,15 @@
 #  define _mm_stream_si128 _mm_storeu_si128
 # endif
 
+#ifndef STDOUT_ERROR
 #include "stringconv.h"
 inline void debug8(__m128i a){uint8_t n[16];memcpy(n,&a,16);puts(tostringhex(n));}
 inline void debug16(__m128i a){int16_t n[8];memcpy(n,&a,16);printf("%d %d %d %d %d %d %d %d\n",n[0],n[1],n[2],n[3],n[4],n[5],n[6],n[7]);}
 inline void debug32(__m128i a){int32_t n[4];memcpy(n,&a,16);printf("%d %d %d %d\n",n[0],n[1],n[2],n[3]);}
-inline void debug32f(__m128 a){float n[4];memcpy(n,&a,16);printf("%f %f %f %f\n",n[0],n[1],n[2],n[3]);}
+inline void debug32f(__m128 a){float n[4];memcpy(n,&a,16);printf("%f %f %f %f\n",(double)n[0],(double)n[1],(double)n[2],(double)n[3]);}
 inline void debug8(const char*n,__m128i a){printf("%s ",n);debug8(a);}
 inline void debug16(const char*n,__m128i a){printf("%s ",n);debug16(a);}
 inline void debug32(const char*n,__m128i a){printf("%s ",n);debug32(a);}
 inline void debug32f(const char*n,__m128 a){printf("%s ",n);debug32f(a);}
+#endif
 #endif

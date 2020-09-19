@@ -282,7 +282,7 @@ public:
 //puts("---");
 //}
 	
-	static const bool serialize_as_array = true;
+	static constexpr bool serialize_as_array() { return true; }
 	template<typename Ts> void serialize(Ts& s)
 	{
 		if constexpr (Ts::serializing)
@@ -494,9 +494,9 @@ public:
 	c_iterator begin() const { return items.begin(); }
 	c_iterator end() const { return items.end(); }
 	
-	iterwrap<k_iterator> keys() const { return iterwrap<k_iterator>(items.begin(), items.end()); }
-	iterwrap<v_iterator> values() { return iterwrap<v_iterator>(items.begin(), items.end()); }
-	iterwrap<cv_iterator> values() const { return iterwrap<cv_iterator>(items.begin(), items.end()); }
+	iterwrap<k_iterator> keys() const { return items; }
+	iterwrap<v_iterator> values() { return items; }
+	iterwrap<cv_iterator> values() const { return items; }
 	
 	template<typename Ts>
 	void serialize(Ts& s)

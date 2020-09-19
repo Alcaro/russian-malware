@@ -114,7 +114,7 @@ test("thread runonce","","thread")
 	
 	for (int thread_id=0;thread_id<4;thread_id++)
 	{
-		thread_create([&sem, &once, &t,thread_id]() {
+		thread_create([&sem, &once, &t]() {
 			assert_range(t.us(), 0, US_TOLERANCE);
 			usleep(US_DELAYSTART);
 			assert_range(t.us(), US_DELAYSTART-US_TOLERANCE_NEG, US_DELAYSTART+US_TOLERANCE);

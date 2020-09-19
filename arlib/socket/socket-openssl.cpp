@@ -253,7 +253,7 @@ public:
 	}
 };
 
-socket* socket::wrap_ssl_raw(socket* inner, cstring domain, runloop* loop)
+socket* socket::wrap_ssl_raw_openssl(socket* inner, cstring domain, runloop* loop)
 {
 	initialize();
 	if (!ctx) return NULL;
@@ -261,7 +261,7 @@ socket* socket::wrap_ssl_raw(socket* inner, cstring domain, runloop* loop)
 	return new socketssl_openssl(inner, domain, loop, false);
 }
 
-socket* socket::wrap_ssl_raw_noverify(socket* inner, runloop* loop)
+socket* socket::wrap_ssl_raw_openssl_noverify(socket* inner, runloop* loop)
 {
 	initialize();
 	if (!ctx) return NULL;

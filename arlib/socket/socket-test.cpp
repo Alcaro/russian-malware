@@ -10,7 +10,6 @@
 static void socket_test_httpfail(socket* sock, bool xfail, runloop* loop)
 {
 	test_skip("too slow");
-	
 	assert(sock);
 	
 	uintptr_t timer = loop->raw_set_timer_once(8000, bind_lambda([&]() { assert_unreachable(); loop->exit(); }));
@@ -29,27 +28,22 @@ static void socket_test_httpfail(socket* sock, bool xfail, runloop* loop)
 	bool inside = false; // reject recursion
 	bool exited = false; // and excessive calls after loop->exit()
 	int exit_calls = 0;
-	sock->callback(bind_lambda([&]()
-		{
+	function<void()> cb = bind_lambda([&]() // extra variable so deleting the socket doesn't delete the handler
+		{                                   // please implement coroutines quickly, gcc and clang
 			assert(!exited);
 			if (exited) assert_lt(exit_calls++, 5);
 			assert(!inside);
+			inside = true;
 			
 			if (n_buf < 8)
 			{
-				inside = true;
 				int bytes = sock->recv(arrayvieww<uint8_t>(buf).slice(n_buf, n_buf==0 ? 2 : 1));
-				inside = false;
 				
-				if (bytes == 0) return;
+				if (bytes == 0) goto out;
 				if (xfail)
 				{
 					assert_lt(bytes, 0);
-					delete sock;
-					sock = NULL;
-					
-					loop->exit();
-					exited = true;
+					goto finish;
 				}
 				else
 				{
@@ -61,19 +55,20 @@ static void socket_test_httpfail(socket* sock, bool xfail, runloop* loop)
 			{
 				uint8_t discard[4096];
 				
-				inside = true;
 				if (sock->recv(discard) < 0)
 				{
-					inside = false;
+				finish:
 					delete sock;
 					sock = NULL;
 					loop->exit();
 					exited = true;
-					return;
+					goto out;
 				}
-				inside = false;
 			}
-		}));
+		out:
+			inside = false;
+		});
+	sock->callback(cb);
 	
 	loop->enter();
 	if (!xfail) assert_eq(string(arrayview<uint8_t>(buf)), "HTTP/1.1");
@@ -87,36 +82,56 @@ static void socket_test_httpfail(socket* sock, bool xfail, runloop* loop)
 void socket_test_http(socket* sock, runloop* loop) { socket_test_httpfail(sock, false, loop); }
 void socket_test_fail(socket* sock, runloop* loop) { socket_test_httpfail(sock, true, loop); }
 
-static void clienttest(cstring target, int port, bool ssl, bool xfail = false, bool unsafe = false)
+test("TCP client",  "dns", "tcp")
+{
+	test_skip("too slow");
+	
+	autoptr<runloop> loop = runloop::create();
+	// this IP is www.nic.ad.jp, both lookup and ping time for that one are 300ms (helps shake out failure to return to runloop)
+	socket_test_http(socket::create("192.41.192.145", 80, loop), loop);
+	socket_test_http(socket::create("www.nic.ad.jp",  80, loop), loop);
+}
+
+static void ssltest(function<socket*(socket* inner, cstring domain, runloop* loop)> wrap_raw,
+                    function<socket*(socket* inner,                 runloop* loop)> wrap_raw_unsafe)
 {
 	test_skip("too slow");
 	
 	autoptr<runloop> loop = runloop::create();
 	
-	auto creator = socket::create;
-	if (ssl)
-		creator = socket::create_ssl;
-	if (unsafe)
-#if defined(ARLIB_SSL_OPENSSL) || defined(ARLIB_SSL_SCHANNEL)
-		creator = [](cstring domain, int port, runloop* loop) -> socket*
-			{
-				return socket::wrap(socket::wrap_ssl_raw_noverify(socket::create(domain, port, loop), loop), loop);
-			};
-#else
-		test_skip_force("unsafe SSL not implemented");
-#endif
-	socket* sock = creator(target, port, loop);
-	assert(sock);
+	auto dotest = [&](cstring desc, cstring domain, int port, bool should_succeed = true, bool unsafe = false) {
+		testctx(desc) {
+			socket* sock_raw = socket::create_raw(domain, port, loop);
+			socket* sock_ssl = (!unsafe ? wrap_raw(sock_raw, domain, loop) : wrap_raw_unsafe(sock_raw, loop));
+			socket_test_httpfail(socket::wrap(sock_ssl, loop), !should_succeed, loop);
+		}
+	};
 	
-	socket_test_httpfail(sock, xfail, loop);
+	dotest("basic", "example.com", 443);
+	dotest("SNI", "git.io", 443);
+	dotest("bad root", "superfish.badssl.com", 443, false);
+	dotest("bad name", "wrong.host.badssl.com", 443, false);
+	dotest("expired", "expired.badssl.com", 443, false);
+	if (wrap_raw_unsafe)
+	{
+		dotest("bad root, permissive", "superfish.badssl.com", 443, true, true);
+		dotest("bad name, permissive", "wrong.host.badssl.com", 443, true, true);
+		dotest("expired, permissive", "expired.badssl.com", 443, true, true);
+	}
 }
 
-//this IP is www.nic.ad.jp, both lookup and ping time for that one are 300ms
-test("TCP client with IP",  "runloop", "tcp") { clienttest("192.41.192.145", 80, false); }
-test("TCP client with DNS", "dns",     "tcp") { clienttest("www.nic.ad.jp", 80, false); }
-
-test("SSL client",          "tcp",     "ssl") { clienttest("example.com", 443, true); }
-test("SSL SNI",             "tcp",     "ssl") { clienttest("git.io", 443, true); }
+#ifdef ARLIB_SSL_OPENSSL
+test("SSL client, OpenSSL",  "tcp", "ssl") { ssltest(socket::wrap_ssl_raw_openssl, socket::wrap_ssl_raw_openssl_noverify); }
+#endif
+#ifdef ARLIB_SSL_GNUTLS
+test("SSL client, GnuTLS",   "tcp", "ssl") { ssltest(socket::wrap_ssl_raw_gnutls, NULL); }
+#endif
+#ifdef ARLIB_SSL_SCHANNEL
+test("SSL client, SChannel", "tcp", "ssl") { ssltest(socket::wrap_ssl_raw_schannel, socket::wrap_ssl_raw_schannel_noverify); }
+#endif
+#ifdef ARLIB_SSL_BEARSSL
+test("SSL client, BearSSL",  "tcp", "ssl") { ssltest(socket::wrap_ssl_raw_bearssl, NULL); }
+#endif
 
 test("TCP client, disconnecting server", "runloop,dns", "tcp")
 {
@@ -156,25 +171,11 @@ test("TCP client, disconnecting server", "runloop,dns", "tcp")
 	loop->raw_timer_remove(timer2);
 }
 
-test("SSL client, bad root", "tcp", "ssl") { clienttest("superfish.badssl.com", 443, true, true); }
-test("SSL client, bad name", "tcp", "ssl") { clienttest("wrong.host.badssl.com", 443, true, true); }
-test("SSL client, expired",  "tcp", "ssl") { clienttest("expired.badssl.com", 443, true, true); }
-
-test("SSL client, bad root, permissive", "tcp", "ssl") { clienttest("superfish.badssl.com", 443, true, false, true); }
-test("SSL client, bad name, permissive", "tcp", "ssl") { clienttest("wrong.host.badssl.com", 443, true, false, true); }
-test("SSL client, expired, permissive",  "tcp", "ssl") { clienttest("expired.badssl.com", 443, true, false, true); }
-
 //test("SSL renegotiation", "tcp", "ssl")
 //{
 //	test_skip("too slow");
 //	assert(!"find or create a renegotiating server, then use it");
 //	// perhaps BoarSSL could help, or maybe I should add server support to some SSL engines and do some lamehack to renegotiate
-//}
-
-//test("","","")
-//{
-//	test_skip("too slow");
-//	assert(!"allow switching SSL engines at runtime");
 //}
 
 #ifdef ARLIB_SSL_BEARSSL

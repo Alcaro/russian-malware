@@ -21,6 +21,10 @@ unsigned int thread_num_cores_idle();
 #include <errno.h>
 #endif
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 //This is a simple tool that ensures only one thread is doing a certain action at a given moment.
 //Memory barriers are inserted as appropriate. Any memory access done while holding a lock is finished while holding this lock.
 //This means that if all access to an object is done exclusively while holding the lock, no further synchronization is needed.
@@ -45,14 +49,7 @@ public:
 	~mutex() { pthread_mutex_destroy(&mut); }
 	
 #elif _WIN32_WINNT >= _WIN32_WINNT_LONGHORN
-#if !defined(_MSC_VER) || _MSC_VER > 1600
 	SRWLOCK srwlock = SRWLOCK_INIT;
-#else
-	// apparently MSVC2008 doesn't understand struct S item = {0}. let's do something it does understand and hope it's optimized out.
-	SRWLOCK srwlock;
-public:
-	mutex_base() { srwlock.Ptr = NULL; } // and let's hope MS doesn't change the definition of RTL_SRWLOCK.
-#endif
 	
 public:
 	void lock() { AcquireSRWLockExclusive(&srwlock); }
@@ -60,7 +57,6 @@ public:
 	void unlock() { ReleaseSRWLockExclusive(&srwlock); }
 	
 #elif _WIN32_WINNT >= _WIN32_WINNT_WINXP
-	
 	CRITICAL_SECTION cs;
 	
 public:
@@ -138,7 +134,7 @@ public:
 public:
 	void run(function<void()> fn)
 	{
-		InitOnceExecuteOnce(&once, wrap, (void**)&fn, NULL); // parameter order is wrong in MSDN, check Wine sourcce before refactoring
+		InitOnceExecuteOnce(&once, wrap, (void**)&fn, NULL); // parameter order is wrong in MSDN, check Wine source before refactoring
 	}
 #else
 	enum { st_uninit, st_busy, st_done };

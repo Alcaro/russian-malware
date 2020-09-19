@@ -3,6 +3,7 @@
 #include "set.h"
 #include "os.h"
 #include "test.h"
+#include <windows.h>
 
 #if defined(ARLIB_GAME) || !defined(ARGUI_NONE)
 #define ENABLE_MSGPUMP

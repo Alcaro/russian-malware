@@ -1,29 +1,9 @@
 #include "random.h"
 
 #if defined(_WIN32) && _WIN32_WINNT < _WIN32_WINNT_WIN7
-#include <wincrypt.h>
-
-#ifdef ARLIB_THREAD
-#include "thread.h"
-#endif
-
-static HCRYPTPROV prov = 0; // despite starting with H, it's ULONG_PTR, not a pointer
-bool random_t::get_seed(void* out, size_t n)
-{
-#ifndef ARLIB_THREAD
-	if (!prov)
-		CryptAcquireContextA(&prov, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT|CRYPT_SILENT);
-#else
-	if (!lock_read_acq(&prov))
-	{
-		HCRYPTPROV newprov;
-		CryptAcquireContextA(&newprov, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT|CRYPT_SILENT);
-		if (lock_cmpxchg_rel(&prov, 0, newprov) != 0)
-			CryptReleaseContext(newprov, 0);
-	}
-#endif
-	return CryptGenRandom(prov, n, (uint8_t*)out);
-}
+HCRYPTPROV rand_seed_prov;
+oninit() { CryptAcquireContextA(&rand_seed_prov, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT|CRYPT_SILENT); }
+ondeinit() { CryptReleaseContext(rand_seed_prov, 0); }
 #endif
 
 #include "test.h"

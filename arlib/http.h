@@ -98,7 +98,11 @@ private:
 public:
 	
 	//A custom socket creation function, if you want proxy support.
+#ifdef ARLIB_SSL
 	void wrap_socks(function<socket*(bool ssl, cstring domain, int port, runloop* loop)> cb) { cb_mksock = cb; }
+#else
+	void wrap_socks(function<socket*(cstring domain, int port, runloop* loop)> cb) { cb_mksock = cb; }
+#endif
 	
 	//Multiple requests may be sent to the same object. This will make them use HTTP Keep-Alive.
 	//The requests must be to the same protocol-domain-port tuple (note that http://example.com/ is treated as port 0, not 80).
@@ -156,7 +160,11 @@ private:
 	size_t next_send = 0; // index to requests[] next to sock->send(), or requests.size() if all done / in tosend
 	
 	runloop* loop;
+#ifdef ARLIB_SSL
 	function<socket*(bool ssl, cstring domain, int port, runloop* loop)> cb_mksock = socket::create_sslmaybe;
+#else
+	function<socket*(cstring domain, int port, runloop* loop)> cb_mksock = socket::create;
+#endif
 	autoptr<socket> sock;
 	
 	void do_timeout();
@@ -194,7 +202,7 @@ public:
 	public:
 		form()
 		{
-			uint8_t rand[16];
+			uint8_t rand[16]; // 128 bits of random ought to be enough for everyone
 			random_t::get_seed(&rand, sizeof(rand));
 			boundary = "--ArlibFormBoundary"+tostringhex(rand); // max 70 characters allowed, not counting the two leading hyphens
 		}
@@ -225,7 +233,7 @@ public:
 		//Counts as calling pack(), so only once.
 		void attach(HTTP::req& rq)
 		{
-			rq.body = std::move(pack());
+			rq.body = pack();
 			rq.headers.append("Content-Type: multipart/form-data; boundary="+boundary.substr(2, ~0));
 		}
 	};

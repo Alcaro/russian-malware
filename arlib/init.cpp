@@ -9,11 +9,13 @@
 
 string argparse::get_usage()
 {
+#ifdef STDOUT_DELETE
+	return "";
+#endif
 	return "TODO";
 }
 void argparse::usage()
 {
-	puts(get_usage());
 	exit(0);
 }
 void argparse::error(cstring why)
@@ -78,16 +80,18 @@ void argparse::single_arg(char sname, const char * value, arglevel_t arglevel, b
 
 void argparse::parse_pre(const char * const * argv)
 {
+#ifndef ARLIB_OPT
 	if (m_appname)
 	{
 		error("internal error: argparse::parse called twice");
 	}
+#endif
 	m_appname = argv[0];
 }
 void argparse::parse(const char * const * argv)
 {
 #if !defined(ARGUI_NONE) && !defined(ARLIB_TEST)
-	abort(); // unreachable
+	abort(); // should be unreachable
 #endif
 	parse_pre(argv);
 	

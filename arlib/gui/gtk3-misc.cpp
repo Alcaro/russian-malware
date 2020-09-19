@@ -86,7 +86,6 @@ struct window_x11_info window_x11;
 static void init_gui_shared_early()
 {
 	setenv("NO_AT_BRIDGE", "1", true); // https://askubuntu.com/questions/1086294/terminal-and-nautilus-stopped-working-after-a-crash
-//struct rlimit core_limits;core_limits.rlim_cur=core_limits.rlim_max=64*1024*1024;setrlimit(RLIMIT_CORE,&core_limits);
 #ifdef DEBUG
 	g_log_set_always_fatal((GLogLevelFlags)(G_LOG_LEVEL_CRITICAL|G_LOG_LEVEL_WARNING));
 #endif

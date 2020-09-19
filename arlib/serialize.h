@@ -52,10 +52,10 @@ template<typename T> ser_include_if_t<const T> ser_include_if(bool cond, const T
 
 template<typename T>
 static constexpr inline
-std::enable_if_t<sizeof(T::serialize_as_array), bool>
+std::enable_if_t<sizeof(T::serialize_as_array())!=0, bool>
 serialize_as_array(int ov_resolut1)
 {
-	return T::serialize_as_array;
+	return T::serialize_as_array();
 }
 template<typename T> // I can't do 'enable if serialize_as_array member does not exist'
 constexpr static inline bool serialize_as_array(float ov_resolut1) // instead, extra argument so the other is a better match
@@ -155,7 +155,7 @@ class jsonserializer {
 	}
 	
 	template<typename T>
-	std::enable_if_t<sizeof(typename T::serialize_as)>
+	std::enable_if_t<sizeof(typename T::serialize_as)!=0>
 	add_node(T& inner)
 	{
 		add_node((typename T::serialize_as)inner);
@@ -178,7 +178,7 @@ class jsonserializer {
 	void add_node(ser_compact_t<T> inner)
 	{
 		int prev = delay_compact;
-		delay_compact = min(prev, delay_compact);
+		delay_compact = min(inner.depth, delay_compact);
 		add_node(inner.c);
 		delay_compact = prev;
 	}
@@ -363,6 +363,14 @@ class jsondeserializer {
 	}
 	
 	template<typename T>
+	std::enable_if_t<std::is_invocable_v<T, cstring>>
+	read_item_raw(const T& out)
+	{
+		if (ev.action == jsonparser::str) out(ev.str);
+		else valid = false;
+	}
+	
+	template<typename T>
 	std::enable_if_t<std::is_arithmetic_v<T>>
 	read_item_raw(T& out)
 	{
@@ -384,7 +392,7 @@ class jsondeserializer {
 	}
 	
 	template<typename T>
-	std::enable_if_t<sizeof(typename T::serialize_as)>
+	std::enable_if_t<sizeof(typename T::serialize_as)!=0>
 	read_item_raw(T& inner)
 	{
 		typename T::serialize_as tmp;
@@ -621,14 +629,14 @@ class bmlserializer {
 	}
 	
 	template<typename T>
-	std::enable_if_t<sizeof(tostring(std::declval<T>()))>
+	std::enable_if_t<sizeof(tostring(std::declval<T>()))!=0>
 	item_inner(cstring name, const T& inner)
 	{
 		w.node(name, tostring(inner));
 	}
 	
 	template<typename T>
-	std::enable_if_t<sizeof(typename T::serialize_as)>
+	std::enable_if_t<sizeof(typename T::serialize_as)!=0>
 	item_inner(cstring name, T& inner)
 	{
 		item_inner(name, (typename T::serialize_as)inner);
@@ -745,7 +753,7 @@ class bmldeserializer {
 	// output: ev points to the next node; each implementation must end with finish_item() next_ev()
 	
 	template<typename T>
-	std::enable_if_t<sizeof(fromstring(string(), std::declval<T&>()))>
+	std::enable_if_t<sizeof(fromstring(string(), std::declval<T&>()))!=0>
 	read_item(T& out)
 	{
 		valid &= fromstring(ev.value, out);
@@ -805,7 +813,7 @@ class bmldeserializer {
 	}
 	
 	template<typename T>
-	std::enable_if_t<sizeof(typename T::serialize_as)>
+	std::enable_if_t<sizeof(typename T::serialize_as)!=0>
 	read_item(T& out)
 	{
 		typename T::serialize_as tmp;

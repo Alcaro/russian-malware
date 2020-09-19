@@ -22,7 +22,9 @@ public:
 	//If the server doesn't exist or doesn't respond, reports a broken connection.
 	//Once the connection is established, it reports writability to its runloop. However, writes before that will succeed.
 	static socket* create(cstring domain, int port, runloop* loop);
+#ifdef ARLIB_SSL
 	static socket* create_ssl(cstring domain, int port, runloop* loop); // TODO: choosable backend, server
+#endif
 	// To avoid amplification attacks, any homemade protocol must have the first packet longer than the first reply.
 	// For example, it can contain a 256 character message explaining that this is a 256 byte message to avoid amplification attacks.
 	static socket* create_udp(cstring domain, int port, runloop* loop);
@@ -36,16 +38,11 @@ public:
 	//(Can be used with a raw socket, of course.)
 	static socket* wrap(socket* inner, runloop* loop);
 	
+#ifdef ARLIB_SSL
 	//Super simple function, just calls create() or create_ssl().
 	//Suitable as default implementation of a 'create socket' callback. Said callback should be expected to return a non-raw socket.
 	static socket* create_sslmaybe(bool ssl, cstring domain, int port, runloop* loop);
-	
-	//Wraps the socket in a SSL layer. This function can accept a raw socket.
-	static socket* wrap_ssl(socket* inner, cstring domain, runloop* loop);
-	//Like the above, but with create_raw's caveats.
-	static socket* wrap_ssl_raw(socket* inner, cstring domain, runloop* loop);
-	//Like the above, but does not validate the certificate. Generally a bad idea. Does not exist under all SSL backends.
-	static socket* wrap_ssl_raw_noverify(socket* inner, runloop* loop);
+#endif
 	
 	
 	enum {
@@ -103,6 +100,56 @@ public:
 	static bool string_to_ip6(arrayvieww<uint8_t> out, cstring str);
 	
 	static bool ip_to_sockaddr(struct sockaddr_storage * sa, arrayview<uint8_t> bytes);
+	
+	
+#ifdef ARLIB_SSL
+	//Wraps the socket in a SSL layer. This function can accept a raw socket.
+	static socket* wrap_ssl(socket* inner, cstring domain, runloop* loop);
+	//Like the above, but with create_raw's caveats.
+	static socket* wrap_ssl_raw(socket* inner, cstring domain, runloop* loop)
+	{
+#ifdef ARLIB_SSL_OPENSSL
+		return wrap_ssl_raw_openssl(inner, domain, loop);
+#endif
+#ifdef ARLIB_SSL_GNUTLS
+		return wrap_ssl_raw_gnutls(inner, domain, loop);
+#endif
+#ifdef ARLIB_SSL_SCHANNEL
+		return wrap_ssl_raw_schannel(inner, domain, loop);
+#endif
+#ifdef ARLIB_SSL_BEARSSL
+		return wrap_ssl_raw_bearssl(inner, domain, loop);
+#endif
+	}
+	//Like the above, but does not validate the certificate. Generally a bad idea. Does not exist under all SSL backends.
+	static socket* wrap_ssl_raw_noverify(socket* inner, runloop* loop)
+	{
+#ifdef ARLIB_SSL_OPENSSL
+		return wrap_ssl_raw_openssl_noverify(inner, loop);
+#endif
+#ifdef ARLIB_SSL_SCHANNEL
+		return wrap_ssl_raw_schannel_noverify(inner, loop);
+#endif
+		return unsafe_ssl_not_available();
+	}
+	
+#ifdef ARLIB_SSL_OPENSSL
+	static socket* wrap_ssl_raw_openssl(socket* inner, cstring domain, runloop* loop);
+	static socket* wrap_ssl_raw_openssl_noverify(socket* inner, runloop* loop);
+#endif
+#ifdef ARLIB_SSL_GNUTLS
+	static socket* wrap_ssl_raw_gnutls(socket* inner, cstring domain, runloop* loop);
+#endif
+#ifdef ARLIB_SSL_SCHANNEL
+	static socket* wrap_ssl_raw_schannel(socket* inner, cstring domain, runloop* loop);
+	static socket* wrap_ssl_raw_schannel_noverify(socket* inner, runloop* loop);
+#endif
+#ifdef ARLIB_SSL_BEARSSL
+	static socket* wrap_ssl_raw_bearssl(socket* inner, cstring domain, runloop* loop);
+#endif
+	
+	static socket* unsafe_ssl_not_available(); // gives a linker error if used
+#endif // ARLIB_SSL
 };
 
 class socketlisten : nomove {
@@ -115,7 +162,7 @@ class socketlisten : nomove {
 	socketlisten(intptr_t sock, runloop* loop, function<void(autoptr<socket>)> callback);
 	
 	intptr_t fd;
-	HANDLE waiter = CreateEvent(NULL, true, false, NULL);
+	HANDLE waiter;
 #endif
 	
 	runloop* loop;

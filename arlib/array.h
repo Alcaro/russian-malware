@@ -18,7 +18,7 @@ protected:
 	size_t count = 0;
 	
 protected:
-	//must be functions, Clang won't like it otherwise
+	// static variables clog gdb output, so extra () it is
 	static bool trivial_cons() { return std::is_trivial_v<T>; } // constructor is memset(0)
 	static bool trivial_copy() { return std::is_trivially_copyable_v<T>; } // copy constructor is memcpy
 	static bool trivial_comp() { return std::has_unique_object_representations_v<T>; } // equality comparison is memcmp
@@ -49,8 +49,8 @@ public:
 	
 	arrayview(nullptr_t)
 	{
-		this->items=NULL;
-		this->count=0;
+		this->items = NULL;
+		this->count = 0;
 	}
 	
 	arrayview(const T * ptr, size_t count)
@@ -171,7 +171,7 @@ public:
 	const T* end() const { return this->items+this->count; }
 	
 	
-	static const bool serialize_as_array = true;
+	static constexpr bool serialize_as_array() { return true; }
 	template<typename Ts>
 	std::enable_if_t<Ts::serializing>
 	serialize(Ts& s)
@@ -200,8 +200,8 @@ public:
 	
 	arrayvieww(nullptr_t)
 	{
-		this->items=NULL;
-		this->count=0;
+		this->items = NULL;
+		this->count = 0;
 	}
 	
 	arrayvieww(T * ptr, size_t count)
@@ -332,10 +332,19 @@ template<typename T> class array : public arrayvieww<T> {
 	//T * items;
 	//size_t count;
 	
+	static size_t capacity_for(size_t n)
+	{
+		// don't allocate enough space for 1 entry, just go for 4 or 8 directly - fewer mallocs means faster
+		// TODO: are these numbers reasonable?
+		size_t min = (sizeof(T) <= 16 ? 8 : 4);
+		if (n < min) return min;
+		else return bitround(n);
+	}
+	
 	void clone(const arrayview<T>& other)
 	{
-		this->count = other.size(); // I can't access non-this instances of my base class, so let's just use the public interface.
-		this->items = malloc(sizeof(T)*bitround(this->count));
+		this->count = other.size(); // I can't access non-this instances of my base class, so let's just use the public interface
+		this->items = malloc(sizeof(T)*capacity_for(this->count));
 		if (this->trivial_copy())
 		{
 			memcpy(this->items, other.ptr(), sizeof(T)*this->count);
@@ -366,56 +375,56 @@ public:
 	}
 	
 private:
-	void resize_grow_noinit(size_t count)
+	void resize_grow_noinit(size_t newcount)
 	{
-		if (this->count >= count) return;
-		if (count > bitround(this->count) || !this->items) this->items = realloc(this->items, sizeof(T)*bitround(count));
-		this->count = count;
+		if (this->count >= newcount) return;
+		if (newcount > capacity_for(this->count) || !this->items) this->items = realloc(this->items, sizeof(T)*capacity_for(newcount));
+		this->count = newcount;
 	}
 	
-	//it would be better if this thing didn't reallocate until it's a quarter of the original size
-	//but I don't store the allocated size, so that's hard
-	//there is malloc_usable_size (and similar), but it may or may not exist depending on the libc used
-	void resize_shrink_noinit(size_t count)
+	// it would be better if this thing didn't reallocate until it's a quarter of the original size
+	// but I don't store the allocated size, so that's hard
+	// there is malloc_usable_size (and similar), but it may or may not exist depending on the libc used
+	void resize_shrink_noinit(size_t newcount)
 	{
-		if (this->count <= count) return;
-		size_t new_bufsize = bitround(count);
+		if (this->count <= newcount) return;
+		size_t new_bufsize = capacity_for(newcount);
 		if (this->count > new_bufsize) this->items = realloc(this->items, sizeof(T)*new_bufsize);
-		this->count = count;
+		this->count = newcount;
 	}
 	
-	void resize_grow(size_t count)
+	void resize_grow(size_t newcount)
 	{
-		if (this->count >= count) return;
+		if (this->count >= newcount) return;
 		size_t prevcount = this->count;
-		resize_grow_noinit(count);
+		resize_grow_noinit(newcount);
 		if (this->trivial_cons())
 		{
-			memset(this->items+prevcount, 0, sizeof(T)*(count-prevcount));
+			memset(this->items+prevcount, 0, sizeof(T)*(newcount-prevcount));
 		}
 		else
 		{
-			for (size_t i=prevcount;i<count;i++)
+			for (size_t i=prevcount;i<newcount;i++)
 			{
 				new(&this->items[i]) T();
 			}
 		}
 	}
 	
-	void resize_shrink(size_t count)
+	void resize_shrink(size_t newcount)
 	{
-		if (this->count <= count) return;
-		for (size_t i=count;i<this->count;i++)
+		if (this->count <= newcount) return;
+		for (size_t i=newcount;i<this->count;i++)
 		{
 			this->items[i].~T();
 		}
-		resize_shrink_noinit(count);
+		resize_shrink_noinit(newcount);
 	}
 	
-	void resize_to(size_t count)
+	void resize_to(size_t newcount)
 	{
-		if (count > this->count) resize_grow(count);
-		else resize_shrink(count);
+		if (newcount > this->count) resize_grow(newcount);
+		else resize_shrink(newcount);
 	}
 	
 public:
@@ -601,7 +610,7 @@ public:
 	static array<T> create_usurp(arrayvieww<T> data)
 	{
 		array<T> ret;
-		ret.items = realloc(data.ptr(), sizeof(T)*bitround(data.size()));
+		ret.items = realloc(data.ptr(), sizeof(T)*capacity_for(data.size()));
 		ret.count = data.size();
 		return ret;
 	}
@@ -638,6 +647,11 @@ inline array<T2> arrayview<T>::cast() const
 	for (const T& tmp : *this) ret.append(tmp);
 	return ret;
 }
+
+template<typename T> inline array<T> operator+(array<T>&& left, arrayview<T> right) { left += right; return left; }
+template<typename T> inline array<T> operator+(arrayview<T> left, arrayview<T> right) { array<T> ret = left; ret += right; return ret; }
+
+
 
 //Sized (or static) array - saves an allocation when returning fixed-size arrays, like string.split<N> or pack_le32
 template<typename T, size_t N> class sarray {

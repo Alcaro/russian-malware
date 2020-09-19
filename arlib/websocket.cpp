@@ -17,10 +17,16 @@ void WebSocket::connect(cstring target, arrayview<string> headers)
 	
 	int defport;
 	if (loc.scheme == "ws") defport = 80;
+#ifdef ARLIB_SSL
 	else if (loc.scheme == "wss") defport = 443;
+#endif
 	else { cb_error(); return; }
 	
-	sock = cb_mksock(defport==443, loc.domain, loc.port ? loc.port : defport, loop);
+	sock = cb_mksock(
+#ifdef ARLIB_SSL
+	                 defport==443,
+#endif
+	                 loc.domain, loc.port ? loc.port : defport, loop);
 	if (!sock) { cb_error(); return; }
 	sock->callback(bind_this(&WebSocket::activity), NULL);
 	

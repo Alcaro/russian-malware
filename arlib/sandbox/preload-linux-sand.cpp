@@ -7,7 +7,7 @@
 //Its lesser known cousin LD_AUDIT works better, but the library itself is open()ed.
 //This can be worked around with ptrace to make that specific syscall return a pre-opened fd, but that's way too much effort.
 //Instead, we will be the loader. Of course we don't want to actually load the program, that's even harder than ptrace,
-// so we'll "just" load the real loader, after setting up a SIGSYS handler (see sysemu.cpp) to let open() act normally.
+// so we'll "just" load the real loader, after setting up a SIGSYS handler in sysemu.cpp to let open() act normally.
 //We'll skip most error checking. Everything will succeed on a sane system, and if it doesn't, there's no way to recover.
 
 //#define _GNU_SOURCE // default (mandatory) in c++
@@ -255,14 +255,14 @@ extern const char sandbox_preload_bin[];
 extern const unsigned sandbox_preload_len;
 __asm__(R"(
 .section .rodata
-.global sandbox_preload_bin
+.globl sandbox_preload_bin
 sandbox_preload_bin:
 .incbin "obj/sand-preload-)" STR(ARLIB_OBJNAME) R"(.elf"
 .equ my_len, .-sandbox_preload_bin
 .align 4
-.global sandbox_preload_len
+.globl sandbox_preload_len
 sandbox_preload_len:
 .int my_len
-.section .text
+.text
 )");
 #endif
