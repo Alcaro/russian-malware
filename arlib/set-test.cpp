@@ -11,7 +11,7 @@ public:
 	size_t hash() const { return 0; }
 };
 
-test("set", "array", "set")
+test("set", "array,string", "set")
 {
 	{
 		set<int> item;

@@ -202,7 +202,7 @@ bool image::init_decode_png(arrayview<uint8_t> pngdata)
 	//start_filtered = end - height*scan_filtered
 	//deinterleaving probably isn't doable in-place at all
 	size_t nbytes = max(this->stride, bytes_per_line_raw+4) * (height+2) + sizeof(uint32_t)*7;
-	this->storage = malloc(nbytes);
+	this->storage = xmalloc(nbytes);
 	
 	this->pixels8 = (uint8_t*)this->storage;
 	this->fmt = (has_alpha ? (has_bool_alpha ? ifmt_bargb8888 : ifmt_argb8888) : ifmt_xrgb8888);

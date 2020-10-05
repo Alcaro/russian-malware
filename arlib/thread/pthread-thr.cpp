@@ -48,7 +48,7 @@ static void * threadproc(void * userdata)
 
 static void thread_create_inner(function<void()>&& start, pthread_attr_t* attr)
 {
-	threaddata_pthread* thdat = malloc(sizeof(threaddata_pthread));
+	threaddata_pthread* thdat = xmalloc(sizeof(threaddata_pthread));
 	memset(thdat, 0, sizeof(*thdat));
 	thdat->func = std::move(start);
 	

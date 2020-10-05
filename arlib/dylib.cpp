@@ -75,24 +75,27 @@ bool dylib::init(const char * filename)
 {
 	if (handle) abort();
 	
-	synchronized(dylib_lock) // two threads racing on SetDllDirectory is bad news
+	//if (uniq)
+	//{
+	//	if (GetModuleHandleEx(0, filename, (HMODULE*)&handle)) return NULL;
+	//}
+	
+	// this is so dependencies, for example winpthread-1.dll, can be placed beside the dll where they belong
+	char * filename_copy = strdup(filename);
+	char * filename_copy_slash = strrchr(filename_copy, '/');
+	if (!filename_copy_slash) filename_copy_slash = strrchr(filename_copy, '\0');
+	filename_copy_slash[0]='\0';
+	
+	// two threads racing on SetDllDirectory is bad news
+	// (hope nothing else uses SetDllDirectory; even without threads, global state is bad news)
+	// (and even without dlls, this thing is inherited by child processes for some absurd reason?)
+	synchronized(dylib_lock)
 	{
-		//if (uniq)
-		//{
-		//	if (GetModuleHandleEx(0, filename, (HMODULE*)&handle)) return NULL;
-		//}
-		
-		//this is so weird dependencies, for example winpthread-1.dll, can be placed beside the dll where they belong
-		char * filename_copy = strdup(filename);
-		char * filename_copy_slash = strrchr(filename_copy, '/');
-		if (!filename_copy_slash) filename_copy_slash = strrchr(filename_copy, '\0');
-		filename_copy_slash[0]='\0';
 		SetDllDirectory(filename_copy);
-		free(filename_copy);
-		
 		handle = LoadLibrary(filename);
 		SetDllDirectory(NULL);
 	}
+	free(filename_copy);
 	return handle;
 }
 

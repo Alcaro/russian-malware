@@ -40,7 +40,7 @@ void widget_layout::construct(unsigned int numchildren, widget_base* * children,
 	widget=grid;
 	
 	m->numchildren=numchildren;
-	m->children=malloc(sizeof(widget_base*)*numchildren);
+	m->children=xmalloc(sizeof(widget_base*)*numchildren);
 	memcpy(m->children, children, sizeof(widget_base*)*numchildren);
 	
 	widthprio=0;
@@ -289,7 +289,7 @@ widget_radio* widget_radio::group(unsigned int numitems, widget_radio * * group)
 		group[i]->m->id=i;
 		gtk_radio_button_join_group(GTK_RADIO_BUTTON(group[i]->widget), GTK_RADIO_BUTTON(group[i-1]->widget));
 	}
-	m->group=malloc(sizeof(widget_radio*)*numitems);
+	m->group=xmalloc(sizeof(widget_radio*)*numitems);
 	memcpy(m->group, group, sizeof(widget_radio*)*numitems);
 	m->grouplen=numitems;
 	in_callback=true;

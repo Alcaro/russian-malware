@@ -183,7 +183,8 @@ public:
 	{
 		DWORD bytes;
 		if (!WriteFile(submit_write, &cb, sizeof(cb), &bytes, NULL) || bytes != sizeof(cb)) abort();
-		memset(&cb, 0, sizeof(cb));
+		// this relies on function's ctor not allocating, and its dtor doing nothing if given an all-zero object
+		memset((void*)&cb, 0, sizeof(cb));
 		SetEvent(submit_event);
 	}
 #endif

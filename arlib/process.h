@@ -208,9 +208,9 @@ public:
 	
 	
 #ifdef __linux__
-	bool running() { return (lock_read_loose(&pid) != -1); }
+	bool running() { return (lock_read<lock_loose>(&pid) != -1); }
 	//Returns exit code, or -1 if it's still running. Can be called multiple times.
-	int status() { return lock_read_loose(&exitcode); }
+	int status() { return lock_read<lock_loose>(&exitcode); }
 #endif
 	//Doesn't return until the process is gone and onexit() is called.
 	//The process is automatically terminated when the object is destroyed.

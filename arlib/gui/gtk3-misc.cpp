@@ -577,7 +577,7 @@ public:
 		fd_cbs& cbs = fdinfo.get_create(fd);
 #ifdef ARLIB_TESTRUNNER
 		if (!cbs.valgrind_dummy)
-			cbs.valgrind_dummy = malloc(1);
+			cbs.valgrind_dummy = xmalloc(1);
 #endif
 		if (cbs.source_id) g_source_remove(cbs.source_id);
 		
@@ -617,7 +617,7 @@ public:
 	{
 		timer_cb& cb = timerinfo.append();
 #ifdef ARLIB_TESTRUNNER
-		cb.valgrind_dummy = malloc(1);
+		cb.valgrind_dummy = xmalloc(1);
 #endif
 		cb.callback = callback;
 		cb.parent = this;
@@ -630,7 +630,7 @@ public:
 	{
 		timer_cb& cb = timerinfo.append();
 #ifdef ARLIB_TESTRUNNER
-		cb.valgrind_dummy = malloc(1);
+		cb.valgrind_dummy = xmalloc(1);
 #endif
 		cb.callback = callback;
 		cb.parent = this;

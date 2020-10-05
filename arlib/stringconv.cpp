@@ -1,18 +1,13 @@
 #include "stringconv.h"
-#include <stdio.h>
-#include <math.h>
-#include <float.h>
-#include <errno.h>
-#include "test.h"
 
-template<typename T> bool parse_str_raw(const char * in, const char * end, T& out)
+template<typename Tu> bool fromstring_int_inner(const char * in, const char * end, Tu& out)
 {
 	out = 0;
-	if (in == end) return false;
-	T t_max = (T)-1;
+	if (UNLIKELY(in == end)) return false;
+	Tu t_max = (Tu)-1;
 	while (in != end)
 	{
-		if (*in >= '0' && *in <= '9')
+		if (LIKELY(*in >= '0' && *in <= '9'))
 		{
 			if (UNLIKELY(out >= t_max/10))
 			{
@@ -27,26 +22,26 @@ template<typename T> bool parse_str_raw(const char * in, const char * end, T& ou
 	return true;
 }
 
-template<typename T> bool parse_str(const char * in, const char * end, T& out)
+template<typename Tu> bool fromstring_uint_real(cstring s, Tu& out)
 {
-	if constexpr (sizeof(T) > sizeof(size_t)) return parse_str_raw<T>(in, end, out);
-	
-	out = 0;
-	size_t n;
-	if (!parse_str_raw<size_t>(in, end, n)) return false; // minimize number of parse_str_raw instantiations
-	out = n;
-	return ((size_t)out == n);
+	const char * start = (char*)s.bytes().ptr();
+	const char * end = start + s.length();
+	return fromstring_int_inner<Tu>(start, end, out);
 }
 
-template<typename Ts, typename Tu> bool parse_str_sign(const char * in, const char * end, Ts& out)
+template<typename Tu, typename Ts> bool fromstring_int_real(cstring s, Ts& out)
 {
 	out = 0;
-	if (UNLIKELY(in == end)) return false;
-	bool neg = (*in == '-');
-	in += neg;
+	const char * start = (char*)s.bytes().ptr();
+	const char * end = start + s.length();
 	
+	if (UNLIKELY(start == end)) return false;
+	bool neg = (*start == '-');
+	start += neg;
 	Tu tmp;
-	if (UNLIKELY(!parse_str<Tu>(in, end, tmp))) return false;
+	
+	if (UNLIKELY(!fromstring_int_inner<Tu>(start, end, tmp))) return false;
+	
 	if (neg)
 	{
 		out = (Ts)-tmp;
@@ -59,90 +54,70 @@ template<typename Ts, typename Tu> bool parse_str_sign(const char * in, const ch
 	}
 }
 
-
-template<typename T> bool parse_str_hex_raw(const char * in, const char * end, T& out)
+template<typename Tu> bool fromstring_hex_real(cstring s, Tu& out)
 {
-	out = 0;
-	if (UNLIKELY(in == end)) return false;
-	while (in < end && *in == '0') in++;
-	if (UNLIKELY(end-in > (ptrdiff_t)sizeof(T)*2)) return false;
+	const char * start = (char*)s.bytes().ptr();
+	const char * end = start + s.length();
 	
-	while (in != end)
+	out = 0;
+	if (UNLIKELY(start == end)) return false;
+	while (start < end && *start == '0') start++;
+	if (UNLIKELY(end-start > (ptrdiff_t)sizeof(Tu)*2)) return false;
+	
+	while (start != end)
 	{
 		out <<= 4;
-		if (*in >= '0' && *in <= '9') out += *in-'0';
-		else
-		{
-			char upper = *in & ~0x20;
-			if (upper >= 'A' && upper <= 'F') out += upper-'A'+10;
-			else return false;
-		}
-		in++;
+		char upper = *start & ~0x20;
+		if (*start >= '0' && *start <= '9') out += *start-'0';
+		else if (upper >= 'A' && upper <= 'F') out += upper-'A'+10;
+		else return false;
+		start++;
 	}
 	return true;
 }
 
-template<typename T> bool parse_str_hex(const char * in, const char * end, T& out)
+template<typename Tu> inline bool fromstring_uint(cstring s, Tu& out)
 {
-	if constexpr (sizeof(T) > sizeof(size_t)) return parse_str_hex_raw<T>(in, end, out);
-	
-	size_t n;
-	if (!parse_str_hex_raw<size_t>(in, end, n)) return false;
-	out = n;
-	return ((size_t)out == n);
+	// funny wrappers to minimize number of fromstring_(u)int_real instantiations, for size reasons
+	if constexpr (sizeof(Tu) > sizeof(uintptr_t)) return fromstring_uint_real<Tu>(s, out);
+	if constexpr (sizeof(Tu) == sizeof(uintptr_t)) return fromstring_uint_real<uintptr_t>(s, (uintptr_t&)out);
+	uintptr_t tmp;
+	bool ret = fromstring_uint_real<uintptr_t>(s, tmp);
+	out = (Tu)tmp;
+	return (ret && tmp == (uintptr_t)out);
 }
 
+template<typename Tu, typename Ts> inline bool fromstring_int(cstring s, Ts& out)
+{
+	if constexpr (sizeof(Ts) > sizeof(intptr_t)) return fromstring_int_real<Tu, Ts>(s, out);
+	if constexpr (sizeof(Ts) == sizeof(intptr_t)) return fromstring_int_real<uintptr_t, intptr_t>(s, (intptr_t&)out);
+	intptr_t tmp;
+	bool ret = fromstring_int_real<uintptr_t, intptr_t>(s, tmp);
+	out = (Ts)tmp;
+	return (ret && tmp == (intptr_t)out);
+}
+
+template<typename Tu> inline bool fromstring_hex(cstring s, Tu& out)
+{
+	if constexpr (sizeof(Tu) > sizeof(uintptr_t)) return fromstring_hex_real<Tu>(s, out);
+	if constexpr (sizeof(Tu) == sizeof(uintptr_t)) return fromstring_hex_real<uintptr_t>(s, (uintptr_t&)out);
+	uintptr_t tmp;
+	bool ret = fromstring_hex_real<uintptr_t>(s, tmp);
+	out = (Tu)tmp;
+	return (ret && tmp == (uintptr_t)out);
+}
 
 #define FROMFUNC(Tu, Ts) \
-	bool fromstring(cstring s, Tu& out) \
-	{ \
-		return parse_str((char*)s.bytes().ptr(), (char*)s.bytes().ptr()+s.length(), out); \
-	} \
-	bool fromstring(cstring s, Ts& out) \
-	{ \
-		return parse_str_sign<Ts, Tu>((char*)s.bytes().ptr(), (char*)s.bytes().ptr()+s.length(), out); \
-	} \
-	bool fromstringhex(cstring s, Tu& out) \
-	{ \
-		return parse_str_hex((char*)s.bytes().ptr(), (char*)s.bytes().ptr()+s.length(), out); \
-	}
-
+	bool fromstring(cstring s, Tu& out) { return fromstring_uint<Tu>(s, out); } \
+	bool fromstring(cstring s, Ts& out) { return fromstring_int<Tu, Ts>(s, out); } \
+	bool fromstringhex(cstring s, Tu& out) { return fromstring_hex<Tu>(s, out); }
 FROMFUNC(unsigned char,      signed char)
 FROMFUNC(unsigned short,     signed short)
 FROMFUNC(unsigned int,       signed int)
 FROMFUNC(unsigned long,      signed long)
 FROMFUNC(unsigned long long, signed long long)
+#undef FROMFUNC
 
-
-// if the input does not start with 0x, return it unchanged
-// otherwise, return a substring of input that strtod rejects, for example pointer to the x (pointer to the nul would work too)
-static const char * drop0x(const char * in)
-{
-	if (in[0]=='0' && (in[1]=='x' || in[1]=='X')) return in+1;
-	else return in;
-}
-
-template<typename T, T(*strtod)(const char*,char**)>
-bool fromstring_float(cstring s, T& out)
-{
-	out = 0;
-	auto tmp_s = s.c_str();
-	const char * tmp_cp = tmp_s;
-	if (UNLIKELY(*tmp_cp != '-' && !isdigit(*tmp_cp))) goto maybe_inf;
-	char * tmp_cpo;
-	out = strtod(drop0x(tmp_cp), &tmp_cpo);
-	if (UNLIKELY(tmp_cpo != tmp_cp + s.length())) goto maybe_inf;
-	if (UNLIKELY(!isdigit(tmp_cpo[-1]))) goto maybe_inf;
-	if (UNLIKELY(out == HUGE_VAL || out == -HUGE_VAL)) goto maybe_inf;
-	return true;
-maybe_inf:
-	if (s == "inf") { out = HUGE_VAL; return true; }
-	if (s == "-inf") { out = -HUGE_VAL; return true; }
-	if (s == "nan") { out = NAN; return true; }
-	return false;
-}
-bool fromstring(cstring s, double& out) { return fromstring_float<double, strtod>(s, out); }
-bool fromstring(cstring s, float& out) { return fromstring_float<float, strtof>(s, out); }
 
 bool fromstring(cstring s, bool& out)
 {
@@ -162,110 +137,6 @@ bool fromstring(cstring s, bool& out)
 	return false;
 }
 
-static void flatten_zeroes(char* str);
-// Arlib's float->string functions yield the shortest possible string that roundtrips, like Python,
-//  except I omit the fraction if zero, and I don't zero pad the exponent.
-// Like Python, I use decimal for 0.0001 to 9999999999999998 (inclusive), and scientific for anything else.
-// Upper threshold is because above that, rounding gets wonky. https://github.com/python/cpython/blob/v3.8.0/Python/pystrtod.c#L1116
-// Lower threshold is to match Python. I don't know why they chose that one, personally I would've kept it decimal for another digit.
-// Thresholds are same for float and double because why wouldn't they. However, tostring((float)0.1) is 0.1, not 0.10000000149011612.
-template<typename T, typename Ti, T(*strtod)(const char*,char**), int minprec>
-string tostring_float(T f)
-{
-	static_assert(std::numeric_limits<T>::is_iec559);
-	static_assert(sizeof(T) == sizeof(Ti));
-	
-	if (isnan(f)) return "nan";
-	if (isinf(f)) return &"-inf"[!signbit(f)];
-	
-	int prec = minprec;
-	
-	char fmt[] = "%#.*e";
-	if ((fabs(f) >= (T)0.0001 && fabs(f) < (T)10000000000000000.0) || f==0.0)
-	{
-		fmt[4] = 'f'; // decimal notation
-		prec = minprec - log10(f);
-		if (prec < 0) prec = 0;
-		if (prec > minprec) prec = minprec;
-	}
-	if (!isnormal(f)) prec = 0;
-	
-	while (true)
-	{
-		char ret[64];
-		sprintf(ret, fmt, prec, f);
-		T parsed = strtod(ret, nullptr);
-		if (parsed != f)
-		{
-			// For a few numbers, like 5.960464477539063e-8 and 1.262177448e-29f, rounding to N digits parses as the previous float,
-			// but incrementing the last digit parses as the desired number.
-			Ti f_i;
-			memcpy(&f_i, &f, sizeof(f_i));
-			Ti parsed_i;
-			memcpy(&parsed_i, &parsed, sizeof(parsed_i));
-			if (f_i-1 == parsed_i)
-			{
-				char* last = strchr(ret, 'e');
-				if (!last) last = strchr(ret, '\0');
-				last[-1]++; // ignore if that's a 9 and overflows, it would've been caught on the previous digit
-				parsed = strtod(ret, nullptr);
-			}
-			// There's no need to worry about the other direction, where the best answer would be decreasing last[-1].
-			// Proof: Assume there is such a number. Call it N. Let N-1 and N+1 be the two closest floats.
-			// Also assume, without loss of generality, that 1.23 parses as N, but rounding N to three digits yields 1.24.
-			// -> N's full decimal expansion is 1.235 or greater (otherwise it wouldn't round to 1.24)
-			// -> N-1 is 1.225 or less (otherwise 1.23 wouldn't parse as N)
-			// -> N+1's full decimal expansion is 1.245 or less (otherwise 1.24 would parse as N)
-			// -> N - N-1 >= 0.010, N - N+1 <= 0.010
-			// -> the epsilon grows as the number shrinks
-			// -> impossible. Floats don't work that way.
-			// Per the above, the opposite can happen, but it too requires an epsilon change, i.e. N is an exact power of two.
-		}
-		if (parsed == f)
-		{
-			flatten_zeroes(ret);
-			return ret;
-		}
-		// it's possible to do a binary search instead, but all likely inputs only have a few digits anyways, so better keep it simple
-		prec++;
-	}
-}
-// Removes unnecessary zeroes (trailing in fraction, leading in exponent) from a number from printf %#f or %#e.
-// Any other input is undefined behavior.
-static void flatten_zeroes(char* str)
-{
-	char* e = strchr(str, 'e');
-	char* end = e ? e : strchr(str, '\0');
-	while (end[-1] == '0') end--;
-	if (end[-1] == '.') end--;
-	
-	if (e)
-	{
-		*(end++) = *(e++); // e
-		*(end++) = *(e++); // + or -
-#ifdef _WIN32 // msvcrt printf uses three-digit exponents, glibc uses two
-		while (*e == '0') e++;
-#else
-		if (*e == '0') e++;
-#endif
-		while (*e) *(end++) = *(e++);
-	}
-	*end = '\0';
-}
-string tostring(double f) { return tostring_float<double, uint64_t, strtod, 14>(f); }
-string tostring(float f) { return tostring_float<float, uint32_t, strtof, 5>(f); }
-
-string tostringhex(arrayview<uint8_t> val)
-{
-	string ret;
-	arrayvieww<uint8_t> retb = ret.construct(val.size()*2);
-	for (size_t i=0;i<val.size();i++)
-	{
-		sprintf((char*)retb.slice(i*2, 2).ptr(), "%.2X", val[i]);
-	}
-	return ret;
-}
-
 bool fromstringhex(cstring s, arrayvieww<uint8_t> val)
 {
 	if (val.size()*2 != s.length()) return false;
@@ -283,6 +154,73 @@ bool fromstringhex(cstring s, array<uint8_t>& val)
 }
 
 
+
+static const char hexdigits[16] = { '0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F' };
+template<typename Ts, typename Tu>
+string tostring_int(Ts vals)
+{
+	Tu val = (vals < 0 ? -vals : vals);
+	uint8_t buf[20]; // can't write directly to string's inline buffer; [ui]64 can need 20+nul bytes, and writes must go backwards
+	uint8_t* bufend = buf+sizeof(buf);
+	uint8_t* iter = bufend;
+	do {
+		*--iter = '0'+val%10;
+		val /= 10;
+	} while (val);
+	if (vals < 0) *--iter = '-';
+	return string(bytesr(iter, bufend-iter));
+}
+template<typename T>
+string tostringhex_int(T val, size_t mindigits)
+{
+	uint8_t buf[16];
+	uint8_t* bufend = buf+sizeof(buf);
+	uint8_t* iter = bufend;
+	do {
+		*--iter = hexdigits[val%16];
+		val /= 16;
+	} while (val);
+	while ((size_t)(bufend-iter) < mindigits) *--iter = '0';
+	return string(bytesr(iter, bufend-iter));
+}
+string tostring(  signed long long val) { return tostring_int<signed long long, unsigned long long>(val); }
+string tostring(unsigned long long val) { return tostring_int<unsigned long long, unsigned long long>(val); }
+string tostringhex(unsigned long long val, size_t mindigits) { return tostringhex_int<unsigned long long>(val, mindigits); }
+#if SIZE_MAX < ULLONG_MAX
+string tostring(  signed long val) { return tostring_int<signed long, unsigned long>(val); }
+string tostring(unsigned long val) { return tostring_int<unsigned long, unsigned long>(val); }
+string tostringhex(unsigned long val, size_t mindigits) { return tostringhex_int<unsigned long>(val, mindigits); }
+#endif
+string tostring(unsigned val, size_t mindigits)
+{
+	uint8_t buf[24]; // can't write directly to string's inline buffer; [ui]64 can need 20+nul bytes, and writes must go backwards
+	uint8_t* bufend = buf+sizeof(buf);
+	uint8_t* iter = bufend;
+	do {
+		*--iter = '0'+val%10;
+		val /= 10;
+	} while (val);
+	while ((size_t)(bufend-iter) < mindigits) *--iter = '0';
+	return string(bytesr(iter, bufend-iter));
+}
+
+
+string tostringhex(arrayview<uint8_t> val)
+{
+	string ret;
+	arrayvieww<uint8_t> retb = ret.construct(val.size()*2);
+	for (size_t i=0;i<val.size();i++)
+	{
+		retb[i*2+0] = hexdigits[val[i]>>4];
+		retb[i*2+1] = hexdigits[val[i]&15];
+	}
+	return ret;
+}
+
+
+#include "test.h"
+#include <math.h>
+
 template<typename T> void testunhex(const char * S, T V)
 {
 	T a;
@@ -295,6 +233,7 @@ template<typename T> void testundec(const char * S, T V)
 	assert_eq(fromstring(S, a), true);
 	test_nothrow { assert_eq(a, V); }
 }
+
 test("string conversion", "", "string")
 {
 	testcall(testundec<int>("123", 123));
@@ -310,13 +249,15 @@ test("string conversion", "", "string")
 	testcall(testundec<double>("000123", 123));
 	testcall(testundec<double>("0", 0));
 	testcall(testundec<double>("0000", 0));
-	testcall(testundec<double>("0e1", 0)); // this input has triggered the 0x detector, making it fail
+	testcall(testundec<double>("0e1", 0));
 	testcall(testundec<double>("0e-1", 0));
 	testcall(testundec<double>("0e+1", 0));
 	testcall(testundec<double>("11e1", 110));
 	testcall(testundec<double>("11e+1", 110));
 	testcall(testundec<double>("11e-1", 1.1));
+	testcall(testundec<double>("1E1", 10));
 	testcall(testundec<double>("-1", -1));
+	testcall(testundec<double>("1e-999", 0));
 	testcall(testundec<double>("inf", HUGE_VAL));
 	testcall(testundec<double>("-inf", -HUGE_VAL));
 	testcall(testundec<float>("2.5", 2.5));
@@ -355,6 +296,13 @@ test("string conversion", "", "string")
 	assert_eq(tostringhex(arrayview<uint8_t>(foo)), "12345678");
 	assert_eq(tostring_dbg(arrayview<uint8_t>(foo)), "[18,52,86,120]");
 	assert_eq(strlen(tostring_dbg("abc")), 3); // no [97,98,99,0] allowed
+	assert_eq(tostring(18446744073709551615ull), "18446744073709551615");
+	assert_eq(tostring((int8_t)-128), "-128");
+	assert_eq(tostring((int16_t)-32768), "-32768");
+	assert_eq(tostring((int32_t)-2147483648u), "-2147483648"); // weird suffixes because -123 is operator-(123)
+	assert_eq(tostring((int64_t)-9223372036854775808ull), "-9223372036854775808"); // and 9223372036854775808 doesn't fit in int64_t
+	assert_eq(tostringhex<4>(0x0123), "0123");
+	assert_eq(tostringhex(18446744073709551615ull), "FFFFFFFFFFFFFFFF");
 	
 	assert(fromstringhex("87654321", arrayvieww<uint8_t>(foo)));
 	assert_eq(foo[0], 0x87); assert_eq(foo[1], 0x65); assert_eq(foo[2], 0x43); assert_eq(foo[3], 0x21);
@@ -379,20 +327,25 @@ test("string conversion", "", "string")
 	uint64_t u64;
 	float f;
 	double d;
-	assert(!fromstring("", u32)); // this isn't an integer
-	assert(!fromstringhex("", u32));
-	assert(!fromstring("", f));
+	u32 = 42; assert(!fromstring("", u32)); assert_eq(u32, 0); // this isn't an integer
+	i32 = 42; assert(!fromstring("", i32)); assert_eq(i32, 0);
+	u32 = 42; assert(!fromstringhex("", u32)); assert_eq(u32, 0);
+	f = 42; assert(!fromstring("", f)); assert_eq(f, 0);
 	
 	assert(!fromstring("2,5", f)); // this is not the decimal separator, has never been and will never be
 	
 	string s = "42" + string::nul();
-	assert(!fromstring(s, u32)); // no nul allowed
+	assert(!fromstring(s, i32)); // no nul allowed
+	assert(!fromstring(s, u32));
 	assert(!fromstring(s, f));
 	assert(!fromstringhex(s, u32));
 	
 	assert(!fromstring("-0", u32)); // if -1 is invalid, -0 should be too
 	assert(!fromstringhex("-0", u32));
 	assert( fromstring("-0", i32)); // but if -1 is valid, -0 should be too
+	assert(!fromstring("+1", u32)); // no + prefix allowed
+	assert(!fromstring("+1", i32));
+	assert(!fromstring("+1", f));
 	assert(!fromstring(" 42", u32));
 	assert(!fromstring("0x42", u32));
 	assert(!fromstringhex(" 42", u32));
@@ -401,12 +354,25 @@ test("string conversion", "", "string")
 	assert(!fromstring("0x42", f));
 	
 	assert(!fromstring("0x123", f));
+	assert(!fromstring("+0x123", f));
+	assert(!fromstring("-0x123", f));
+	assert(!fromstring("0X123", f));
+	assert(!fromstring("+0X123", f));
+	assert(!fromstring("-0X123", f));
 	assert(!fromstring("1e", f));
 	assert(!fromstring("1e+", f));
 	assert(!fromstring("1e-", f));
 	assert(!fromstring("1.", f));
 	assert(!fromstring(".1", f));
+	assert(!fromstring(".", f));
+	assert( fromstring("0", f)); assert_eq(f, 0.0); assert(!signbit(f));
+	assert( fromstring("-0", f)); assert_eq(f, -0.0); assert(signbit(f));
+	assert( fromstring("0.0", f)); assert_eq(f, 0.0); assert(!signbit(f));
+	assert( fromstring("-0.0", f)); assert_eq(f, -0.0); assert(signbit(f));
+	assert( fromstring("1e-999", f)); assert_eq(f, 0.0); assert(!signbit(f));
+	assert( fromstring("-1e-999", f)); assert_eq(f, -0.0); assert(signbit(f));
 	assert( fromstring("inf", f)); assert(isinf(f));
+	assert(!fromstring("+inf", f));
 	assert( fromstring("-inf", f)); assert(isinf(f));
 	assert( fromstring("nan", f)); assert(isnan(f));
 	assert(!fromstring("NAN", f));
@@ -494,7 +460,7 @@ test("string conversion", "", "string")
 	
 	// https://www.exploringbinary.com/incorrectly-rounded-conversions-in-visual-c-plus-plus/
 	// many other troublesome numbers can be found at exploringbinary.com
-	// (they still fail on Windows)
+	// (they fail on Windows 7; may have been fixed in Windows 8+, didn't check)
 	testcall(testundec<double>("9214843084008499.0",
 	                            9214843084008500.0));
 	assert_eq(9214843084008499.0, 9214843084008500.0); // test the compiler too
@@ -528,7 +494,7 @@ test("string conversion", "", "string")
 	assert_eq(tostring(0.1+0.2), "0.30000000000000004");
 	assert_eq(tostring(0.7-0.4), "0.29999999999999993");
 	assert_eq(tostring(-0.1), "-0.1");
-	assert_eq(tostring(0.9999999999999999), "0.9999999999999999"); // next is 1
+	assert_eq(tostring(0.9999999999999999), "0.9999999999999999"); // next representable double is 1
 	assert_eq(tostring(4.999999999999999), "4.999999999999999"); // next is 5
 	assert_eq(tostring(9.999999999999998), "9.999999999999998"); // next is 10
 	assert_eq(tostring(999999999999999.9), "999999999999999.9"); // largest non-integer where next is a power of 10
@@ -541,7 +507,7 @@ test("string conversion", "", "string")
 #endif
 	assert_eq(tostring(2251799813685246.2), "2251799813685246.2");
 	assert_eq(tostring(4503599627370495.5), "4503599627370495.5"); // largest non-integer
-	assert_eq(tostring(4503599627370494.5), "4503599627370494.5"); // second largest non-integer, to ensure it rounds properly
+	assert_eq(tostring(4503599627370494.5), "4503599627370494.5"); // second largest non-integer
 	assert_eq(tostring(399999999999999.94), "399999999999999.94"); // next is integer, prev's fraction doesn't start with 9
 	assert_eq(tostring(0.6822871999174), "0.6822871999174"); // glitchy in C# ToString R
 	assert_eq(tostring(0.6822871999174001), "0.6822871999174001");
@@ -582,14 +548,14 @@ test("string conversion", "", "string")
 	assert_eq(tostring(5.3169119831396646722e+36), "5.316911983139665e+36"); //  for human readers)
 	
 	assert_eq(tostring(0.1f), "0.1");
-	assert_eq(tostring(0.0000999999974737875163555145263671875f), "0.0001"); // below threshold, but at threshold if rounded
+	assert_eq(tostring(0.0000999999974737875163555145263671875f), "0.0001"); // (float)0.0001 < 0.0001, but should be decimal anyways
 #ifndef _WIN32
 	assert_eq(tostring(0.0000000000000000000000000000000000000000000014012984643248170709f), "1e-45"); // smallest positive float
 #endif
 	assert_eq(tostring(340282346638528859811704183484516925440.0f), "3.4028235e+38"); // max possible float
 	assert_eq(tostring(340282326356119256160033759537265639424.0f), "3.4028233e+38"); // second largest
-#ifndef _WIN32 // this one is nasty - Windows turns it into 1e-42, which is a different number.
-	assert_eq(tostring(9.99e-43f), "9.99e-43"); // I think it only happens on subnormals...
+#ifndef _WIN32 // Windows turns this one into 1e-42, which is a different number. I think it's right on all normal numbers...
+	assert_eq(tostring(9.99e-43f), "9.99e-43");
 #endif
 	assert_eq(tostring(4.7019785e-38f), "4.7019785e-38");
 	assert_eq(tostring(9.40397050112110050170108664354930e-38f), "9.40397e-38"); // printing to 6 decimals gives nonzero last

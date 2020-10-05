@@ -265,7 +265,7 @@ file2::mmap_t file2::mmap(cstring filename)
 	uint8_t * data;
 	if (size <= MMAP_THRESHOLD)
 	{
-		data = malloc(size);
+		data = xmalloc(size);
 		if (pread(fd, data, size, 0) != size)
 		{
 			free(data);

@@ -305,7 +305,7 @@ file2::mmap_t file2::mmap(cstring filename)
 	
 	if (len <= MMAP_THRESHOLD)
 	{
-		uint8_t* data = malloc(len);
+		uint8_t* data = xmalloc(len);
 		DWORD len2;
 		if (!ReadFile(file, data, len, &len2, NULL) || len2 != len)
 		{

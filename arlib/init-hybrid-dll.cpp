@@ -5,12 +5,7 @@
 #include <winternl.h>
 #include <stdint.h>
 
-#if defined(__i386__) || defined(__x86_64__)
-# define MAYBE_SSE2
-# include <emmintrin.h>
-#endif
-
-#define ALLINTS(x) x(uint8_t) // just ignore the others...
+#include "simd.h"
 #include "thread/atomic.h"
 
 extern "C" void _pei386_runtime_relocator();
@@ -43,13 +38,13 @@ size_t strlen(const char * a)
 HMODULE pe_get_ntdll()
 {
 	PEB* peb;
-#ifdef __i386__
+#if defined(__i386__)
 	__asm__("{mov %%fs:(0x30), %0|mov %0, fs:[0x30]}" : "=r"(peb)); // *(PEB* __seg_fs*)0x30 would be a lot cleaner, but it's C only
 #elif defined(__x86_64__)
 	__asm__("{mov %%gs:(0x60), %0|mov %0, gs:[0x60]}" : "=r"(peb));
 #elif defined(_M_IX86)
 	peb = (PEB*)__readfsdword(0x30);
-#elif _M_AMD64
+#elif defined(_M_AMD64)
 	peb = (PEB*)__readgsqword(0x60);
 #else
 	#error "don't know what platform this is"
@@ -148,7 +143,7 @@ void pe_process_imports(ntdll_t* ntdll, HMODULE mod)
 	while (imports->Name)
 	{
 		const char * libname = (char*)(base_addr + imports->Name);
-		WCHAR libname16[64];
+		WCHAR libname16[64]; // hope nothing uses non-ascii in dll names... ...how would it even be represented?
 		WCHAR* libname16iter = libname16;
 		while (*libname) *libname16iter++ = *libname++;
 		*libname16iter = '\0';
@@ -191,12 +186,12 @@ void pe_do_relocs(ntdll_t* ntdll, HMODULE mod)
 	IMAGE_SECTION_HEADER* sec = (IMAGE_SECTION_HEADER*)((uint8_t*)&head_nt->OptionalHeader + head_nt->FileHeader.SizeOfOptionalHeader);
 	for (uint16_t i=0;i<head_nt->FileHeader.NumberOfSections;i++)
 	{
-		// ideally, there would be no relocations in .text, so we can just skip that section
+		// ideally, there should be no relocations in .text, so we can just skip that section
 		// in practice, __CTOR_LIST__ is in the same section
 		// (no clue why, makes more sense in .rdata, or as a sequence of call instructions rather than pointers)
 		// the easiest solution is to just mark everything PAGE_EXECUTE_READWRITE instead of PAGE_READWRITE
 		// we're already deep into shenanigans territory, a W^X violation is nothing to worry about
-		// (if I want to fix the W^X, I'd map a copy of this function somewhere as r-x and let that one make the main dll rw-)
+		// (if I want to fix the W^X, I'd map a copy of this function somewhere as r-x, and let that one make the real one rw-)
 		void* sec_addr = base_addr + sec[i].VirtualAddress;
 		size_t sec_size = sec[i].SizeOfRawData;
 		ntdll->NtProtectVirtualMemory((HANDLE)-1, &sec_addr, &sec_size, PAGE_EXECUTE_READWRITE, &prot_prev[i]);
@@ -226,7 +221,7 @@ void pe_do_relocs(ntdll_t* ntdll, HMODULE mod)
 
 // many ctors call atexit to register destructors, and even if their dtors work differently, they often leak memory
 // therefore, don't call the entire ctor table; call only a whitelist of known good ctors
-// to do this, group up the safe ones in the ctor table, and add markers for which ones are safe
+// to do this, group up the safe ones in the ctor table, and add labels around the safe subsection
 #ifndef __x86_64__
 #error change the .quad
 #endif
@@ -251,9 +246,8 @@ static void run_static_ctors()
 	const funcptr * iter = init_first;
 	const funcptr * end = init_last;
 	// comparing two "unrelated" pointers is undefined behavior, so let's force gcc to forget their relationship and lack thereof
-	// (oddly enough, it also yields better code - if I use init_last directly, gcc spills it to stack, rather than keeping it in a reg.)
-	__asm__("" : "+r"(end));
 	__asm__("" : "+r"(iter));
+	__asm__("" : "+r"(end));
 	do { // arlib_hybrid_exe_init guarantees that at least one static ctor exists, so we can safely use a do-while here
 		iter--;
 		(*iter)(); 
@@ -262,18 +256,16 @@ static void run_static_ctors()
 
 
 
-#define init_no   (uint8_t)0 // #define rather than enum, lock_write doesn't like mismatched types
-#define init_busy (uint8_t)1
-#define init_done (uint8_t)2
+// can't use a normal runonce or mutex here, OS facilities aren't available yet
+enum { init_no, init_busy, init_done };
 static uint8_t init_state = init_no;
 
 extern "C" __attribute__((used))
 void arlib_hybrid_exe_init()
 {
 	// if we're a dll, this is the last ctor to run, so use an atomic write
-	// if we're an exe, this is not the last ctor, so being atomic accomplishes nothing,
-	//  but we also know that nobody will call arlib_hybrid_dll_init() before all ctors are done
-	lock_write_rel(&init_state, init_done);
+	// if we're an exe, there is no concurrency; atomic is overkill, but it works, and it's easier to implement this way
+	lock_write<lock_rel>(&init_state, init_done);
 }
 
 }
@@ -281,19 +273,19 @@ void arlib_hybrid_exe_init()
 void arlib_hybrid_dll_init();
 void arlib_hybrid_dll_init()
 {
-	int state = lock_read_acq(&init_state);
+	int state = lock_read<lock_acq>(&init_state);
 	if (state == init_done) return;
 	
 #ifdef ARLIB_THREAD
-	state = lock_cmpxchg_acq(&init_state, init_no, init_busy);
-	if (state == init_busy)
+	state = lock_cmpxchg<lock_acq, lock_acq>(&init_state, init_no, init_busy);
+	if (state != init_no)
 	{
 		while (state == init_busy)
 		{
 #ifdef MAYBE_SSE2
 			_mm_pause();
 #endif
-			state = lock_read_acq(&init_state);
+			state = lock_read<lock_acq>(&init_state);
 		}
 		return;
 	}

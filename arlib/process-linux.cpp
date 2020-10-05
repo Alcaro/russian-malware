@@ -324,6 +324,8 @@ string process::find_prog(cstring prog)
 
 
 struct process::onexit_t {
+	// TODO: this one looks highly dubious, see if it can be deleted
+	// once coroutines exist, making terminate awaitable should make most of this unnecessary
 	bool called;
 	short refcount;
 	int arg;
@@ -331,7 +333,7 @@ struct process::onexit_t {
 	
 	void ref()
 	{
-		lock_incr(&refcount);
+		lock_incr<lock_loose>(&refcount);
 	}
 	void invoke_unref() // not thread safe
 	{
@@ -469,15 +471,15 @@ bool process::_on_sigchld_offloop()
 		this->loop->submit(bind_ptr(&onexit_t::invoke_unref, onexit_cb));
 #else
 		//ensure exitcode is written before onexit is called
-		lock_write(&this->exitcode, status);
-		lock_write(&this->pid, -1);
+		lock_write<lock_loose>(&this->exitcode, status);
+		lock_write<lock_loose>(&this->pid, -1);
 		onexit_cb->invoke_unref(); // if Arlib is configured single threaded, we're always on the right thread, so this is safe
 		return true; // no point writing twice
 #endif
 	}
 	
-	lock_write(&this->exitcode, status);
-	lock_write(&this->pid, -1);
+	lock_write<lock_loose>(&this->exitcode, status);
+	lock_write<lock_loose>(&this->pid, -1);
 	
 	return true;
 }

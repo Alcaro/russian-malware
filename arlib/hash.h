@@ -15,20 +15,10 @@ typename std::enable_if_t<std::is_class_v<T>, size_t> hash(const T& val)
 {
 	return val.hash();
 }
-static inline size_t hash(const char * val, size_t n)
-{
-	// SIMDing this doesn't seem to do anything useful
-	size_t hash = 5381;
-	while (n--)
-	{
-		hash = (hash ^ *val) * 31;
-		val++;
-	}
-	return hash;
-}
+size_t hash(const uint8_t * val, size_t n);
 static inline size_t hash(const char * val)
 {
-	return hash(val, strlen(val));
+	return hash((uint8_t*)val, strlen(val));
 }
 
 

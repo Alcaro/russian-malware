@@ -49,6 +49,18 @@ define LF
 
 endef
 
+ifeq ($(V),)
+  Q = @
+  ECHOQ = @echo
+else
+  Q =
+  ifeq ($(HOST_SHELL),cmd)
+    ECHOQ = @ver>nul
+  else
+    ECHOQ = @true
+  endif
+endif
+
 CC = gcc
 CFLAGS =
 CXX = g++
@@ -109,8 +121,8 @@ ARTHREAD ?= 0
 ARSANDBOX ?= 0
 ARWUTF ?= 0
 ARSOCKET ?= 0
-ARSOCKET_SSL ?= openssl
-#ARTERMINAL ?= auto # leave it unset, there are some ?= further down
+#ARSOCKET_SSL ?= openssl # leave them unset, there are some ?= further down
+#ARTERMINAL ?= auto
 
 OPT ?= 0
 ifeq ($(OPT),0)
@@ -130,6 +142,7 @@ endif
 #doesn't seem to do anything
 #CFLAGS += -Wmissing-prototypes
 ifeq ($(EXCEPTIONS),1)
+  DEFINES += ARLIB_EXCEPTIONS
   OPTFLAGS_CXX += -fno-enforce-eh-specs
   ifeq ($(OS),windows)
     # these eat a few hundred kilobytes, but better embedded than DLL
@@ -152,10 +165,6 @@ HOST_SHELL := sh
 #(2) '#pragma GCC diagnostic ignored "-Wcomment"' does nothing
 # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=53431
 CCXXFLAGS += -Wno-comment
-#every Arlib class is memmovable, I'm not interested in 99999 gcc warnings
-ifeq ($(CC_FAMILY),gcc)
-  CONF_CXXFLAGS += -Wno-class-memaccess
-endif
 
 EXESUFFIX =
 CONF_CXXFLAGS += $(CONF_CFLAGS)
@@ -210,21 +219,9 @@ ifeq ($(OS),windows)
   endif
 endif
 
-ifeq ($(V),)
-  Q = @
-  ECHOQ = @echo
-else
-  Q =
-  ifeq ($(HOST_SHELL),cmd)
-    ECHOQ = @ver>nul
-  else
-    ECHOQ = @true
-  endif
-endif
-
 OPTFLAGS += -Os -fomit-frame-pointer -fmerge-all-constants
 OPTFLAGS += -ffunction-sections
-#inhibits some optimizations, and more importantly, turns .bss into .data on Windows
+#-fdata-sections inhibits some optimizations, and more importantly, turns .bss into .data on Windows
 #OPTFLAGS += -fdata-sections
 OPTFLAGS += -fno-ident
 OPTFLAGS += -DNDEBUG -DARLIB_OPT
@@ -315,8 +312,7 @@ ifeq ($(ARGUI),1)
     CONF_CFLAGS += $(shell pkg-config --cflags gtk+-3.0)
     CONF_LFLAGS += -lX11 $(shell pkg-config --libs gtk+-3.0)
     ifneq ($(OPT),0)
-      # don't know if this has ever caught anything except NULLs, but they're harmless on debug
-      # but they do waste space on release builds.
+      # these are useful on debug builds (they catch mostly NULLs), but on release builds, they just waste space
       CONF_CFLAGS += -DG_DISABLE_CAST_CHECKS
     endif
   endif
@@ -365,15 +361,19 @@ ifeq ($(OS),windows)
     ARTERMINAL ?= 1
   endif
   
-  ifeq ($(ARTERMINAL),0)
+  ifeq ($(ARTERMINAL),1)
+    # nothing
+  else ifeq ($(ARTERMINAL),0)
     CONF_LFLAGS += -mwindows
     DEFINES += STDOUT_DELETE
-  endif
-  
-  ifeq ($(ARTERMINAL),error)
+  else ifeq ($(ARTERMINAL),error)
     CONF_LFLAGS += -mwindows
     DEFINES += STDOUT_ERROR
     CFLAGS_ARLIB += -D STDOUT_DELETE -U STDOUT_ERROR
+  else ifeq ($(ARTERMINAL),wine)
+    CONF_LFLAGS += -mwindows
+  else
+    $(error invalid ARTERMINAL value $(ARTERMINAL))
   endif
 endif
 
@@ -429,7 +429,7 @@ ifeq ($(ARSOCKET),1)
     DEFINES += ARLIB_SSL_BEARSSL
     SOURCES_ARLIB += arlib/socket/bear-ser.c
     ifeq ($(OS),windows)
-      LFLAGS += -lcrypt32
+      CONF_LFLAGS += -lcrypt32
     endif
     # update make superclean if changing this
     # there's only one libbearssl.a per OS, not per OBJNAME; BearSSL rarely changes, there's no need to be more granular
@@ -463,18 +463,20 @@ SOURCES_NOWARN += arlib/deps/miniz.c
 CONF_CFLAGS += $(patsubst %,-D%,$(DEFINES))
 
 TRUE_CFLAGS := -std=c99 $(CCXXFLAGS) $(CONF_CFLAGS) $(CFLAGS)
-# C++ version policy: I will switch to a newer version of C++ only if it adds something that
-# - considerably simplifies existing code (everything is doable without that, but some things are painful)
-# - works on the default compiler on current Debian stable, latest Ubuntu LTS, whatever compiler I currently use for
-#    Windows (as of writing, mingw-w64 8.1.0), and whatever other computers I have at the moment
+# C++ version policy: I will switch to a newer version of C++ if and only if it adds something that
+# - considerably simplifies existing code, or permits writing something that would've previously been too complicated to even try
+# - works on the default compiler on current Debian stable, latest Ubuntu LTS, and whatever computers I have at the moment
+#    (as of writing, GCC 7.5.0 on Ubuntu 18.04, and mingw-w64 8.1.0)
 #    working on additional compilers (for example Clang) is recommended, but not mandatory
 # - is functional and non-experimental in a finalized -std= version (c++11 is final, c++0x isn't, -fcoroutines isn't)
-#    it's fine if not every part of that language version is supported in that compiler version
+#    it's fine if not every part of that language version is supported in that compiler version, but only working parts may be used
 # If someone cares about older C++ versions, I will accept PRs and not intentionally break it, as long as
 # - it doesn't uglify anything too much; most modern C++ features aren't indispensable, but the lambdas are staying
 # - there is no performance penalty if compiled under modern C++; this may be accomplished with #if __cplusplus > 12345, if necessary,
-#     though doing that without uglifying things may be difficult
-# - said someone maintains it, and does not expect me to; I will forget what's C++11 and what isn't at random intervals
+#     though too big and/or too many ifdefs counts as uglifying things
+# - said someone maintains it, and does not expect me to; I will forget what's C++11 and what isn't at random intervals,
+#     and I will use new C++ features if I deem them valuable
+# It's fine if said backport doesn't include the entire Arlib.
 # The following features would be useful; if enough of them show up, I will switch:
 #   C++2a template lambdas (for the PNG decoder)
 #   C++2a designated initializers (foo_t foo = { .a = 42, .b = 123 })
@@ -487,7 +489,7 @@ TRUE_CFLAGS := -std=c99 $(CCXXFLAGS) $(CONF_CFLAGS) $(CFLAGS)
 #   C++2a ban non-twos-complement signed - will probably enable various other language improvements
 #   C++2a void foo(auto arg) (shorthand for template<typename T> void foo(T arg) - simplifies function::bind_member)
 #   C++2a coroutines, for runloop-related stuff
-#   C++17 <charconv>, to speed up tostring(float) (though I'll need to keep the current one around, for Windows)
+#   C++17 <charconv>, to speed up tostring(float) (though I'll need to keep the current one around anyways, for Windows)
 #   [[trivially_relocatable]] http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p1144r3.html
 #   Lambdas without braces/return, function<int(int)> mul2 = [](int i) => i*2; (useful for LINQ)
 #   Zero-overhead deterministic exceptions http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2018/p0709r0.pdf
@@ -508,7 +510,7 @@ TRUE_CFLAGS := -std=c99 $(CCXXFLAGS) $(CONF_CFLAGS) $(CFLAGS)
 # I'm not interested in library features. Most of them lack important functionality, have bad constant factors, and bloat the binary.
 # The compiler-magic ones, like std::move and type traits, do one thing and do it well, and optimize to nothing. I use them.
 TRUE_CXXFLAGS := -std=c++17 -fno-rtti $(CCXXFLAGS) $(CONF_CXXFLAGS) $(CXXFLAGS)
-TRUE_LFLAGS := $(LFLAGS) -fvisibility=hidden $(CONF_LFLAGS)
+TRUE_LFLAGS := -fvisibility=hidden $(CONF_LFLAGS) $(LFLAGS)
 
 obj:
 	mkdir obj
@@ -610,10 +612,6 @@ test-all: obj/arlibtest$(EXESUFFIX)
 	$(TR) obj/arlibtest$(EXESUFFIX) --all $(TESTFILTER)
 test-all-twice: obj/arlibtest$(EXESUFFIX)
 	$(TR) obj/arlibtest$(EXESUFFIX) --all --twice $(TESTFILTER)
-test-cg: obj/arlibtest$(EXESUFFIX)
-	-rm obj/callgrind.log
-	valgrind --tool=callgrind --dump-instr=yes --callgrind-out-file=obj/callgrind.log obj/arlibtest$(EXESUFFIX) $(TESTFILTER)
-	kcachegrind obj/callgrind.log
 endif
 
 

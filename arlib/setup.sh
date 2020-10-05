@@ -39,7 +39,6 @@ EOF
 
 cat > Makefile <<-EOF
 	PROGRAM = $program
-	#valid values: exe (executable), dll (shared library), hybrid (usable as both exe and dll, named as if it's an exe)
 	ARTYPE = exe
 	ARGUI = 0
 	ARGAME = 0
@@ -47,9 +46,7 @@ cat > Makefile <<-EOF
 	ARTHREAD = 0
 	ARWUTF = 0
 	ARSOCKET = 0
-	#valid values: openssl (default), gnutls, bearssl, no
 	ARSOCKET_SSL = openssl
-	#valid values: schannel (default), bearssl, no (others may work, not tested)
 	ARSOCKET_SSL_WINDOWS = schannel
 	ARSANDBOX = 0
 	

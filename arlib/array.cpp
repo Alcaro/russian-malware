@@ -45,7 +45,7 @@ void array<bool>::resize(size_t len)
 	case 1: // small->big
 		{
 			size_t newbytes = alloc_size(len);
-			uint8_t* newbits = malloc(newbytes);
+			uint8_t* newbits = xmalloc(newbytes);
 			memcpy(newbits, this->bits_inline, sizeof(this->bits_inline));
 			memset(newbits+sizeof(this->bits_inline), 0, newbytes-sizeof(this->bits_inline));
 			bits_outline = newbits;
@@ -65,7 +65,7 @@ void array<bool>::resize(size_t len)
 			size_t newbytes = alloc_size(len);
 			if (newbytes > prevbytes)
 			{
-				bits_outline = realloc(this->bits_outline, newbytes);
+				bits_outline = xrealloc(this->bits_outline, newbytes);
 				clear_unused(prevlen, newbytes);
 			}
 			else if (len < prevlen)
@@ -148,7 +148,7 @@ test("array", "", "array")
 			glutton() { food.resize(1000); }
 		};
 		array<glutton> x;
-		for (int i=0;i<1000;i++)
+		for (int i=0;i<100;i++)
 		{
 			x.append();
 		}
@@ -174,9 +174,16 @@ test("array", "", "array")
 	}
 	
 	{
+		array<int> x = { 0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9 };
+		array<int> y = { 4,5,6,7,8,9,0,1,2,3,4,5 };
+		x = x.slice(4, 12);
+		assert_eq(x, y);
+	}
+	
+	{
 		array<int> x = { 0,1,2,3,4,5,6,7,8,9 };
-		x.remove_range(3, 5);
 		array<int> y = { 0,1,2,5,6,7,8,9 };
+		x.remove_range(3, 5);
 		assert_eq(x, y);
 	}
 	

@@ -6,45 +6,39 @@
 
 inline string tostring(string s) { return s; }
 inline string tostring(cstring s) { return s; }
-//I'd use int123_t, but the set {8, 16, 32, 64} is smaller than {char, short, int, long, long long}, so one disappears
-//if this one shows up (for example time_t = long on Windows), error
-//printf has PRIi32, but the native ones are defined in terms of int/long
-inline string tostring(  signed char val)     { char ret[32]; sprintf(ret, "%d",   val); return ret; } // the C++ standard says
-inline string tostring(unsigned char val)     { char ret[32]; sprintf(ret, "%u",   val); return ret; } // (un)signed char/short are
-//signless char isn't integral, so not here
-inline string tostring(  signed short val)    { char ret[32]; sprintf(ret, "%d",   val); return ret; } // promoted to (un)signed int
-inline string tostring(unsigned short val)    { char ret[32]; sprintf(ret, "%u",   val); return ret; } // in ellipsis
-inline string tostring(  signed int val)      { char ret[32]; sprintf(ret, "%d",   val); return ret; }
-inline string tostring(unsigned int val)      { char ret[32]; sprintf(ret, "%u",   val); return ret; }
-inline string tostring(  signed long val)     { char ret[32]; sprintf(ret, "%ld",  val); return ret; }
-inline string tostring(unsigned long val)     { char ret[32]; sprintf(ret, "%lu",  val); return ret; }
-inline string tostringhex(unsigned char val)  { char ret[32]; sprintf(ret, "%X",   val); return ret; }
-inline string tostringhex(unsigned short val) { char ret[32]; sprintf(ret, "%X",   val); return ret; }
-inline string tostringhex(unsigned int val)   { char ret[32]; sprintf(ret, "%X",   val); return ret; }
-inline string tostringhex(unsigned long val)  { char ret[32]; sprintf(ret, "%lX",  val); return ret; }
-#ifdef _WIN32
-# ifdef __GNUC__ // my GCC doesn't recognize I64, but msvcrt does
-#  pragma GCC diagnostic push
-#  pragma GCC diagnostic ignored "-Wformat"
-# endif
-inline string tostring(  signed long long val)    { char ret[32]; sprintf(ret, "%I64d", val); return ret; }
-inline string tostring(unsigned long long val)    { char ret[32]; sprintf(ret, "%I64u", val); return ret; }
-inline string tostringhex(unsigned long long val) { char ret[32]; sprintf(ret, "%I64X", val); return ret; }
-# ifdef __GNUC__
-#  pragma GCC diagnostic pop
-# endif
+
+// as much as I prefer int123_t, the set {8, 16, 32, 64} is smaller than {char, short, int, long, long long}
+// if any typedef of the missing one shows up (for example time_t = long on Windows), ambiguity errors
+string tostring(  signed long long val);
+string tostring(unsigned long long val);
+string tostringhex(unsigned long long val, size_t mindigits = 0);
+#if SIZE_MAX < ULLONG_MAX
+string tostring(  signed long val); // long is 32 bits on every OS where size_t < long long,
+string tostring(unsigned long val); // so long's absurd definition of 'uhhh pointer size except on windows' won't cause trouble here
+string tostringhex(unsigned long val, size_t mindigits = 0);
 #else
-inline string tostring(  signed long long val)    { char ret[32]; sprintf(ret, "%lld", val); return ret; }
-inline string tostring(unsigned long long val)    { char ret[32]; sprintf(ret, "%llu", val); return ret; }
-inline string tostringhex(unsigned long long val) { char ret[32]; sprintf(ret, "%llX", val); return ret; }
+inline string tostring(  signed long val) { return tostring((signed long long)val); }
+inline string tostring(unsigned long val) { return tostring((unsigned long long)val); }
+inline string tostringhex(unsigned long val, size_t mindigits = 0) { return tostringhex((unsigned long long)val, mindigits); }
 #endif
-template<int n> inline string tostring(unsigned long val)    { char ret[32]; sprintf(ret, "%.*lu", n, val); return ret; }
-template<int n> inline string tostringhex(unsigned long val) { char ret[32]; sprintf(ret, "%.*lX", n, val); return ret; }
+// signless char isn't integral, so not here (or anywhere else, I don't know what it should be)
+inline string tostring(  signed char val)  { return tostring((signed long)val); }
+inline string tostring(unsigned char val)  { return tostring((unsigned long)val); }
+inline string tostring(  signed short val) { return tostring((signed long)val); }
+inline string tostring(unsigned short val) { return tostring((unsigned long)val); }
+inline string tostring(  signed int val)   { return tostring((signed long)val); }
+inline string tostring(unsigned int val)   { return tostring((unsigned long)val); }
+inline string tostringhex(unsigned char val, size_t mindigits = 0)  { return tostringhex((unsigned long)val, mindigits); }
+inline string tostringhex(unsigned short val, size_t mindigits = 0) { return tostringhex((unsigned long)val, mindigits); }
+inline string tostringhex(unsigned int val, size_t mindigits = 0)   { return tostringhex((unsigned long)val, mindigits); }
+template<size_t mindigits> inline string tostringhex(unsigned val) { return tostringhex(val, mindigits); }
+
+string tostring(unsigned val, size_t mindigits);
+template<size_t mindigits> inline string tostring(unsigned val) { return tostring(val, mindigits); }
 
 string tostring(double val);
 string tostring(float val);
 inline string tostring(bool val) { return val ? "true" : "false"; }
-//inline string tostring(char val); // there's no obvious interpretation of this
 
 inline string tostring(const char * s) { return s; } // only exists as tostring, fromstring would be a memory leak
 
@@ -56,6 +50,7 @@ tostring(const T& val)
 }
 
 
+// 'out' is guaranteed to be initialized to something even on failure. However, it's not guaranteed to be anything useful.
 inline bool fromstring(cstring s, string& out) { out=s; return true; }
 inline bool fromstring(cstring s, cstring& out) { out=s; return true; }
 bool fromstring(cstring s,   signed char & out);
@@ -85,12 +80,6 @@ bool fromstringhex(cstring s, unsigned long long & out);
 string tostringhex(arrayview<uint8_t> val);
 bool fromstringhex(cstring s, arrayvieww<uint8_t> val);
 bool fromstringhex(cstring s, array<uint8_t>& val);
-
-#define ALLSTRINGABLE(x) \
-	ALLNUMS(x) \
-	x(string) \
-	x(cstring) \
-	x(bool)
 
 
 //Same as fromstring, but can't report failure. May be easier to use.

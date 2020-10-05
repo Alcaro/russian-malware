@@ -4,6 +4,9 @@
 #include "file.h"
 
 // TODO: I don't think this thing optimizes out properly
+// TODO: this should be reduced to argument parsing only, it doesn't make sense in DLLs
+// may also want to replace libc rand() with a custom function based on random_t, so I won't write to shared state (srand)
+// (not sure how that'd interact with threading though - cmpxchg the state?)
 
 class argparse {
 	class arg_base {

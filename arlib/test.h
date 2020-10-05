@@ -41,10 +41,10 @@ void _test_nothrow(int add);
 
 void _teststack_push(cstring file, int line);
 void _teststack_pop();
-int _teststack_pushstr(string text); // Returns 1, to simplify the below macros.
-int _teststack_popstr(); // Returns 0.
-int _test_blockmalloc(); // Returns 1.
-int _test_unblockmalloc(); // Returns 0.
+void _teststack_pushstr(string text);
+void _teststack_popstr();
+void _test_blockmalloc();
+void _test_unblockmalloc();
 
 void _test_skip(cstring why);
 void _test_skip_force(cstring why);

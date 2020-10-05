@@ -219,7 +219,7 @@ void statusbar_create(int numslots, const int * align, const int * dividerpos)
 	}
 	
 	this->status_count = numslots;
-	this->status_pos = malloc(sizeof(int)*numslots);
+	this->status_pos = xmalloc(sizeof(int)*numslots);
 	memcpy(this->status_pos, dividerpos, sizeof(int)*(numslots-1));
 	this->status_pos[numslots-1] = 240;
 	//gtk_widget_set_size_request(GTK_WIDGET(this->status), width, -1);
@@ -523,7 +523,7 @@ windowmenu_radio* windowmenu_radio::create(unsigned int numitems, const char * c
 	
 	ret->mu = new windowmenu_radio::impl;
 	ret->mu->numchildren = numitems;
-	ret->mu->children = malloc(sizeof(windowmenu_radio_child)*numitems);
+	ret->mu->children = xmalloc(sizeof(windowmenu_radio_child)*numitems);
 	
 	GSList* group=NULL;
 	for (unsigned int i=0;i<numitems;i++)
@@ -615,7 +615,7 @@ void windowmenu_menu::insert_child(unsigned int pos, windowmenu* child)
 	}
 	if ((this->mu->numchildren&(this->mu->numchildren-1))==0)
 	{
-		this->mu->children=realloc(this->mu->children, (this->mu->numchildren+1)*2*sizeof(windowmenu*));
+		this->mu->children=xrealloc(this->mu->children, (this->mu->numchildren+1)*2*sizeof(windowmenu*));
 	}
 	memmove(this->mu->children+pos+1, this->mu->children+pos, (this->mu->numchildren - pos)*sizeof(windowmenu*));
 	this->mu->children[pos]=child;

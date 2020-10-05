@@ -202,7 +202,7 @@ static bool bml_parse_inline_node(cstring& data, cstring& node, bool& hasvalue, 
 				hasvalue = true;
 				int valend = 2;
 				while (data[valend]!='"' && data[valend]!='\0') valend++;
-				if (data[valend]!='"' || !strchr(" \t", data[valend+1]))
+				if (data[valend]!='"' || (data[valend+1]!=' ' && data[valend+1]!='\t' && data[valend+1]!='\0'))
 				{
 					while (data[valend]!='\0') valend++;
 					data = data.substr(valend, ~0);

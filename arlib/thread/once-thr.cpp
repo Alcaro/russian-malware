@@ -13,7 +13,7 @@
 // 2 - finished
 // other - casted pointer to state struct on each thread's stack, containing
 // - a semaphore (unique for each waiter - yes, it's wasteful, but multiple waiters are rare)
-// - state* next (or prev, it's an unordered set) (null for the first waiter)
+// - state* next (or prev, it's an unordered set) ((void*)1 for the first waiter)
 //
 // procedure:
 // read_acq()
@@ -25,14 +25,12 @@
 //   cmpxchg_loose(0 -> 1)
 //   on failure, not first thread, go to the other branch
 //   fn()
-//   cmpxchg_rel(1 -> 2)
-//   on success: return
-//   on failure:
-//     xchg_acq(-> 2)
-//     SetEvent each one (read next before calling SetEvent, to dodge another race condition)
+//   xchg_acqrel(-> 2)
+//   if xchg return value is not 1:
+//     it's the linked list head, so SetEvent each one (read next before calling SetEvent, to dodge another race condition)
 //
 // other threads:
-//   create event, put in struct, along with next=null
+//   create event, put in struct, along with next = (void*) read_acq result
 //   cmpxchg_rel(1 -> struct)
 //   on failure, put prev val in struct, repeat the above cmpxchg
 //   unless prev is st_done, in which case just return
@@ -47,28 +45,26 @@ void runonce::run(function<void()> fn)
 		state* next;   // and I can't figure out how to solve lifetime issues without that
 	};
 	
-	uintptr_t st = lock_read_acq(&m_st);
-	if (st == st_done) return;
+	uintptr_t st = lock_read<lock_acq>(&m_st);
+	if (LIKELY(st == st_done)) return;
 	if (st == st_uninit)
 	{
-		st = lock_cmpxchg_loose(&m_st, st_uninit, st_busy);
+		st = lock_cmpxchg<lock_loose>(&m_st, st_uninit, st_busy);
 		if (st == st_uninit)
 		{
 			fn();
-			st = lock_cmpxchg_rel(&m_st, st_busy, st_done);
-			if (st != st_busy)
+			st = lock_xchg<lock_acqrel>(&m_st, st_done);
+			state* stp = (state*)st;
+			while (stp != (state*)st_busy)
 			{
-				state* stp = (state*)lock_xchg_loose(&m_st, st_done);
-				while (stp != (state*)st_busy)
-				{
-					state* next = stp->next;
-					stp->sem.release();
-					stp = next;
-				}
+				state* next = stp->next;
+				stp->sem.release();
+				stp = next;
 			}
 			return;
 		}
 		else if (st == st_done) return;
+		// else it's either 'busy, no waiters' or a pointer; in both cases, insert ourselves
 	}
 	
 	// don't bother spinning, just sleep immediately
@@ -76,10 +72,10 @@ void runonce::run(function<void()> fn)
 	state sts;
 	while (true)
 	{
-		uintptr_t st_prev = st;
+		uintptr_t prevst = st;
 		sts.next = (state*)st;
-		st = lock_cmpxchg(&m_st, st, (uintptr_t)&sts);
-		if (st == st_prev) break;
+		st = lock_cmpxchg<lock_rel, lock_loose>(&m_st, st, (uintptr_t)&sts);
+		if (st == prevst) break;
 		if (st == st_done) return;
 	}
 	sts.sem.wait();

@@ -12,28 +12,9 @@ class bytepipe {
 	array<uint8_t> buf2;
 	size_t buf2end;
 	
-	void try_swap()
-	{
-		if (buf1st == buf1end)
-		{
-			buf1.swap(buf2);
-			buf1st = 0;
-			buf1end = buf2end;
-			buf2end = 0;
-			if (buf2.size() > 65536) buf2.resize(65536);
-		}
-	}
-	
-	void push_one(arrayview<uint8_t> bytes)
-	{
-		arrayvieww<uint8_t> tmp = push_buf(bytes.size());
-		memcpy(tmp.ptr(), bytes.ptr(), bytes.size());
-		push_done(bytes.size());
-	}
-	void push_one(cstring str)
-	{
-		push(str.bytes());
-	}
+	void try_swap();
+	void push_one(arrayview<uint8_t> bytes);
+	void push_one(cstring str);
 	void push() {}
 	
 public:
@@ -43,20 +24,7 @@ public:
 	}
 	
 	//Will return a buffer of at least 'bytes' bytes. Can be bigger. Use push_done afterwards.
-	arrayvieww<uint8_t> push_buf(size_t bytes = 512)
-	{
-		if (buf2end + bytes > buf2.size())
-		{
-			try_swap();
-		}
-		if (buf2end + bytes > buf2.size())
-		{
-			size_t newsize = buf2.size();
-			while (buf2end + bytes > newsize) newsize *= 2;
-			buf2.resize(newsize);
-		}
-		return buf2.skip(buf2end);
-	}
+	arrayvieww<uint8_t> push_buf(size_t bytes = 512);
 	void push_done(size_t bytes)
 	{
 		buf2end += bytes;
@@ -91,94 +59,18 @@ public:
 		pull_done(bytes.size());
 	}
 	//Returns the entire thing.
-	arrayview<uint8_t> pull_buf_full()
-	{
-		if (buf1end+buf2end > buf1.size())
-		{
-			if (buf1st != 0)
-			{
-				memmove(buf1.ptr(), buf1.skip(buf1st).ptr(), buf1end-buf1st);
-				buf1end -= buf1st;
-				buf1st = 0;
-			}
-			if (buf1end+buf2end > buf1.size())
-			{
-				if (buf1end > buf2end) buf1.resize(buf1.size()*2);
-				else buf1.resize(buf2.size()*2);
-			}
-		}
-		
-		memcpy(buf1.slice(buf1end, buf2end).ptr(), buf2.ptr(), buf2end);
-		buf1end += buf2end;
-		buf2end = 0;
-		
-		return buf1.slice(buf1st, buf1end-buf1st);
-	}
+	arrayview<uint8_t> pull_buf_full();
 	//Returns the entire thing, and immediately acknowledges it. Other than the return value, it's equivalent to reset().
-	array<uint8_t> pull_buf_full_drain()
-	{
-		if (buf1st != 0)
-		{
-			memmove(buf1.skip(buf1st).ptr(), buf1.ptr(), buf1end-buf1st);
-			buf1end -= buf1st;
-		}
-		if (buf2end != 0)
-		{
-			if (buf1end+buf2end > buf1.size())
-			{
-				size_t newsize = buf1.size();
-				while (buf1end+buf2end > newsize) newsize *= 2;
-				buf1.resize(newsize);
-			}
-			memcpy(buf1.skip(buf1end).ptr(), buf2.ptr(), buf2end);
-			buf1end += buf2end;
-		}
-		
-		array<uint8_t> ret = std::move(buf1);
-		ret.resize(buf1end);
-		
-		reset();
-		return ret;
-	}
+	array<uint8_t> pull_buf_full_drain();
 	
 	//Returns data until and including the next \n. Doesn't acknowledge it. If there is no \n, returns an empty array.
-	arrayview<uint8_t> pull_line()
-	{
-		uint8_t* start = buf1.ptr()+buf1st;
-		size_t len = buf1end-buf1st;
-		uint8_t* nl = (uint8_t*)memchr(start, '\n', len);
-		if (nl)
-		{
-			return arrayview<uint8_t>(start, nl+1-start);
-		}
-		
-		nl = (uint8_t*)memchr(buf2.ptr(), '\n', buf2end);
-		if (nl)
-		{
-			size_t pos = buf1end-buf1st + nl+1-buf2.ptr();
-			return pull_buf_full().slice(0, pos);
-		}
-		
-		return NULL;
-	}
+	arrayview<uint8_t> pull_line();
 	//Returns 'line' minus a trailing \r\n or \n. The \n must exist.
 	//Usable together with the above, though you must acknowledge the \n too.
-	static arrayview<uint8_t> trim_line(arrayview<uint8_t> line)
-	{
-		if (line.size()==1) return NULL;
-		if (line[line.size()-2]=='\r') return line.slice(0, line.size()-2);
-		else return line.slice(0, line.size()-1);
-	}
+	static arrayview<uint8_t> trim_line(arrayview<uint8_t> line);
 	
 	operator bool() { return size(); }
 	
 	size_t size() { return buf1end-buf1st+buf2end; }
-	void reset()
-	{
-		buf1.resize(1024);
-		buf1st = 0;
-		buf1end = 0;
-		buf2.resize(1024);
-		buf2end = 0;
-	}
+	void reset();
 };

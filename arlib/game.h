@@ -78,6 +78,7 @@ enum key_t : uint8_t {
 	K_F6             = 159, K_F7             = 160, K_F8             = 161, K_F9             = 162, K_F10            = 163,
 	K_F11            = 164, K_F12            = 165, K_F13            = 166, K_F14            = 167, K_F15            = 168,
 	
+	// SCROLLOCK is typoed, and LSUPER/RSUPER are swapped, for compatibility
 	K_NUMLOCK        = 172, K_CAPSLOCK       = 173, K_SCROLLOCK      = 174, K_RSHIFT         = 175, K_LSHIFT         = 176,
 	K_RCTRL          = 177, K_LCTRL          = 178, K_RALT           = 179, K_LALT           = 180, K_RMETA          = 181,
 	K_LMETA          = 182, K_LSUPER         = 183, K_RSUPER         = 184, K_MODE           = 185, K_COMPOSE        = 186,
@@ -88,8 +89,8 @@ enum key_t : uint8_t {
 	K_LAST,
 };
 
-// If the system can't distinguish between different keyboards, keyboard ID is -1.
-// scancode is guaranteed to exist, but k may be K_UNKNOWN if the scancode doesn't correspond to anything.
+// scancode is guaranteed to exist, but key may be K_UNKNOWN.
+// Scancodes must be treated as opaque integers; do not assume anything about the user's keyboard layout.
 // Key repeat events will not show up here.
 virtual void keys_cb(function<void(int scancode, key_t key, bool down)> cb) = 0;
 

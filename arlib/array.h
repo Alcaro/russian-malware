@@ -19,10 +19,10 @@ protected:
 	
 protected:
 	// static variables clog gdb output, so extra () it is
-	static bool trivial_cons() { return std::is_trivial_v<T>; } // constructor is memset(0)
-	static bool trivial_copy() { return std::is_trivially_copyable_v<T>; } // copy constructor is memcpy
-	static bool trivial_comp() { return std::has_unique_object_representations_v<T>; } // equality comparison is memcmp
-	static bool trivial_dtor() { return std::is_trivially_destructible_v<T>; } // destructor does nothing
+	static constexpr bool trivial_cons() { return std::is_trivial_v<T>; } // constructor is memset(0)
+	static constexpr bool trivial_copy() { return std::is_trivially_copyable_v<T>; } // copy constructor is memcpy
+	static constexpr bool trivial_comp() { return std::has_unique_object_representations_v<T>; } // equality comparison is memcmp
+	static constexpr bool trivial_dtor() { return std::is_trivially_destructible_v<T>; } // destructor does nothing
 	
 public:
 	const T& operator[](size_t n) const { return items[n]; }
@@ -237,9 +237,9 @@ public:
 		if (a == b) return;
 		
 		char tmp[sizeof(T)];
-		memcpy(tmp, this->items+a, sizeof(T));
-		memcpy(this->items+a, this->items+b, sizeof(T));
-		memcpy(this->items+b, tmp, sizeof(T));
+		memcpy(tmp, (void*)(this->items+a), sizeof(T));
+		memcpy((void*)(this->items+a), (void*)(this->items+b), sizeof(T));
+		memcpy((void*)(this->items+b), tmp, sizeof(T));
 	}
 	
 	//unstable sort - default because equivalent-but-nonidentical states are rare
@@ -285,9 +285,9 @@ public:
 			size_t newpos = min;
 			
 			char tmp[sizeof(T)];
-			memcpy(tmp, &this->items[a], sizeof(T));
-			memmove(&this->items[newpos+1], &this->items[newpos], sizeof(T)*(a-newpos));
-			memcpy(&this->items[newpos], tmp, sizeof(T));
+			memcpy((void*)tmp, (void*)&this->items[a], sizeof(T));
+			memmove((void*)&this->items[newpos+1], (void*)&this->items[newpos], sizeof(T)*(a-newpos));
+			memcpy((void*)&this->items[newpos], tmp, sizeof(T));
 		}
 	}
 	
@@ -344,10 +344,10 @@ template<typename T> class array : public arrayvieww<T> {
 	void clone(const arrayview<T>& other)
 	{
 		this->count = other.size(); // I can't access non-this instances of my base class, so let's just use the public interface
-		this->items = malloc(sizeof(T)*capacity_for(this->count));
+		this->items = xmalloc(sizeof(T)*capacity_for(this->count));
 		if (this->trivial_copy())
 		{
-			memcpy(this->items, other.ptr(), sizeof(T)*this->count);
+			memcpy((void*)this->items, (void*)other.ptr(), sizeof(T)*this->count);
 		}
 		else
 		{
@@ -378,7 +378,7 @@ private:
 	void resize_grow_noinit(size_t newcount)
 	{
 		if (this->count >= newcount) return;
-		if (newcount > capacity_for(this->count) || !this->items) this->items = realloc(this->items, sizeof(T)*capacity_for(newcount));
+		if (newcount > capacity_for(this->count) || !this->items) this->items = xrealloc(this->items, sizeof(T)*capacity_for(newcount));
 		this->count = newcount;
 	}
 	
@@ -389,7 +389,7 @@ private:
 	{
 		if (this->count <= newcount) return;
 		size_t new_bufsize = capacity_for(newcount);
-		if (this->count > new_bufsize) this->items = realloc(this->items, sizeof(T)*new_bufsize);
+		if (this->count > new_bufsize) this->items = xrealloc(this->items, sizeof(T)*new_bufsize);
 		this->count = newcount;
 	}
 	
@@ -398,7 +398,7 @@ private:
 		if (this->count >= newcount) return;
 		size_t prevcount = this->count;
 		resize_grow_noinit(newcount);
-		if (this->trivial_cons())
+		if constexpr (this->trivial_cons())
 		{
 			memset(this->items+prevcount, 0, sizeof(T)*(newcount-prevcount));
 		}
@@ -445,8 +445,8 @@ public:
 		new(&tmp) T(std::move(item));
 		
 		resize_grow_noinit(this->count+1);
-		memmove(this->items+index+1, this->items+index, sizeof(T)*(this->count-1-index));
-		memcpy(&this->items[index], tmp, sizeof(T));
+		memmove((void*)(this->items+index+1), (void*)(this->items+index), sizeof(T)*(this->count-1-index));
+		memcpy((void*)(&this->items[index]), tmp, sizeof(T));
 		return this->items[index];
 	}
 	T& insert(size_t index, const T& item)
@@ -455,14 +455,14 @@ public:
 		new(&tmp) T(item);
 		
 		resize_grow_noinit(this->count+1);
-		memmove(this->items+index+1, this->items+index, sizeof(T)*(this->count-1-index));
-		memcpy(&this->items[index], tmp, sizeof(T));
+		memmove((void*)(this->items+index+1), (void*)(this->items+index), sizeof(T)*(this->count-1-index));
+		memcpy((void*)(&this->items[index]), tmp, sizeof(T));
 		return this->items[index];
 	}
 	T& insert(size_t index)
 	{
 		resize_grow_noinit(this->count+1);
-		memmove(this->items+index+1, this->items+index, sizeof(T)*(this->count-1-index));
+		memmove((void*)(this->items+index+1), (void*)(this->items+index), sizeof(T)*(this->count-1-index));
 		new(&this->items[index]) T();
 		return this->items[index];
 	}
@@ -475,7 +475,7 @@ public:
 	void remove(size_t index)
 	{
 		this->items[index].~T();
-		memmove(this->items+index, this->items+index+1, sizeof(T)*(this->count-1-index));
+		memmove((void*)(this->items+index), (void*)(this->items+index+1), sizeof(T)*(this->count-1-index));
 		resize_shrink_noinit(this->count-1);
 	}
 	
@@ -483,7 +483,7 @@ public:
 	{
 		for (size_t n=start;n<end;n++)
 			this->items[n].~T();
-		memmove(this->items+start, this->items+end, sizeof(T)*(this->count-end));
+		memmove((void*)(this->items+start), (void*)(this->items+end), sizeof(T)*(this->count-end));
 		resize_shrink_noinit(this->count - (end-start));
 	}
 	
@@ -545,7 +545,7 @@ public:
 			size_t len = other.size();
 			
 			for (size_t i=0;i<start;i++) this->items[i].~T();
-			memmove(this->ptr(), this->ptr()+start, sizeof(T)*len);
+			memmove((void*)this->ptr(), (void*)(this->ptr()+start), sizeof(T)*len);
 			for (size_t i=start+len;i<this->count;i++) this->items[i].~T();
 			
 			resize_shrink_noinit(len);
@@ -582,7 +582,7 @@ public:
 			dst = this->items+prevcount;
 		}
 		
-		if (this->trivial_copy())
+		if constexpr (this->trivial_copy())
 		{
 			memcpy(dst, src, sizeof(T)*othercount);
 		}
@@ -610,7 +610,7 @@ public:
 	static array<T> create_usurp(arrayvieww<T> data)
 	{
 		array<T> ret;
-		ret.items = realloc(data.ptr(), sizeof(T)*capacity_for(data.size()));
+		ret.items = xrealloc(data.ptr(), sizeof(T)*capacity_for(data.size()));
 		ret.count = data.size();
 		return ret;
 	}
@@ -784,7 +784,7 @@ private:
 		if (nbits > n_inline)
 		{
 			size_t nbytes = alloc_size(nbits);
-			bits_outline = malloc(nbytes);
+			bits_outline = xmalloc(nbytes);
 			memcpy(bits_outline, other.bits_outline, nbytes);
 		}
 		else
@@ -794,7 +794,7 @@ private:
 	}
 	void construct(array<bool>&& other)
 	{
-		memcpy(this, &other, sizeof(*this));
+		memcpy((void*)this, (void*)&other, sizeof(*this));
 		other.nbits = 0;
 		memset(other.bits_inline, 0, sizeof(other.bits_inline));
 	}

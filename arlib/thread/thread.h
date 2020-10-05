@@ -56,7 +56,7 @@ public:
 	bool try_lock() { return TryAcquireSRWLockExclusive(&srwlock); }
 	void unlock() { ReleaseSRWLockExclusive(&srwlock); }
 	
-#elif _WIN32_WINNT >= _WIN32_WINNT_WINXP
+#elif defined(_WIN32)
 	CRITICAL_SECTION cs;
 	
 public:
@@ -139,6 +139,7 @@ public:
 #else
 	enum { st_uninit, st_busy, st_done };
 	uintptr_t m_st = st_uninit; // can be the above, or a casted pointer
+	// pthread_once() exists, but only takes a single void(*)(), no userdata; better reinvent it
 	
 public:
 	void run(function<void()> fn);
@@ -160,19 +161,18 @@ static inline size_t thread_get_id() { return GetCurrentThreadId(); }
 //This one creates 'count' threads, calls work() in each of them with 'id' from 0 to 'count'-1, and
 // returns once each thread has returned.
 //Unlike thread_create, thread_split is expected to be called often, for short-running tasks. The threads may be reused.
-//It is safe to use the values 0 and 1. However, you should avoid going above thread_num_cores().
 void thread_split(unsigned int count, function<void(unsigned int id)> work);
 
 
-//It is permitted to define this as (e.g.) QThreadStorage<T> rather than compiler magic.
-//However, it must support operator=(T) and operator T(), so QThreadStorage is not directly usable. A wrapper may be.
-//An implementation must support all {u,}int{8,16,32,64}_t, all basic integral types (char, short, etc), and all pointers.
-#ifdef __GNUC__
-#define THREAD_LOCAL(t) __thread t
-#endif
-#ifdef _MSC_VER
-#define THREAD_LOCAL(t) __declspec(thread) t
-#endif
+////It is permitted to define this as (e.g.) QThreadStorage<T> rather than compiler magic.
+////However, it must support operator=(T) and operator T(), so QThreadStorage is not directly usable. A wrapper may be.
+////An implementation must support all {u,}int{8,16,32,64}_t, all basic integral types (char, short, etc), and all pointers.
+//#ifdef __GNUC__
+//#define THREAD_LOCAL(t) __thread t
+//#endif
+//#ifdef _MSC_VER
+//#define THREAD_LOCAL(t) __declspec(thread) t
+//#endif
 
 
 #ifdef __linux__

@@ -38,7 +38,8 @@
 //   advantages: less boilerplate; no need to store runloop pointers everywhere; DECL_TIMER becomes trivial
 //   disadvantages: TLS is tricky, especially regarding destructors; it's a global variable (though runloop::global is global already);
 //                  may complicate testing; explicit is better
-//   (if yes, use a global object's constructor to assign the GUI runloop to the main thread)
+//   (if yes, use a global object's ctor to assign the GUI runloop to the main thread)
+// - allows plenty of cleanups across all of Arlib; grep for TODO
 // should also remove the idle/relative/absolute/repeat distinction, oneshot relative only; the others are too rare
 
 //A runloop keeps track of a number of file descriptors, calling their handlers whenever the relevant operation is available.
@@ -98,7 +99,7 @@ public:
 	// so they can be shared among runloop users
 	
 	// Executes the runloop until ->exit() is called. Recommended for most programs.
-	// The runloop may dispatch a few events after exit(), but will exit as soon as possible.
+	// The runloop may dispatch a few events after exit(), but will not go idle.
 	virtual void enter() = 0;
 	virtual void exit() = 0;
 	
@@ -179,28 +180,28 @@ public:
 // - not use virtual inheritance. Single and multiple inheritance is fine, as are virtual functions.
 // All public members of base_timer are available on the resulting object.
 //DECL_G_TIMER uses the global runloop.
-#define DECL_TIMER(name, parent_t)                                             \
-	class JOIN(name, _t) : public runloop::base_timer<JOIN(name, _t)> {        \
-		template<typename Tp>                                                  \
+#define DECL_TIMER(name, parent_t)                                                  \
+	class JOIN(name, _t) : public runloop::base_timer<JOIN(name, _t)> {             \
+		template<typename Tp>                                                       \
 		typename std::enable_if_t<sizeof(&*std::declval<Tp>().loop) >= 0, runloop*> \
-		get_loop_inner(Tp* parent)                                             \
-		{                                                                      \
-			return parent->loop;                                               \
-		}                                                                      \
-		template<typename Tp>                                                  \
+		get_loop_inner(Tp* parent)                                                  \
+		{                                                                           \
+			return parent->loop;                                                    \
+		}                                                                           \
+		template<typename Tp>                                                       \
 		typename std::enable_if_t<sizeof(std::declval<Tp>().loop()) >= 0, runloop*> \
-		get_loop_inner(Tp* parent)                                             \
-		{                                                                      \
-			return parent->loop();                                             \
-		}                                                                      \
-	public:                                                                    \
-		runloop* get_loop() {                                                  \
-			parent_t* parent_off = (parent_t*)nullptr;                         \
-			JOIN(name,_t)* child_off = &parent_off->name;                      \
-			size_t offset = (uint8_t*)child_off - (uint8_t*)parent_off;        \
-			parent_t* parent = (parent_t*)((uint8_t*)this - offset);           \
-			return get_loop_inner(parent);                                     \
-		}                                                                      \
+		get_loop_inner(Tp* parent)                                                  \
+		{                                                                           \
+			return parent->loop();                                                  \
+		}                                                                           \
+	public:                                                                         \
+		runloop* get_loop() {                                                       \
+			parent_t* parent_off = (parent_t*)nullptr;                              \
+			JOIN(name,_t)* child_off = &parent_off->name;                           \
+			size_t offset = (uint8_t*)child_off - (uint8_t*)parent_off;             \
+			parent_t* parent = (parent_t*)((uint8_t*)this - offset);                \
+			return get_loop_inner(parent);                                          \
+		}                                                                           \
 	} name; friend class JOIN(name, _t)
 #define DECL_G_TIMER(name, parent_t) runloop::g_timer name
 	

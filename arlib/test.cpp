@@ -31,9 +31,10 @@ static testlist* g_testlist = NULL;
 
 static testlist* cur_test;
 
+// funny code because this tests Arlib itself, relying on array<> to work when testing array<> is unwise
 _testdecl::_testdecl(void(*func)(), const char * filename, int line, const char * name, const char * requires, const char * provides)
 {
-	testlist* next = malloc(sizeof(testlist));
+	testlist* next = xmalloc(sizeof(testlist));
 	next->func = func;
 	next->filename = filename;
 	next->line = line;
@@ -68,8 +69,8 @@ void _teststack_push(cstring file, int line) { callstack.append({ file, line });
 void _teststack_pop() { callstack.resize(callstack.size()-1); }
 
 static array<string> ctxstack;
-int _teststack_pushstr(string text) { ctxstack.append(text); return 1; }
-int _teststack_popstr() { ctxstack.resize(ctxstack.size()-1); return 0; }
+void _teststack_pushstr(string text) { ctxstack.append(text); }
+void _teststack_popstr() { ctxstack.resize(ctxstack.size()-1); }
 
 static size_t n_malloc = 0;
 static size_t n_free = 0;
@@ -84,8 +85,8 @@ void _test_malloc()
 	n_malloc++;
 }
 void _test_free() { n_free++; }
-int _test_blockmalloc() { n_malloc_block++; return 1; }
-int _test_unblockmalloc() { n_malloc_block--; return 0; }
+void _test_blockmalloc() { n_malloc_block++; }
+void _test_unblockmalloc() { n_malloc_block--; }
 
 static string fmt_stackentry(bool verbose, cstring file, int line)
 {
@@ -464,7 +465,7 @@ int main(int argc, char* argv[])
 		}
 		
 		printf(ESC_ERASE_LINE);
-		for (size_t i=1;i<ARRAY_SIZE(max_latencies_us);i++)
+		for (size_t i=ARRAY_SIZE(max_latencies_us)-1;i;i--)
 		{
 			uint64_t max_latency_us = (RUNNING_ON_VALGRIND ? 100 : 3) * 1000;
 			if (max_latencies_us[i].us > max_latency_us || i == ARRAY_SIZE(max_latencies_us)-1)

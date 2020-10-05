@@ -10,10 +10,11 @@ class set : public linqbase<set<T>> {
 	//this is a hashtable, using open addressing and linear probing
 	
 	enum { i_empty, i_deleted };
-	uint8_t& tag(size_t id) { return *(uint8_t*)(m_data+id); }
-	uint8_t tag(size_t id) const { return *(uint8_t*)(m_data+id); }
+	// char can alias anything, so use that for tag type; the above two are the only valid tags
+	char& tag(size_t id) { return *(char*)(m_data+id); }
+	char tag(size_t id) const { return *(char*)(m_data+id); }
 	
-	T* m_data; // length is always same as m_valid, so no explicit length - waste of space
+	T* m_data; // length is always same as m_valid, no need to duplicate its length
 	array<bool> m_valid;
 	size_t m_count;
 	
@@ -23,7 +24,7 @@ class set : public linqbase<set<T>> {
 		T* prev_data = m_data;
 		array<bool> prev_valid = std::move(m_valid);
 		
-		m_data = calloc(newsize, sizeof(T));
+		m_data = xcalloc(newsize, sizeof(T));
 		m_valid.reset();
 		m_valid.resize(newsize);
 		
@@ -33,7 +34,7 @@ class set : public linqbase<set<T>> {
 			
 			size_t pos = find_pos_full<true, false>(prev_data[i]);
 			//this is known to not overwrite any existing object; if it does, someone screwed up
-			memcpy(&m_data[pos], &prev_data[i], sizeof(T));
+			memcpy((void*)&m_data[pos], (void*)&prev_data[i], sizeof(T));
 			m_valid[pos] = true;
 		}
 		free(prev_data);
@@ -146,7 +147,7 @@ class set : public linqbase<set<T>> {
 	}
 	void construct(const set& other)
 	{
-		m_data = calloc(other.m_valid.size(), sizeof(T));
+		m_data = xcalloc(other.m_valid.size(), sizeof(T));
 		m_valid = other.m_valid;
 		m_count = other.m_count;
 		

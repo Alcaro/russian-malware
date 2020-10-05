@@ -141,7 +141,6 @@ extern const unsigned sandbox_preload_len;
 int sandproc::preloader_fd()
 {
 	static int s_fd = 0;
-	if (s_fd) return s_fd;
 	if (lock_read_loose(&s_fd)) return s_fd;
 	
 	int fd = syscall(__NR_memfd_create, "arlib-sand-preload", MFD_CLOEXEC|MFD_ALLOW_SEALING);
@@ -151,8 +150,7 @@ int sandproc::preloader_fd()
 		goto fail;
 	if (fcntl(fd, F_ADD_SEALS, F_SEAL_WRITE|F_SEAL_SHRINK|F_SEAL_GROW|F_SEAL_SEAL) < 0)
 		goto fail;
-	int prev;
-	prev = lock_cmpxchg(&s_fd, 0, fd);
+	int prev = lock_cmpxchg_loose(&s_fd, 0, fd);
 	if (prev != 0)
 	{
 		close(fd);

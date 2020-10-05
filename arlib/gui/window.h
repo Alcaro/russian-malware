@@ -4,6 +4,8 @@
 #include "../runloop.h"
 #include <string.h>
 
+// TODO: this entire thing is a mess, and it's not used by anything at all
+
 class window;
 class windowmenu_menu;
 class widget_base;
@@ -565,10 +567,10 @@ public:
 	
 	widget_listbox* insert_row(size_t before, const char * const * cols)
 	{
-		cells = realloc(cells, sizeof(char**)*(numrows+1));
+		cells = xrealloc(cells, sizeof(char**)*(numrows+1));
 		memmove(cells+before+1, cells+before, sizeof(char**)*(numrows-before));
 		numrows++;
-		cells[before] = malloc(sizeof(char*)*numcols);
+		cells[before] = xmalloc(sizeof(char*)*numcols);
 		for (size_t col=0;col<numcols;col++)
 		{
 			cells[before][col] = strdup(cols[col]);

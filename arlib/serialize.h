@@ -395,7 +395,7 @@ class jsondeserializer {
 	std::enable_if_t<sizeof(typename T::serialize_as)!=0>
 	read_item_raw(T& inner)
 	{
-		typename T::serialize_as tmp;
+		typename T::serialize_as tmp{};
 		read_item_raw(tmp);
 		inner = std::move(tmp);
 	}
@@ -816,7 +816,7 @@ class bmldeserializer {
 	std::enable_if_t<sizeof(typename T::serialize_as)!=0>
 	read_item(T& out)
 	{
-		typename T::serialize_as tmp;
+		typename T::serialize_as tmp{};
 		read_item(tmp);
 		out = std::move(tmp);
 	}

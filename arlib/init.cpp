@@ -22,7 +22,7 @@ void argparse::error(cstring why)
 {
 	m_onerror(why);
 	
-	fputs(m_appname+": "+why+"\n", stderr);
+	fprintf(stderr, "%s: %s\n", (const char*)m_appname, why.c_str().c_str());
 	exit(1);
 }
 void argparse::single_arg(arg_base& arg, const char * value, arglevel_t arglevel, bool* used_value)

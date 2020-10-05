@@ -40,11 +40,13 @@ public:
 	
 	class mmap_t : public arrayview<uint8_t>, nocopy {
 		friend class file2;
-		mmap_t(nullptr_t) {}
-		mmap_t(const uint8_t * ptr, size_t count) : arrayview(ptr, count) {}
+		mmap_t(nullptr_t) : success(false) {}
+		mmap_t(const uint8_t * ptr, size_t count) : arrayview(ptr, count), success(true) {}
+		bool success;
 	public:
 		mmap_t(const mmap_t&) = delete;
-		mmap_t(mmap_t&& other) : arrayview(other) {other.items = nullptr; other.count = 0; }
+		mmap_t(mmap_t&& other) : arrayview(other) { other.items = nullptr; other.count = 0; }
+		operator bool() const { return success; }
 		~mmap_t();
 	};
 	

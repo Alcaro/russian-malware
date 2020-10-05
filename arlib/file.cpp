@@ -3,7 +3,7 @@
 
 arrayview<uint8_t> file::impl::default_mmap(size_t start, size_t len)
 {
-	arrayvieww<uint8_t> ret(malloc(len), len);
+	arrayvieww<uint8_t> ret(xmalloc(len), len);
 	size_t actual = this->pread(ret, start);
 	return ret.slice(0, actual);
 }
@@ -15,7 +15,7 @@ void file::impl::default_unmap(arrayview<uint8_t> data)
 
 arrayvieww<uint8_t> file::impl::default_mmapw(size_t start, size_t len)
 {
-	uint8_t* ptr = malloc(sizeof(size_t) + len);
+	uint8_t* ptr = xmalloc(sizeof(size_t) + len);
 	*(size_t*)ptr = start;
 	
 	arrayvieww<uint8_t> ret(ptr+sizeof(size_t), len);

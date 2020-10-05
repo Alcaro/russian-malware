@@ -173,12 +173,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	switch (uMsg)
 	{
+	// handled by parent window
 	case WM_CLOSE: cb_exit(); break;
 	case WM_KEYDOWN:
 	case WM_KEYUP:
 		if ((lParam&0xC0000000) != 0x40000000) // repeat
 			cb_keys((lParam>>16)&255, vk_to_key(wParam), !(lParam&0x80000000));
 		break;
+	
+	// handled by child window
 	case WM_LBUTTONUP:
 	case WM_LBUTTONDOWN:
 	case WM_RBUTTONUP:
@@ -187,12 +190,17 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	case WM_MBUTTONDOWN:
 	case WM_MOUSEMOVE:
 		{
+			static_assert(MK_LBUTTON == 1);
+			static_assert(MK_RBUTTON == 2);
+			static_assert(MK_MBUTTON == 16);
 			TRACKMOUSEEVENT tme = { sizeof(TRACKMOUSEEVENT), TME_LEAVE, child, HOVER_DEFAULT };
 			TrackMouseEvent(&tme);
 			cb_mouse(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), (wParam&(MK_LBUTTON|MK_RBUTTON)) | (wParam&MK_MBUTTON)>>2);
 		}
 		break;
-	case WM_MOUSELEAVE: cb_mouse(-1, -1, 0); break;
+	case WM_MOUSELEAVE: cb_mouse(-0x8000000, -0x8000000, 0); break;
+	
+	// handled by both
 	default: return DefWindowProc(hwnd, uMsg, wParam, lParam);
 	}
 	return 0;

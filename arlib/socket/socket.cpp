@@ -2,6 +2,7 @@
 #include "../bytepipe.h"
 #include "../dns.h"
 #include "../thread.h"
+#include "../stringconv.h"
 
 #undef socket
 #ifdef _WIN32
@@ -81,11 +82,8 @@ static void MAYBE_UNUSED setblock(socketint_t fd, bool newblock)
 #endif
 }
 
-static addrinfo * parse_hostname(cstring domain, int port, bool udp)
+static addrinfo * parse_hostname(cstring domain, uint16_t port, bool udp)
 {
-	char portstr[16];
-	sprintf(portstr, "%i", port);
-	
 	addrinfo hints;
 	memset(&hints, 0, sizeof(addrinfo));
 	hints.ai_family = AF_UNSPEC;
@@ -93,7 +91,7 @@ static addrinfo * parse_hostname(cstring domain, int port, bool udp)
 	hints.ai_flags = AI_NUMERICHOST;
 	
 	addrinfo * addr = NULL;
-	getaddrinfo(domain.c_str(), portstr, &hints, &addr);
+	getaddrinfo(domain.c_str(), tostring(port), &hints, &addr); // why does getaddrinfo take port as a string
 	
 	return addr;
 }

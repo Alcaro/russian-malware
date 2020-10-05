@@ -1,6 +1,14 @@
 #include "image.h"
 #include "simd.h"
 
+void image::init_new(uint32_t width, uint32_t height, imagefmt fmt)
+{
+	size_t stride = byteperpix(fmt)*width;
+	size_t nbytes = stride*height;
+	storage = xmalloc(nbytes);
+	init_ptr(storage, width, height, stride, fmt);
+}
+
 static inline void image_insert_noov(image& target, int32_t x, int32_t y, const image& source);
 //checks if the source fits in the target, and if not, crops it; then calls the above
 void image::insert(int32_t x, int32_t y, const image& other)
@@ -564,7 +572,7 @@ static bool image_decode_gtk(image* out, arrayview<uint8_t> data)
 	out->width = gdk_pixbuf_get_width(pix);
 	out->height = gdk_pixbuf_get_height(pix);
 	out->stride = out->width*sizeof(uint32_t);
-	out->storage = malloc(out->stride*out->height);
+	out->storage = xmalloc(out->stride*out->height);
 	
 	out->pixels8 = (uint8_t*)out->storage;
 	

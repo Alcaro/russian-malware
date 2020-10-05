@@ -2,31 +2,26 @@
 
 #ifdef __unix__
 #include <unistd.h>
+//separate file so this ctor can be optimized out if unused
 
-//separate file so this oninit can be optimized out if unused
-
-static char* g_cwd;
-cstring file::cwd() { return g_cwd; }
-
-oninit()
-{
-	char* cwd;
+namespace {
+struct cwd_finder {
+	string path;
+	
+	cwd_finder() // can't oninit() to initialize a string, globals' ctors' order is implementation defined and often wrong
+	{
 #ifdef __linux__
-	cwd = getcwd(NULL, 0);
+		path = string::create_usurp(getcwd(NULL, 0));
 #else
 #error TODO
 #endif
-	
-	size_t n = strlen(cwd);
-	if (cwd[n-1] != '/')
-	{
-		char* tmp = malloc(n+2);
-		strcpy(tmp, cwd);
-		tmp[n] = '/';
-		tmp[n+1] = '\0';
-		free(cwd);
-		g_cwd = tmp;
+		if (path[path.length()-1] != '/')
+			path += "/";
 	}
-	else g_cwd = cwd;
+};
+
+static cwd_finder g_cwd;
 }
+
+cstring file::cwd() { return g_cwd.path; }
 #endif

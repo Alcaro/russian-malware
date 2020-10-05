@@ -19,6 +19,7 @@
 #include "global.h"
 #include "linqbase.h"
 
+#include "simd.h"
 #include "hash.h"
 #include "array.h"
 #include "string.h"
@@ -48,7 +49,6 @@
 #include "regex.h"
 #include "runloop.h"
 #include "serialize.h"
-#include "simd.h"
 #include "test.h"
 #include "zip.h"
 

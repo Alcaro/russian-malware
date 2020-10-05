@@ -142,13 +142,7 @@ struct image {
 	}
 	
 	//0x? and ?x0 images are undefined behavior. The pixels are uninitialized.
-	void init_new(uint32_t width, uint32_t height, imagefmt fmt)
-	{
-		size_t stride = byteperpix(fmt)*width;
-		size_t nbytes = stride*height;
-		storage = malloc(nbytes);
-		init_ptr(storage, width, height, stride, fmt);
-	}
+	void init_new(uint32_t width, uint32_t height, imagefmt fmt);
 	//If the input image changes after calling one of these three, the callee changes too. Probably better to not do that.
 	void init_ptr(const void * pixels, uint32_t width, uint32_t height, size_t stride, imagefmt fmt)
 	{
