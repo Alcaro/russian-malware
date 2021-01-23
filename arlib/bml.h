@@ -25,7 +25,8 @@ public:
 		               // but reader clarity is more important, and this name is better
 	};
 	
-	//It is not allowed to try to stream data into this object.
+	// It is not possible to stream data into this object.
+	// The BML parser is not performance tuned.
 	bmlparser(cstring bml) : m_orig_data(bml), m_data(m_orig_data), m_exit(false) {}
 	event next(); // Returned cstrings are valid until next function call (or destructor) on this object.
 	
@@ -38,7 +39,7 @@ private:
 	cstring m_inlines;
 	bool m_exit;
 	
-	string m_tmp_value; // returned 'value' points here if it's a multiline
+	string m_tmp_value; // next().value points here if it's a multiline
 	
 	inline bool getline(bool allow_empty);
 };

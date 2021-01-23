@@ -30,7 +30,9 @@
 
 bool dylib::init(const char * filename)
 {
+#ifndef ARLIB_OPT
 	if (handle) abort();
+#endif
 	//synchronized(dylib_lock)
 	{
 		handle = dlopen(filename, RTLD_LAZY);
@@ -73,7 +75,9 @@ static mutex dylib_lock;
 
 bool dylib::init(const char * filename)
 {
+#ifndef ARLIB_OPT
 	if (handle) abort();
+#endif
 	
 	//if (uniq)
 	//{

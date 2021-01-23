@@ -21,6 +21,9 @@
 #error need C++17
 #endif
 
+// TODO: create a cfunction class, like string/cstring
+// or maybe ofunction, like image/oimage
+
 template<typename T> class function;
 template<typename Tr, typename... Ta>
 class function<Tr(Ta...)> {

@@ -445,12 +445,12 @@ public:
 				if (err == D3DERR_DEVICELOST || err == D3DERR_DEVICEHUNG)
 				{
 					// ???
-					debug_or_abort();
+					debug_fatal();
 				}
 				AllocRenderTarget();
 				*/
 				// but I think it'd require reinitializing the GL resources too
-				debug_or_print();
+				debug_warn("D3DERR_DEVICELOST");
 			}
 			
 			wgl.DXLockObjectsNV(D3D_sharehandle, 1, &this->GL_htexture);

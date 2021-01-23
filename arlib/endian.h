@@ -35,9 +35,7 @@
 #endif
 
 #if defined(__GNUC__)
-//This branch is useless, GCC detects the pattern and optimizes it.
-//But MSVC doesn't, so I need the intrinsics. Might as well use both sets.
-//(I need these swap functions, GCC doesn't optimize a sequence of writes. Clang does, but one of two isn't enough.)
+//GCC detects the pattern and optimizes it, but MSVC doesn't, so I need the intrinsics. No reason not to use both.
 #define end_swap16 __builtin_bswap16
 #define end_swap32 __builtin_bswap32
 #define end_swap64 __builtin_bswap64
@@ -89,6 +87,6 @@ inline sarray<uint8_t,4> pack_be32(uint32_t n) { sarray<uint8_t,4> ret; writeu_b
 inline sarray<uint8_t,8> pack_le64(uint64_t n) { sarray<uint8_t,8> ret; writeu_le64(ret.ptr(), n); return ret; }
 inline sarray<uint8_t,8> pack_be64(uint64_t n) { sarray<uint8_t,8> ret; writeu_be64(ret.ptr(), n); return ret; }
 
-#undef end_swap16 // delete these, so callers are forced to use {read,write}u instead
+#undef end_swap16 // delete these, so callers are forced to use the functions instead
 #undef end_swap32
 #undef end_swap64

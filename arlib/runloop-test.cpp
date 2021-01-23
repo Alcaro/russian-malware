@@ -231,7 +231,6 @@ test("private runloop", "function,array,set,time", "runloop")
 	holder.loop->enter();
 	assert_eq(n, 112);
 }
-test("epoll","","") { test_expfail("replace epoll with normal poll, epoll doesn't help at our small scale"); }
 
 #ifdef ARLIB_SOCKET
 static void test_runloop_2(bool is_global)

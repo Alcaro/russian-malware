@@ -1,16 +1,23 @@
 #include "os.h"
 #include "test.h"
 
-#ifdef _WIN32
-#include <windows.h>
 // Returns a*b/c, but gives the correct answer if a*b doesn't fit in uint64_t.
-// (Still gives wrong answer if a*b/c doesn't fit, or if b*c > UINT64_MAX.)
-static uint64_t muldiv64(uint64_t a, uint64_t b, uint64_t c)
+// (May give wrong answer if a*b/c doesn't fit, or if b*c > UINT64_MAX.)
+inline uint64_t muldiv64(uint64_t a, uint64_t b, uint64_t c)
 {
+#ifdef __x86_64__
+	uint64_t out;
+	uint64_t clobber;
+	asm("imul %2\nidiv %3" : "=a"(out), "=d"(clobber) : "r"(b), "r"(c), "a"(a), "d"(0));
+	return out;
+#else
 	// doing it in __int128 would be easier, but that ends up calling __udivti3 which is a waste of time.
 	return (a/c*b) + (a%c*b/c);
+#endif
 }
 
+#ifdef _WIN32
+#include <windows.h>
 static LARGE_INTEGER timer_freq;
 oninit_static()
 {
@@ -19,11 +26,6 @@ oninit_static()
 
 uint64_t time_us_ne()
 {
-	////this one has an accuracy of 10ms by default
-	//ULARGE_INTEGER time;
-	//GetSystemTimeAsFileTime((LPFILETIME)&time);
-	//return time.QuadPart/10;//this one is in intervals of 100 nanoseconds, for some reason. We want microseconds.
-	
 	LARGE_INTEGER timer_now;
 	QueryPerformanceCounter(&timer_now);
 	return muldiv64(timer_now.QuadPart, 1000000, timer_freq.QuadPart);
@@ -35,12 +37,10 @@ uint64_t time_ms_ne()
 
 uint64_t time_us()
 {
-	//this one has an accuracy of 10ms by default
+	// this one has an accuracy of 10ms by default
 	ULARGE_INTEGER time;
 	GetSystemTimeAsFileTime((LPFILETIME)&time);
-	// this one is in intervals of 100 nanoseconds, for some insane reason. We want microseconds.
-	// also epoch is jan 1 1601, subtract that
-	return time.QuadPart/10 - 11644473600000000ULL;
+	return time.QuadPart/10 - 11644473600000000ULL; // epoch is jan 1 1601, we want unix time (and windows loves multiples of 100ns)
 }
 uint64_t time_ms()
 {
@@ -163,4 +163,12 @@ test("time", "", "time")
 #endif
 	assert_range(time2_une_fm-time_une_fm, 40000, 60000);
 	assert_range(time2_une_fu-time_une_fu, 40000, 60000);
+}
+
+test("muldiv64", "", "")
+{
+	assert_eq(muldiv64(100, 100, 2), 5000);
+	assert_eq(muldiv64(0x1000000000000000, 0x0000000000010000, 0x0000000001000000), 0x0010000000000000);
+	assert_eq(muldiv64(1000000000000000000, 10000000, 1000000000), 10000000000000000);
+	assert_eq(muldiv64(100, 100, 3), 3333);
 }

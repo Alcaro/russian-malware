@@ -49,7 +49,7 @@ void runonce::run(function<void()> fn)
 	if (LIKELY(st == st_done)) return;
 	if (st == st_uninit)
 	{
-		st = lock_cmpxchg<lock_loose>(&m_st, st_uninit, st_busy);
+		st = lock_cmpxchg<lock_loose, lock_loose>(&m_st, st_uninit, st_busy);
 		if (st == st_uninit)
 		{
 			fn();

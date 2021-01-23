@@ -1,7 +1,7 @@
 #ifdef ARLIB_SOCKET
 #include "http.h"
 
-bool HTTP::parseUrl(cstring url, bool relative, location& out)
+bool HTTP::parse_url(cstring url, bool relative, location& out)
 {
 	if (!url) return false;
 	
@@ -24,10 +24,7 @@ bool HTTP::parseUrl(cstring url, bool relative, location& out)
 		if (host_loc.size() == 1)
 		{
 			host_loc = url.csplit<1>("?");
-			if (host_loc.size() == 2)
-			{
-				out.path = "/?"+host_loc[1];
-			}
+			if (host_loc.size() == 2) out.path = "/?"+host_loc[1];
 			else out.path = "/";
 		}
 		else out.path = "/"+host_loc[1];
@@ -35,12 +32,13 @@ bool HTTP::parseUrl(cstring url, bool relative, location& out)
 		out.domain = domain_port[0];
 		if (domain_port.size() == 2)
 		{
-			if (!fromstring(domain_port[1], out.port)) return false;
-			if (out.port <= 0 || out.port > 65535) return false;
+			uint16_t port;
+			if (!fromstring(domain_port[1], port)) return false;
+			out.port = port;
 		}
 		else
 		{
-			out.port = 0;
+			out.port = -1;
 		}
 	}
 	else if (!relative) return false;
@@ -64,12 +62,12 @@ void HTTP::send(req q, function<void(rsp)> callback)
 	
 	if (!lasthost.scheme)
 	{
-		if (!parseUrl(r.q.url, false, this->lasthost)) return resolve_err_v(requests.size()-1, rsp::e_bad_url);
+		if (!parse_url(r.q.url, false, this->lasthost)) return resolve_err_v(requests.size()-1, rsp::e_bad_url);
 	}
 	else
 	{
 		location loc;
-		if (!parseUrl(r.q.url, false, loc)) return resolve_err_v(requests.size()-1, rsp::e_bad_url);
+		if (!parse_url(r.q.url, false, loc)) return resolve_err_v(requests.size()-1, rsp::e_bad_url);
 		if (loc.scheme != lasthost.scheme || loc.domain != lasthost.domain || loc.port != lasthost.port)
 		{
 			return resolve_err_v(requests.size()-1, rsp::e_different_url);
@@ -129,7 +127,7 @@ again:
 	}
 	
 	location loc;
-	parseUrl(q.url, false, loc); //known to succeed, it was tested in send()
+	parse_url(q.url, false, loc); //known to succeed, it was tested in send()
 	
 	bytepipe tosend;
 	tosend.push(method, " ", loc.path, " HTTP/1.1\r\n");
@@ -189,7 +187,7 @@ void HTTP::do_timeout()
 	if (requests.size() != 0)
 		requests[0].r.status = rsp::e_timeout;
 	
-	sock_cancel();
+	sock = NULL;
 	timeout.reset();
 	
 	activity(); // can delete 'this', don't do anything fancy afterwards
@@ -214,27 +212,25 @@ newsock:
 		if (!sock) return;
 		
 		uint8_t ignore[1];
-		if (sock->recv(ignore) != 0) return sock_cancel(); // we shouldn't get anything at this point
+		if (sock->recv(ignore) != 0) sock = NULL; // we shouldn't get anything at this point
 		return;
 	}
 	
 	if (!sock)
 	{
-		if (state == st_boundary || state == st_boundary_retried)
-		{
-			//lasthost.proto/domain/port never changes between requests
-			int defport;
-			if (lasthost.scheme == "http") defport = 80;
+		//lasthost.proto/domain/port never changes between requests
+		int defport;
+		if (lasthost.scheme == "http") defport = 80;
 #ifdef ARLIB_SSL
-			else if (lasthost.scheme == "https") defport = 443;
+		else if (lasthost.scheme == "https") defport = 443;
 #endif
-			else { RETURN_IF_CALLBACK_DESTRUCTS(resolve_err_v(0, rsp::e_bad_url)); goto newsock; }
-			sock = cb_mksock(
+		else { RETURN_IF_CALLBACK_DESTRUCTS(resolve_err_v(0, rsp::e_bad_url)); goto newsock; }
+		sock = cb_mksock(
 #ifdef ARLIB_SSL
-			                 defport==443,
+		                 defport==443,
 #endif
-			                 lasthost.domain, lasthost.port ? lasthost.port : defport, loop);
-		}
+		                 lasthost.domain, lasthost.port>=0 ? lasthost.port : defport, loop);
+		
 		if (!sock) { RETURN_IF_CALLBACK_DESTRUCTS(resolve_err_v(0, rsp::e_connect)); goto newsock; }
 		sock->callback(bind_this(&HTTP::activity), NULL);
 		
@@ -244,7 +240,6 @@ newsock:
 		reset_limits();
 	}
 	
-	if (!sock) goto newsock;
 	try_compile_req();
 	if (!sock) goto newsock;
 	
@@ -393,7 +388,7 @@ req_finish:
 	
 	if (!requests.size())
 	{
-		if (newrecv) sock_cancel(); // we shouldn't get anything at this point
+		if (newrecv) sock = NULL; // we shouldn't get anything at this point
 		//return immediately, so we don't poke requests[0] if that doesn't exist
 		return;
 	}
@@ -406,8 +401,8 @@ req_finish:
 static void test_url(cstring url, cstring url2, cstring scheme, cstring domain, int port, cstring path)
 {
 	HTTP::location loc;
-	assert(HTTP::parseUrl(url, false, loc));
-	if (url2) assert(HTTP::parseUrl(url2, true, loc));
+	assert(HTTP::parse_url(url, false, loc));
+	if (url2) assert(HTTP::parse_url(url2, true, loc));
 	assert_eq(loc.scheme, scheme);
 	assert_eq(loc.domain, domain);
 	assert_eq(loc.port, port);
@@ -420,33 +415,33 @@ static void test_url(cstring url, cstring scheme, cstring domain, int port, cstr
 static void test_url_fail(cstring url, cstring url2)
 {
 	HTTP::location loc;
-	assert(HTTP::parseUrl(url, false, loc));
-	assert(!HTTP::parseUrl(url2, true, loc));
+	assert(HTTP::parse_url(url, false, loc));
+	assert(!HTTP::parse_url(url2, true, loc));
 }
 test("URL parser", "string", "http")
 {
-	testcall(test_url("wss://gateway.discord.gg/?v=5&encoding=json",          "wss", "gateway.discord.gg", 0, "/?v=5&encoding=json"));
-	testcall(test_url("wss://gateway.discord.gg?v=5&encoding=json",           "wss", "gateway.discord.gg", 0, "/?v=5&encoding=json"));
-	testcall(test_url("wss://gateway.discord.gg", "?v=5&encoding=json",       "wss", "gateway.discord.gg", 0, "/?v=5&encoding=json"));
-	testcall(test_url("http://example.com/foo/bar.html?baz", "/bar/foo.html", "http", "example.com", 0, "/bar/foo.html"));
-	testcall(test_url("http://example.com/foo/bar.html?baz", "foo.html",      "http", "example.com", 0, "/foo/foo.html"));
-	testcall(test_url("http://example.com/foo/bar.html?baz", "?quux",         "http", "example.com", 0, "/foo/bar.html?quux"));
+	testcall(test_url("wss://gateway.discord.gg/?v=5&encoding=json",          "wss", "gateway.discord.gg", -1, "/?v=5&encoding=json"));
+	testcall(test_url("wss://gateway.discord.gg?v=5&encoding=json",           "wss", "gateway.discord.gg", -1, "/?v=5&encoding=json"));
+	testcall(test_url("wss://gateway.discord.gg", "?v=5&encoding=json",       "wss", "gateway.discord.gg", -1, "/?v=5&encoding=json"));
+	testcall(test_url("http://example.com/foo/bar.html?baz", "/bar/foo.html", "http", "example.com", -1, "/bar/foo.html"));
+	testcall(test_url("http://example.com/foo/bar.html?baz", "foo.html",      "http", "example.com", -1, "/foo/foo.html"));
+	testcall(test_url("http://example.com/foo/bar.html?baz", "?quux",         "http", "example.com", -1, "/foo/bar.html?quux"));
 	testcall(test_url("http://example.com:80/",                               "http", "example.com", 80, "/"));
 	testcall(test_url("http://example.com:80/", "http://example.com:8080/",   "http", "example.com", 8080, "/"));
 	testcall(test_url_fail("http://example.com:80/", ""));
-	testcall(test_url("http://a.com/foo/bar.html?baz#quux",  "#corge",                "http", "a.com", 0, "/foo/bar.html?baz#corge"));
-	testcall(test_url("http://a.com/foo/bar.html?baz",       "#corge",                "http", "a.com", 0, "/foo/bar.html?baz#corge"));
-	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "http://b.com/foo.html", "http", "b.com", 0, "/foo.html#corge"));
-	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "//b.com/bar/foo.html",  "http", "b.com", 0, "/bar/foo.html#corge"));
-	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "/bar/foo.html",         "http", "a.com", 0, "/bar/foo.html#corge"));
-	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "foo.html",              "http", "a.com", 0, "/foo/foo.html#corge"));
-	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "?quux",                 "http", "a.com", 0, "/foo/bar.html?quux#corge"));
-	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "http://b.com/#grault",  "http", "b.com", 0, "/#grault"));
-	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "/bar/foo.html#grault",  "http", "a.com", 0, "/bar/foo.html#grault"));
-	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "foo.html#grault",       "http", "a.com", 0, "/foo/foo.html#grault"));
-	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "?quux#grault",          "http", "a.com", 0, "/foo/bar.html?quux#grault"));
-	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "#grault",               "http", "a.com", 0, "/foo/bar.html?baz#grault"));
-	testcall(test_url("http://a.com:8080/",                  "//b.com/",              "http", "b.com", 0, "/"));
+	testcall(test_url("http://a.com/foo/bar.html?baz#quux",  "#corge",                "http", "a.com", -1, "/foo/bar.html?baz#corge"));
+	testcall(test_url("http://a.com/foo/bar.html?baz",       "#corge",                "http", "a.com", -1, "/foo/bar.html?baz#corge"));
+	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "http://b.com/foo.html", "http", "b.com", -1, "/foo.html#corge"));
+	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "//b.com/bar/foo.html",  "http", "b.com", -1, "/bar/foo.html#corge"));
+	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "/bar/foo.html",         "http", "a.com", -1, "/bar/foo.html#corge"));
+	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "foo.html",              "http", "a.com", -1, "/foo/foo.html#corge"));
+	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "?quux",                 "http", "a.com", -1, "/foo/bar.html?quux#corge"));
+	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "http://b.com/#grault",  "http", "b.com", -1, "/#grault"));
+	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "/bar/foo.html#grault",  "http", "a.com", -1, "/bar/foo.html#grault"));
+	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "foo.html#grault",       "http", "a.com", -1, "/foo/foo.html#grault"));
+	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "?quux#grault",          "http", "a.com", -1, "/foo/bar.html?quux#grault"));
+	testcall(test_url("http://a.com/foo/bar.html?baz#corge", "#grault",               "http", "a.com", -1, "/foo/bar.html?baz#grault"));
+	testcall(test_url("http://a.com:8080/",                  "//b.com/",              "http", "b.com", -1, "/"));
 }
 
 test("HTTP", "tcp,ssl,random", "http")

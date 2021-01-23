@@ -1,7 +1,7 @@
 #include "image.h"
 #include "simd.h"
 
-void image::init_new(uint32_t width, uint32_t height, imagefmt fmt)
+void oimage::init_new(uint32_t width, uint32_t height, imagefmt fmt)
 {
 	size_t stride = byteperpix(fmt)*width;
 	size_t nbytes = stride*height;
@@ -380,55 +380,6 @@ void image::insert_tile_with_border(int32_t x, int32_t y, uint32_t width, uint32
 
 
 
-void image::insert_scale_unsafe(int32_t x, int32_t y, const image& other, int32_t scalex, int32_t scaley)
-{
-	bool flipx = (scalex<0);
-	bool flipy = (scaley<0);
-	scalex = abs(scalex);
-	scaley = abs(scaley);
-	
-	for (uint32_t sy=0;sy<other.height;sy++)
-	{
-		int ty = y + sy*scaley;
-		if (flipy) ty = y + (height-1-sy)*scaley;
-		uint32_t* targetpx = this->pixels32 + ty*this->stride/sizeof(uint32_t);
-		uint32_t* sourcepx = other.pixels32 + sy*other.stride/sizeof(uint32_t);
-		uint32_t* targetpxorg = targetpx;
-		sourcepx += x;
-		
-		if (flipx)
-		{
-			sourcepx += width;
-			for (uint32_t sx=0;sx<other.width;sx++)
-			{
-				sourcepx--;
-				for (int32_t xx=0;xx<scalex;xx++)
-				{
-					*(targetpx++) = *sourcepx;
-				}
-			}
-		}
-		else
-		{
-			for (uint32_t sx=0;sx<other.width;sx++)
-			{
-				for (int32_t xx=0;xx<scalex;xx++)
-				{
-					*(targetpx++) = *sourcepx;
-				}
-				sourcepx++;
-			}
-		}
-		
-		for (int32_t yy=1;yy<scaley;yy++)
-		{
-			memcpy(targetpxorg+yy*stride/sizeof(uint32_t), targetpxorg, sizeof(uint32_t)*width);
-		}
-	}
-}
-
-
-
 void image::insert_rectangle(int32_t x, int32_t y, uint32_t width, uint32_t height, uint32_t argb)
 {
 	if (x<0) { if (width  < (uint32_t)-x) return; width  -= -x; x=0; }
@@ -467,10 +418,52 @@ void image::insert_rectangle(int32_t x, int32_t y, uint32_t width, uint32_t heig
 
 
 
-void image::init_clone(const image& other, int32_t scalex, int32_t scaley)
+void oimage::init_clone(const image& other, int32_t scalex, int32_t scaley)
 {
 	init_new(other.width * (scalex<0 ? -scalex : scalex), other.height * (scaley<0 ? -scaley : scaley), other.fmt);
-	insert_scale_unsafe(0, 0, other, scalex, scaley);
+	
+	bool flipx = (scalex<0);
+	bool flipy = (scaley<0);
+	scalex = abs(scalex);
+	scaley = abs(scaley);
+	
+	for (uint32_t sy=0;sy<other.height;sy++)
+	{
+		int ty = sy*scaley;
+		if (flipy) ty = (height-1-sy)*scaley;
+		uint32_t* targetpx = this->pixels32 + ty*this->stride/sizeof(uint32_t);
+		uint32_t* sourcepx = other.pixels32 + sy*other.stride/sizeof(uint32_t);
+		uint32_t* targetpxorg = targetpx;
+		
+		if (flipx)
+		{
+			sourcepx += width;
+			for (uint32_t sx=0;sx<other.width;sx++)
+			{
+				sourcepx--;
+				for (int32_t xx=0;xx<scalex;xx++)
+				{
+					*(targetpx++) = *sourcepx;
+				}
+			}
+		}
+		else
+		{
+			for (uint32_t sx=0;sx<other.width;sx++)
+			{
+				for (int32_t xx=0;xx<scalex;xx++)
+				{
+					*(targetpx++) = *sourcepx;
+				}
+				sourcepx++;
+			}
+		}
+		
+		for (int32_t yy=1;yy<scaley;yy++)
+		{
+			memcpy(targetpxorg+yy*stride/sizeof(uint32_t), targetpxorg, sizeof(uint32_t)*width);
+		}
+	}
 }
 
 
@@ -523,9 +516,9 @@ void convert_scanline_rgb888_nrgb8888(uint32_t* out, const uint8_t* in, size_t n
 	}
 	SIMD_LOOP_TAIL
 #endif
-	// Clang can vectorize this, but it emits some quite terrible code, so keep the SSE2 anyways
-	// (actually, Clang flattens the above all the way to a single pshufb, if -mssse3)
-	// gcc vector handling is poor; it doesn't vectorize the below, nor do anything interesting to the above
+	// Clang can vectorize this, but it emits some quite messy code, so keep the SSE2 anyways
+	// (in fact, Clang flattens the above all the way to a single pshufb, if -mssse3)
+	// gcc doesn't vectorize the below, nor do anything interesting to the above
 	while (x < npx)
 	{
 		uint8_t* src = (uint8_t*)in + x*3;
@@ -560,7 +553,7 @@ void image::convert_scanline<ifmt_rgb888_by, ifmt_xrgb8888>(void* out, const voi
 #ifdef ARGUI_GTK3
 #include <gtk/gtk.h>
 
-static bool image_decode_gtk(image* out, arrayview<uint8_t> data)
+static bool image_decode_gtk(oimage* out, arrayview<uint8_t> data)
 {
 	GInputStream* is = g_memory_input_stream_new_from_data(data.ptr(), data.size(), NULL);
 	GdkPixbuf* pix = gdk_pixbuf_new_from_stream(is, NULL, NULL);
@@ -626,7 +619,7 @@ out->fmt = ifmt_0rgb8888;
 //or maybe it's better to keep my homebrew, so I know it'll work the same way everywhere
 
 
-bool image::init_decode(arrayview<uint8_t> data)
+bool oimage::init_decode(arrayview<uint8_t> data)
 {
 	this->fmt = ifmt_none;
 	return
@@ -635,7 +628,7 @@ bool image::init_decode(arrayview<uint8_t> data)
 		false;
 }
 
-bool image::init_decode_extern(arrayview<uint8_t> data)
+bool oimage::init_decode_extern(arrayview<uint8_t> data)
 {
 	this->fmt = ifmt_none;
 	return
@@ -645,7 +638,7 @@ bool image::init_decode_extern(arrayview<uint8_t> data)
 		false;
 }
 
-bool image::init_decode_permissive(arrayview<uint8_t> data)
+bool oimage::init_decode_permissive(arrayview<uint8_t> data)
 {
 	this->fmt = ifmt_none;
 	return

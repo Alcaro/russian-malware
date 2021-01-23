@@ -499,12 +499,12 @@ socket* socket::create_sslmaybe(bool ssl, cstring domain, int port, runloop* loo
 #endif
 
 
-static MAYBE_UNUSED socketint_t socketlisten_create_ip4(int port)
+static MAYBE_UNUSED socketint_t socketlisten_create_ip4(u_long ip, int port)
 {
 	struct sockaddr_in sa;
 	memset(&sa, 0, sizeof(sa));
 	sa.sin_family = AF_INET;
-	sa.sin_addr.s_addr = htonl(INADDR_ANY);
+	sa.sin_addr.s_addr = ip;
 	sa.sin_port = htons(port);
 	
 	socketint_t fd = mksocket(AF_INET, SOCK_STREAM, 0);
@@ -519,12 +519,12 @@ fail:
 	return -1;
 }
 
-static socketint_t socketlisten_create_ip6(int port)
+static socketint_t socketlisten_create_ip6(const struct in6_addr& ip, int port)
 {
 	struct sockaddr_in6 sa; // IN6ADDR_ANY_INIT should work, but doesn't.
 	memset(&sa, 0, sizeof(sa));
 	sa.sin6_family = AF_INET6;
-	sa.sin6_addr = in6addr_any;
+	sa.sin6_addr = ip;
 	sa.sin6_port = htons(port);
 	
 	socketint_t fd = mksocket(AF_INET6, SOCK_STREAM, 0);
@@ -545,10 +545,10 @@ socketlisten* socketlisten::create(int port, runloop* loop, function<void(autopt
 	initialize();
 	
 	socketint_t fd = -1;
-	if (fd<0) fd = socketlisten_create_ip6(port);
+	if (fd<0) fd = socketlisten_create_ip6(in6addr_any, port);
 #if defined(_WIN32) && _WIN32_WINNT < _WIN32_WINNT_LONGHORN
-	// XP can't dualstack the v6 addresses, so let's keep the fallback
-	if (fd<0) fd = socketlisten_create_ip4(port);
+	// XP can't dualstack the v6 addresses
+	if (fd<0) fd = socketlisten_create_ip4(htonl(INADDR_ANY), port);
 #endif
 	if (fd<0) return NULL;
 	

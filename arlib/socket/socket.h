@@ -111,9 +111,6 @@ public:
 #ifdef ARLIB_SSL_OPENSSL
 		return wrap_ssl_raw_openssl(inner, domain, loop);
 #endif
-#ifdef ARLIB_SSL_GNUTLS
-		return wrap_ssl_raw_gnutls(inner, domain, loop);
-#endif
 #ifdef ARLIB_SSL_SCHANNEL
 		return wrap_ssl_raw_schannel(inner, domain, loop);
 #endif
@@ -136,9 +133,6 @@ public:
 #ifdef ARLIB_SSL_OPENSSL
 	static socket* wrap_ssl_raw_openssl(socket* inner, cstring domain, runloop* loop);
 	static socket* wrap_ssl_raw_openssl_noverify(socket* inner, runloop* loop);
-#endif
-#ifdef ARLIB_SSL_GNUTLS
-	static socket* wrap_ssl_raw_gnutls(socket* inner, cstring domain, runloop* loop);
 #endif
 #ifdef ARLIB_SSL_SCHANNEL
 	static socket* wrap_ssl_raw_schannel(socket* inner, cstring domain, runloop* loop);
@@ -174,16 +168,4 @@ public:
 	
 	~socketlisten();
 };
-
-//SSL feature matrix:
-//                      | OpenSSL | SChannel | GnuTLS | BearSSL | Comments
-//Basic functionality   | Yes     | No       | No     | Yes     | Many are bitrotted (likely easy to fix)
-//Nonblocking           | Yes     | ?        | Yes    | Yes     | OpenSSL supports nonblocking, but not blocking
-//Permissive (expired)  | Yes     | ?        | Yes    | No      |
-//Permissive (bad root) | Yes     | ?        | Yes    | Yes     |
-//Permissive (bad name) | Yes     | ?        | Yes    | No      |
-//Serialize             | No      | No       | No     | Yes*    | BearSSL is homemade and will need rewrites if upstream changes
-//Server                | No      | No       | No     | No      | Likely possible on everything, I'm just lazy
-//Reputable author      | Yes     | Yes      | Yes    | Yes     |
-//Binary size           | 4       | 2.5      | 4      | 80      | In kilobytes, estimated; DLLs not included
 #endif

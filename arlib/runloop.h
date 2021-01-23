@@ -115,7 +115,7 @@ public:
 	// or said contents will use-after-free.
 	//You can't remove GUI stuff from the global runloop, so you can't delete it.
 	// Not even on process exit; cleanup on process exit is a waste of time, anyways.
-	virtual ~runloop() = 0;
+	virtual ~runloop() {}
 	
 	
 	template<typename Tchild>
@@ -158,9 +158,7 @@ public:
 		
 		void reset()
 		{
-			// don't optimize to set(uintptr_t id) { reset(); this->id = id; }, deleting then adding improves memory use patterns
-			if (id)
-				loop()->raw_timer_remove(id);
+			if (id) loop()->raw_timer_remove(id);
 			id = 0;
 		}
 		
@@ -218,7 +216,6 @@ public:
 	
 	virtual void raw_timer_remove(uintptr_t id) = 0;
 };
-inline runloop::~runloop() {}
 
 #ifdef ARLIB_TESTRUNNER
 runloop* runloop_wrap_blocktest(runloop* inner);

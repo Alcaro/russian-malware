@@ -130,6 +130,12 @@ public:
 		while (*at) at++;
 		return cstring(arrayview<uint8_t>(tmp, (at++)-tmp));
 	}
+	forceinline const char * strnul_ptr()
+	{
+		const uint8_t * ret = at;
+		while (*at++) {}
+		return (char*)ret;
+	}
 	
 	forceinline size_t tell() { return at-start; }
 	forceinline size_t size() { return end-start; }
@@ -292,6 +298,19 @@ public:
 	void text(cstring str)
 	{
 		buf += str.bytes();
+	}
+	void text(const char * str)
+	{
+		buf += bytesr((uint8_t*)str, strlen(str));
+	}
+	void strnul(cstring str)
+	{
+		buf += str.bytes();
+		u8(0);
+	}
+	void strnul(const char * str)
+	{
+		buf += bytesr((uint8_t*)str, strlen(str)+1);
 	}
 	template<typename... Ts>
 	void u8s(Ts... bs)

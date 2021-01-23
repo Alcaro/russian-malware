@@ -89,7 +89,7 @@ static void APIENTRY debug_cb(GLenum source, GLenum type, GLuint id, GLenum seve
 	
 	fprintf((FILE*)userParam, "[GL debug: sev %s, source %s, topic %s: %s]\n", severity_s, source_s, type_s, message);
 	
-	if (severity_l >= sev_warn) debug_or_exit();
+	if (severity_l >= sev_warn) debug_warn();
 }
 
 void aropengl::enableDefaultDebugger(FILE* out)

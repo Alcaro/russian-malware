@@ -21,14 +21,7 @@ class DNS {
 	
 	void init(cstring resolver, int port, runloop* loop);
 	
-	uint16_t pick_trid()
-	{
-		while (true)
-		{
-			uint16_t n = rand(); // rand() gives bad results on windows, don't care
-			if (!queries.contains(n)) return n;
-		}
-	}
+	uint16_t pick_trid();
 	
 public:
 	static string default_resolver();

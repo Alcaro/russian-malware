@@ -70,7 +70,8 @@ static bool libLoad()
 
 static void libUnload()
 {
-	if (glx.lib) dlclose(glx.lib);
+	// trying to close this yields segfaults in XCloseDisplay
+	//if (glx.lib) dlclose(glx.lib);
 }
 
 

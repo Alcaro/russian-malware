@@ -236,10 +236,10 @@ test("JSON serialization", "json", "serialize")
 		ser5 item;
 		item.data.append();
 		item.data.append();
-		item.data[0].a=1;
-		item.data[0].b=2;
-		item.data[1].a=3;
-		item.data[1].b=4;
+		item.data[0].a = 1;
+		item.data[0].b = 2;
+		item.data[1].a = 3;
+		item.data[1].b = 4;
 		assert_eq(jsonserialize(item), "{\"data\":[{\"a\":1,\"b\":2},{\"a\":3,\"b\":4}]}");
 	}
 	
@@ -257,9 +257,8 @@ test("JSON serialization", "json", "serialize")
 		item.g = 0xAAAA;
 		item.h = 0xAAAAAAAA;
 		item.i = 0xAAAAAAAA; // this could have another eight digits on linux, but no real point
-		item.j = 0xAAAAAAAAAAAAA000; // rounded due to float precision
-		// json doesn't support hex, so this just ends up with random-looking numbers
-		assert_eq(jsonserialize(item), "{\"f\":170,\"g\":43690,\"h\":2863311530,\"i\":2863311530,\"j\":1.2297829382473032e+19}");
+		item.j = 0xAAAAAAAAAAAAAAAA; // json doesn't support hex, so this just ends up as random-looking numbers
+		assert_eq(jsonserialize(item), "{\"f\":170,\"g\":43690,\"h\":2863311530,\"i\":2863311530,\"j\":12297829382473034410}");
 	}
 	
 	{
@@ -428,12 +427,12 @@ test("JSON deserialization", "json", "serialize")
 	}
 	
 	{
-		ser7 item = jsondeserialize<ser7>("{\"f\":170,\"g\":43690,\"h\":2863311530,\"i\":2863311530,\"j\":1.2297829382473032e+19}");
+		ser7 item = jsondeserialize<ser7>("{\"f\":170,\"g\":43690,\"h\":2863311530,\"i\":2863311530,\"j\":12297829382473034410}");
 		assert_eq(item.f, 0xAA);
 		assert_eq(item.g, 0xAAAA);
 		assert_eq(item.h, 0xAAAAAAAA);
 		assert_eq(item.i, 0xAAAAAAAA);
-		assert_eq(item.j, 0xAAAAAAAAAAAAA000);
+		assert_eq(item.j, 0xAAAAAAAAAAAAAAAA);
 	}
 	
 	{

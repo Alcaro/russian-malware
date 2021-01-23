@@ -123,9 +123,6 @@ static void ssltest(function<socket*(socket* inner, cstring domain, runloop* loo
 #ifdef ARLIB_SSL_OPENSSL
 test("SSL client, OpenSSL",  "tcp", "ssl") { ssltest(socket::wrap_ssl_raw_openssl, socket::wrap_ssl_raw_openssl_noverify); }
 #endif
-#ifdef ARLIB_SSL_GNUTLS
-test("SSL client, GnuTLS",   "tcp", "ssl") { ssltest(socket::wrap_ssl_raw_gnutls, NULL); }
-#endif
 #ifdef ARLIB_SSL_SCHANNEL
 test("SSL client, SChannel", "tcp", "ssl") { ssltest(socket::wrap_ssl_raw_schannel, socket::wrap_ssl_raw_schannel_noverify); }
 #endif

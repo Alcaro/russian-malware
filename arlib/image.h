@@ -1,11 +1,10 @@
 #pragma once
 #include "global.h"
 #include "array.h"
-#include "string.h"
 #include "endian.h"
 
 enum imagefmt {
-	// the manipulation functions are only implemented for ?rgb8888 formats, others are for storage only
+	// the manipulation functions are only implemented for ?rgb8888 formats, 16bit and _by are for storage only
 	
 	ifmt_none,
 	
@@ -17,38 +16,36 @@ enum imagefmt {
 	ifmt_bgra8888_by,
 	
 	// for these, 'pixels' is an array of native-endian u16 or u32, highest bit listed first
-	ifmt_xrgb8888,
-	ifmt_0rgb8888,
-	// ifmt_argb8888, // same as one of the _by formats
-	ifmt_bargb8888, //'boolean argb'; like argb8888, but only a=00 and a=FF are allowed, anything else is undefined behavior
+	ifmt_xrgb8888, //x bits can be anything and should be ignored (may be copied to other x slots, anything else is illegal)
+	ifmt_0rgb8888, //0 bits are always 0
+	// ifmt_argb8888, //a=1 is opaque; the rgb values are not premultiplied, a=0 rgb!=0 is allowed (alias for one of the _by formats)
+	ifmt_bargb8888, // 'boolean argb'; like argb8888, but only a=00 and a=FF are allowed, anything else is undefined behavior
+	// there is no 1rgb8888 format, that should be xrgb
 	
 	ifmt_rgb565,
-	ifmt_xrgb1555, //x bits can be anything and should be ignored (may be copied to other x slots, anything else is illegal)
-	ifmt_0rgb1555, //0 bits are always 0
-	ifmt_argb1555, //a=1 is opaque; the rgb values are not premultiplied, and a=0 rgb!=0 is allowed
+	ifmt_xrgb1555,
+	ifmt_0rgb1555,
+	ifmt_argb1555,
 	// ifmt_bargb1555 = ifmt_argb1555, // there are only two possible alphas for 1555, so argb and bargb are the same
 	
 	// alias formats are down here because C enums are 'special'
 	ifmt_argb8888 = (END_LITTLE ? ifmt_bgra8888_by : ifmt_argb8888_by),
 	ifmt_bargb1555 = ifmt_argb1555,
 	
-	//an image is considered 'degenerate' if the full power of the format isn't used
-	//for example, an argb with all a=1 is a degenerate xrgb (and a degenerate bargb), and the format can safely be set to xrgb
+	// an image is considered 'degenerate' if the full power of the format isn't used
+	// for example, an argb with all a=FF is a degenerate xrgb (and a degenerate bargb), and should probably be xrgb instead
 	
-	//TODO: find a way to ensure unused formats are optimized out
+	// TODO: find a way to ensure unused formats are optimized out
 };
 
-struct font;
+// image does not own its storage. If you need memory management, use oimage.
 struct image {
-	image() = default;
-	NO_COPY(image);
-	
 	uint32_t width;
 	uint32_t height;
 	
 	imagefmt fmt;
-	size_t stride; // Distance, in bytes, between the start positions of each row in 'pixels'. The first row starts at *pixels.
-	//Must be a multiple of byteperpix(fmt).
+	uint32_t stride; // Distance, in bytes, between the start positions of each row in 'pixels'. The first row starts at *pixels.
+	//Must be a multiple of byteperpix(fmt), and must be positive.
 	//If stride isn't equal to width * byteperpix(fmt), the padding contains undefined data. Don't access it.
 	//Padding, if existent, is not guaranteed to exist past the last scanline; don't try to copy height*stride bytes.
 	//The image is not necessarily writable. It's the caller's job to keep track of that.
@@ -61,9 +58,6 @@ struct image {
 	};
 	static_assert(sizeof(void*) == sizeof(uint32_t*));
 	
-	//Contains nothing useful, it's for internal memory management only.
-	autofree<uint8_t> storage;
-	
 	//Converts the image to the given image format.
 	void convert(imagefmt newfmt);
 	//Like the above, but compile-time fixed formats, to allow dead-code elimination of unused conversions. fmt must be equal to src.
@@ -73,12 +67,6 @@ struct image {
 	//Attempting to create impossible values (by, for example, rendering ARGB a=80 into BARGB a=0) is undefined behavior.
 	//If source overlaps target, undefined behavior. However, they don't need to be distinct allocations.
 	void insert(int32_t x, int32_t y, const image& other);
-	//Inserts the given image, with every pixel turned into a scalex*scaley rectangle, nearest neighbor.
-	//Can also mirror the image, by using negative scalex/scaley. Zero is not allowed.
-	//WARNING: Does not blend alpha properly, it just copies the source pixels. Do not use with 0rgb target and non-0rgb source.
-	//WARNING: Does not check for overflow. If the scaled source doesn't fit in the target,
-	//         or the target coordinate is negative, undefined behavior.
-	void insert_scale_unsafe(int32_t x, int32_t y, const image& other, int32_t scalex, int32_t scaley);
 	//Inserts the subset of the image starting at (offx,offy) continuing for (width,height) pixels.
 	//If that's outside 'other', undefined behavior.
 	void insert_sub(int32_t x, int32_t y, const image& other, uint32_t offx, uint32_t offy, uint32_t width, uint32_t height)
@@ -98,20 +86,6 @@ struct image {
 	//If that yields a noninteger number of repetitions, the top/left parts are repeated once more.
 	void insert_tile_with_border(int32_t x, int32_t y, uint32_t width, uint32_t height,
 	                             const image& other, uint32_t x1, uint32_t x2, uint32_t y1, uint32_t y2);
-	
-	
-	//If xspace is nonzero, that many pixels (not multiplied by scale) are added after every space.
-	//If align is true, a letter may only start at x + (integer * fnt.scale). If false, anywhere is fine.
-	//Returns the width (in pixels) of the widest line.
-	uint32_t insert_text(int32_t x, int32_t y, const font& fnt, cstring text, float xspace = 0, bool align = false);
-	//If the line is at least width1 pixels, spaces are resized such that the line is approximately width2 pixels.
-	//If the line is longer than width2, it overflows.
-	void insert_text_justified(int32_t x, int32_t y, uint32_t width1, uint32_t width2,
-	                           const font& fnt, cstring text, bool align = false);
-	//Automatically inserts linebreaks to ensure everything stays within the given width.
-	//Wrapped lines are justified, non-wrapped lines are left-aligned.
-	void insert_text_wrap(int32_t x, int32_t y, uint32_t width, const font& fnt, cstring text);
-	
 	
 	//Input color is argb8888 no matter what format the input image is.
 	//WARNING: Does not check for overflow.
@@ -141,8 +115,6 @@ struct image {
 		return 1 + ((magic >> (fmt*2)) & 3);
 	}
 	
-	//0x? and ?x0 images are undefined behavior. The pixels are uninitialized.
-	void init_new(uint32_t width, uint32_t height, imagefmt fmt);
 	//If the input image changes after calling one of these three, the callee changes too. Probably better to not do that.
 	void init_ptr(const void * pixels, uint32_t width, uint32_t height, size_t stride, imagefmt fmt)
 	{
@@ -169,50 +141,41 @@ struct image {
 		this->width = width;
 		this->height = height;
 	}
+	
+	
+	// Various parts of the PNG decoder.
+	// Read the source code before calling, some of them have some quite peculiar requirements.
+	// Or even better, don't call them at all, they're very situational.
+	static bool png_defilter(uint8_t * out, size_t out_stride, const uint8_t * in, int bytes_per_pixel, size_t width, size_t height);
+	template<int color_type> void png_unpack_rgb(const uint8_t* source, size_t srcstride) const;
+	template<int bpp_in> bool png_unpack_plte(const uint8_t* source, size_t srcstride, const uint32_t * palette, uint32_t pallen) const;
+	
+	//Also used internally.
+	template<imagefmt src, imagefmt dst>
+	static void convert_scanline(void* out, const void* in, size_t npx);
+};
+
+struct oimage : public image {
+	autofree<uint8_t> storage;
+	
+	//0x? and ?x0 images are undefined behavior. The pixels are uninitialized.
+	void init_new(uint32_t width, uint32_t height, imagefmt fmt);
+	
 	//Scaling algorithm is nearest neighbor. Only integral factors are allowed, but negative is fine.
 	//other may not be equal to *this, and may not be a part of *this. More technically, *this may not own the memory of other.
 	//0x? and ?x0 images are undefined behavior, so neither scalex nor scaley can be zero.
 	void init_clone(const image& other, int32_t scalex = 1, int32_t scaley = 1);
 	
 	//Calls every init_decode_<format> until one succeeds. If none does, returns false; if so, every member should be considered invalid.
-	bool init_decode(arrayview<uint8_t> data);
+	bool init_decode(bytesr data);
 	
 	//Always emits valid argb8888. May (but is not required to) report bargb or xrgb instead, if it's degenerate.
 	//Always emits a packed image, where stride = width*byteperpix.
-	bool init_decode_png(arrayview<uint8_t> pngdata);
+	bool init_decode_png(bytesr pngdata);
 	
 	//Calls zero or more platform-specific external libraries to decode the image.
-	bool init_decode_extern(arrayview<uint8_t> data);
+	bool init_decode_extern(bytesr data);
 	
 	//Calls init_decode(). If that fails, tries init_decode_extern().
-	bool init_decode_permissive(arrayview<uint8_t> data);
-	
-	//Used internally.
-	template<imagefmt src, imagefmt dst>
-	static void convert_scanline(void* out, const void* in, size_t npx);
-};
-
-struct font {
-	//one byte per row, maximum 8 rows
-	//byte&1 is leftmost pixel, byte&0x80 is rightmost
-	//1 is solid, 0 is transparent
-	uint8_t characters[128][8];
-	uint8_t width[128];
-	uint8_t height;
-	
-	uint32_t color = 0x000000; // Top byte is ignored.
-	uint8_t scale = 1;
-	
-	//Called if told to render characters 00-1F, except 0A (LF). Can draw whatever it wants, or change the font color.
-	//If it draws, and the drawn item should have a width, width[ch] should be set as appropriate.
-	//This callback may not set it, that'd confuse measure().
-	function<void(image& out, const font& fnt, int32_t x, int32_t y, uint8_t ch)> fallback;
-	
-	//Expects spacesize in pixels, and returns the same. text may not contain linebreaks. Does not call the fallback.
-	uint32_t measure(cstring text, float spacesize = 0);
-	
-	//The image must be pure black and white, containing 16x6 tiles of equal size.
-	//Each tile must contain one left-aligned symbol, corresponding to its index in the ASCII table.
-	//Each tile must be 8x8 or smaller. Maximum allowed image size is 128x48.
-	void init_from_image(const image& img);
+	bool init_decode_permissive(bytesr data);
 };

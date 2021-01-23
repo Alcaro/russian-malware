@@ -8,6 +8,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+// TODO: replace epoll with normal poll, epoll doesn't help at our small scale
+
 namespace {
 class runloop_linux : public runloop {
 public:
@@ -19,7 +21,7 @@ public:
 	
 	struct fd_cbs {
 #ifdef ARLIB_TESTRUNNER
-		char* valgrind_dummy; // an uninitialized malloc(1), used to print stack trace of the guilty allocation
+		char* valgrind_dummy; // an unused malloc(1), used as a stack trace that can be printed by double freeing
 #endif
 		function<void(uintptr_t)> cb_read;
 		function<void(uintptr_t)> cb_write;

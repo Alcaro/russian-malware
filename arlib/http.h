@@ -105,7 +105,7 @@ public:
 #endif
 	
 	//Multiple requests may be sent to the same object. This will make them use HTTP Keep-Alive.
-	//The requests must be to the same protocol-domain-port tuple (note that http://example.com/ is treated as port 0, not 80).
+	//The requests must be to the same protocol-domain-port tuple. http://example.com/ does not count as same as http://example.com:80/
 	//Failures are reported in the callback. Results are not guaranteed to be reported in any particular order.
 	void send(req q, function<void(rsp)> callback);
 	//If the HTTP object is currently trying to send a request with this ID, it's cancelled.
@@ -114,7 +114,7 @@ public:
 	//Returns whether anything happened.
 	bool cancel(uintptr_t id);
 	
-	//Discards any unfinished requests, errors, and similar.
+	//Cancels and discards every unfinished operation, and resets this object to its freshly constructed state.
 	void reset()
 	{
 		lasthost = location();
@@ -132,9 +132,10 @@ public:
 		string path;
 	};
 	//If 'relative' is false, 'out' can be uninitialized. If true, must be fully valid. On failure, the output location is undefined.
-	//WARNING: HTTP 3xx redirects preserve #fragments unless overridden; <a href> deletes them. This one implements the HTTP 3xx rule.
-	//ALSO WARNING: If the returned port is 0, caller is responsible for filling in the default port for that scheme.
-	static bool parseUrl(cstring url, bool relative, location& out);
+	//If the base URL has a #fragment, and the new one does not, the #fragment is preserved. This matches HTTP 3xx but not <a href>.
+	//parse_url does not know about default ports. If the returned port is -1, caller is responsible for substituting a suitable default.
+	static bool parse_url(cstring url, bool relative, location& out);
+	// TODO: create function to open socket, make http and websocket use it
 	
 private:
 	void resolve(size_t id);
@@ -144,8 +145,6 @@ private:
 		resolve(id);
 	}
 	bool resolve_err_f(size_t id, int err) { resolve_err_v(id, err); return false; }
-	
-	void sock_cancel() { sock = NULL; }
 	
 	//if tosend is empty, adds requests[active_req] to tosend, then increments active_req; if not empty, does nothing
 	//also sets this->location, if not set already
@@ -203,7 +202,7 @@ public:
 		form()
 		{
 			uint8_t rand[16]; // 128 bits of random ought to be enough for everyone
-			random_t::get_seed(&rand, sizeof(rand));
+			rand_secure(&rand, sizeof(rand));
 			boundary = "--ArlibFormBoundary"+tostringhex(rand); // max 70 characters allowed, not counting the two leading hyphens
 		}
 		

@@ -140,16 +140,17 @@ if there is no line, return finish
 static cstring cut(cstring& input, int skipstart, int cut, int skipafter)
 {
 	cstring ret = input.substr(skipstart, cut);
-	input = input.substr(cut+skipafter, ~0);
+	input = input.substr(min(cut+skipafter, input.length()), ~0);
 	return ret;
 }
 
 //returns size of leading whitespace and comments
 static size_t bml_size_white(const cstring& data)
 {
-	int i = 0;
-	while (data[i]==' ' || data[i]=='\t') i++;
-	if (data[i]=='#' || (data[i]=='/' && data[i+1]=='/')) return data.length();
+	size_t i = 0;
+	while (i < data.length() && (data[i]==' ' || data[i]=='\t')) i++;
+	if (i < data.length() && data[i]=='#') return data.length();
+	if (i+1 < data.length() && data[i]=='/' && data[i+1]=='/') return data.length();
 	else return i;
 }
 
@@ -168,18 +169,22 @@ static bool bml_parse_inline_node(cstring& data, cstring& node, bool& hasvalue, 
 	}
 	
 	size_t nodelen = nodestart;
-	while (isalnum(data[nodelen]) || data[nodelen]=='-' || data[nodelen]=='.') nodelen++;
+	while (nodelen < data.length() && (isalnum(data[nodelen]) || data[nodelen]=='-' || data[nodelen]=='.')) nodelen++;
 	if (nodestart == nodelen)
 	{
 		value = "Invalid node name";
-		while (data[nodelen]!='\n' && data[nodelen]!='\0') nodelen++;
+		while (nodelen < data.length() && data[nodelen]!='\n') nodelen++;
 		data = data.substr(nodelen, ~0);
 		return false;
 	}
 	node = cut(data, nodestart, nodelen, 0);
+	if (!data)
+	{
+		hasvalue = false;
+		return true;
+	}
 	switch (data[0])
 	{
-		case '\0':
 		case '\t':
 		case ' ':
 		{
@@ -189,41 +194,33 @@ static bool bml_parse_inline_node(cstring& data, cstring& node, bool& hasvalue, 
 		case ':':
 		{
 			hasvalue = true;
-			int valstart = 1;
-			while (data[valstart]==' ' || data[valstart]=='\t') valstart++;
+			size_t valstart = 1;
+			while (valstart < data.length() && (data[valstart]==' ' || data[valstart]=='\t')) valstart++;
 			value = data.substr(valstart, ~0);
 			data = "";
 			return true;
 		}
 		case '=':
 		{
-			if (data[1]=='"')
+			if (data.length() >= 2 && data[1]=='"')
 			{
 				hasvalue = true;
-				int valend = 2;
-				while (data[valend]!='"' && data[valend]!='\0') valend++;
-				if (data[valend]!='"' || (data[valend+1]!=' ' && data[valend+1]!='\t' && data[valend+1]!='\0'))
-				{
-					while (data[valend]!='\0') valend++;
-					data = data.substr(valend, ~0);
-					value = "Broken quoted value";
-					return false;
-				}
+				size_t valend = 2;
+				while (valend < data.length() && data[valend]!='"') valend++;
+				if (valend == data.length() || data[valend]!='"')
+					goto bad_quote;
+				if (valend+1 < data.length() && data[valend+1]!=' ' && data[valend+1]!='\t')
+					goto bad_quote;
 				value = cut(data, 2, valend, 1);
 				return true;
 			}
 			else
 			{
 				hasvalue = true;
-				int valend = 0;
-				while (data[valend]!=' ' && data[valend]!='"' && data[valend]!='\0') valend++;
-				if (data[valend]=='"')
-				{
-					while (data[valend]!='\0') valend++;
-					data = data.substr(valend, ~0);
-					value = "Broken quoted value";
-					return false;
-				}
+				size_t valend = 0;
+				while (valend < data.length() && data[valend]!=' ' && data[valend]!='"') valend++;
+				if (valend < data.length() && data[valend]=='"')
+					goto bad_quote;
 				value = cut(data, 1, valend, 0);
 				return true;
 			}
@@ -232,36 +229,26 @@ static bool bml_parse_inline_node(cstring& data, cstring& node, bool& hasvalue, 
 			value = "Invalid node suffix";
 			return false;
 	}
-}
-
-static bool isendl(char ch)
-{
-	//this 32 is a perf hack
-	if (LIKELY(ch>=32)) return false;
-	return (ch=='\r' || ch=='\n' || ch=='\0');
+	if (false)
+	{
+	bad_quote:
+		data = "";
+		value = "Broken quoted value";
+		return false;
+	}
 }
 
 static size_t linelen(const cstring& input)
 {
-	//pointers are generally a bad idea, but this is such a hotspot it's worth it
-	const uint8_t * inputraw = input.bytes().ptr();
 	size_t nlpos = 0;
-	if (input.bytes_hasterm())
-	{
-		while (!isendl(inputraw[nlpos])) nlpos++;
-	}
-	else
-	{
-		size_t inputlen = input.length();
-		while (nlpos < inputlen && !isendl(inputraw[nlpos])) nlpos++;
-	}
+	while (nlpos < input.length() && input[nlpos]!='\n' && input[nlpos]!='\r') nlpos++;
 	return nlpos;
 }
 
 static cstring cutline(cstring& input)
 {
 	size_t nlpos = linelen(input);
-	return cut(input, 0, nlpos, (input[nlpos]=='\r') ? 2 : (input[nlpos]=='\n') ? 1 : 0);
+	return cut(input, 0, nlpos, (nlpos==input.length()) ? 0 : (input[nlpos]=='\r') ? 2 : (input[nlpos]=='\n') ? 1 : 0);
 }
 
 inline bool bmlparser::getline(bool allow_empty)
@@ -359,12 +346,12 @@ bmlparser::event bmlparser::next()
 	if (!hasvalue)
 	{
 		if (!getline(false)) return { error, "", "Mixed tabs and spaces" };
-		if (m_thisline[0] == ':')
+		if (m_thisline && m_thisline[0] == ':')
 		{
 			size_t inner_indent = m_indent.length();
 			m_tmp_value = m_thisline.substr(1, ~0);
 			if (!getline(false)) return { error, "", "Mixed tabs and spaces" };
-			while (m_thisline[0] == ':')
+			while (m_thisline && m_thisline[0] == ':')
 			{
 				if (inner_indent != m_indent.length()) return { error, "", "Multi-line values must have constant indentation" };
 				m_tmp_value += "\n" + m_thisline.substr(1, ~0);
@@ -619,6 +606,7 @@ static const char * test6 =
 "//x\n"
 "i=j//k\n"
 "\n"
+"\r" // ensure \r\n detector doesn't do anything silly
 ;
 static bmlparser::event test6e[]={
 	{ e_enter, "a" }, { e_exit },
@@ -704,6 +692,7 @@ test("BML parser", "string,array", "bml")
 	testcall(testbml_error("a a#a"));       // nor here
 	testcall(testbml_error("a//a"));        // nor this kind of comments
 	testcall(testbml_error("a a//a"));      // nor here
+	testcall(testbml_error("a /"));         // incomplete comment, not allowed
 	testcall(testbml_error("a=\"a\"#a\"")); // no quote allowed in eq, that # isn't a comment
 	testcall(testbml_error("a=\"a\"#a"));   // not allowed like this either
 	

@@ -182,15 +182,8 @@ void argparse::parse_post()
 	}
 }
 
-static void arlib_init_shared()
-{
-	srand(time(NULL));
-}
-
 void arlib_init(argparse& args, char** argv)
 {
-	arlib_init_shared();
-	
 #ifndef ARGUI_NONE
 	_arlib_init_gui(args, argv);
 #else
@@ -200,8 +193,6 @@ void arlib_init(argparse& args, char** argv)
 
 void arlib_init_manual_args(int* argc, char*** argv)
 {
-	arlib_init_shared();
-	
 #ifndef ARGUI_NONE
 	_arlib_init_gui_manual_args(argc, argv);
 #endif
@@ -209,8 +200,6 @@ void arlib_init_manual_args(int* argc, char*** argv)
 
 void arlib_init(nullptr_t, char** argv)
 {
-	arlib_init_shared();
-	
 #ifndef ARGUI_NONE
 	_arlib_init_gui(argv);
 #else
@@ -319,6 +308,9 @@ static void test_getopt(bool a, bool b, const char * c, const char * nonopts, Ar
 	args.add("", &realnonopts);
 	
 	args.parse(argvp);
+	
+	if (!c) c = "";
+	if (!nonopts) nonopts = "";
 	
 	assert_eq(ra, a);
 	assert_eq(rb, b);

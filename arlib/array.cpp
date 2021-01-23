@@ -215,6 +215,22 @@ test("array", "", "array")
 		for (int i : range(50))
 			x.insert(i, x[i]); // passes if Valgrind is happy
 	}
+	
+	{
+		array<int> n;
+		n.resize(32);
+		n = n.skip(32);
+		assert_eq(n.size(), 0);
+	}
+	
+	{
+		array<int> a;
+		a.resize(32);
+		array<int> b;
+		test_nomalloc {
+			b = std::move(a);
+		}
+	}
 }
 
 
@@ -268,39 +284,25 @@ test("array<bool>", "", "array")
 		array<bool> b;
 		b.resize(8);
 		b[0] = true;
-		b[1] = true;
+		b[1] = false;
 		b[2] = true;
 		b[3] = true;
-		b[4] = true;
+		b[4] = false;
 		b[5] = true;
 		b[6] = true;
 		b[7] = true;
+		assert_eq(tostring(b), "10110111");
 		
 		b.reset();
 		b.resize(16);
+		assert_eq(tostring(b), "0000000000000000");
 	}
 	
 	{
 		array<bool> b;
 		b.resize(65);
 		b.resize(64);
-		assert_eq(b.size(), 64);
-	}
-	
-	{
-		array<int> n;
-		n.resize(32);
-		n = n.skip(32);
-		assert_eq(n.size(), 0);
-	}
-	
-	{
-		array<int> a;
-		a.resize(32);
-		array<int> b;
-		test_nomalloc {
-			b = std::move(a);
-		}
+		assert_eq(tostring(b), "0000000000000000000000000000000000000000000000000000000000000000");
 	}
 }
 #endif

@@ -123,7 +123,6 @@ class runonce : nomove {
 	int futex = st_uninit;
 public:
 	void run(function<void()> fn);
-	// pthread_once would make sense on other Unix, but it only has a void(*)(), no way to pass userdata
 #elif defined(_WIN32) && _WIN32_WINNT >= _WIN32_WINNT_LONGHORN
 	INIT_ONCE once = INIT_ONCE_STATIC_INIT;
 	static BOOL CALLBACK wrap(INIT_ONCE* once, void* param, void** context)
@@ -139,13 +138,42 @@ public:
 #else
 	enum { st_uninit, st_busy, st_done };
 	uintptr_t m_st = st_uninit; // can be the above, or a casted pointer
-	// pthread_once() exists, but only takes a single void(*)(), no userdata; better reinvent it
 	
 public:
 	void run(function<void()> fn);
 #endif
 };
-#define RUN_ONCE(fn) do { static runonce once; once.run(fn); } while(0);
+// A simplified runonce that doesn't support the function<> class, just function pointers without userdata
+// In exchange, it's simpler.
+class runonce_simple : nomove {
+#if defined(__unix__)
+	// can't use pthread_once_t in the normal runonce, it has no userdata
+	// but it's a perfect match for this one
+	pthread_once_t once = PTHREAD_ONCE_INIT;
+public:
+	void run(funcptr fn) { pthread_once(&once, fn); }
+#elif defined(_WIN32) && _WIN32_WINNT >= _WIN32_WINNT_LONGHORN
+	INIT_ONCE once = INIT_ONCE_STATIC_INIT;
+	static BOOL CALLBACK wrap(INIT_ONCE* once, void* param, void** context)
+	{
+		((funcptr)param)();
+		return TRUE;
+	}
+public:
+	void run(funcptr fn)
+	{
+		InitOnceExecuteOnce(&once, wrap, (void*)fn, NULL); // parameter order is wrong in MSDN, check Wine source before refactoring
+	}
+#else
+	enum { st_uninit, st_busy, st_done };
+	uintptr_t m_st = st_uninit; // can be the above, or a casted pointer
+	// pthread_once() exists, but only takes a single void(*)(), no userdata; better reinvent it
+	
+public:
+	void run(funcptr fn);
+#endif
+};
+#define RUN_ONCE(fn) do { static runonce_simple once; once.run(fn); } while(0);
 #define RUN_ONCE_FN(name) static void name##_core(); static void name() { RUN_ONCE(name##_core); } static void name##_core()
 
 
@@ -182,7 +210,7 @@ void thread_split(unsigned int count, function<void(unsigned int id)> work);
 #include <sys/syscall.h>
 
 //spurious wakeups are possible
-//return can tell if the wakeup is bogus, but it's just as easy to check uaddr
+//return can tell if the wakeup is bogus, but it's better to check uaddr
 static inline int futex_sleep_if_eq(int* uaddr, int val, const struct timespec * timeout = NULL)
 {
 	return syscall(__NR_futex, uaddr, FUTEX_WAIT_PRIVATE, val, timeout);
@@ -212,7 +240,7 @@ public:
 	void release() {}
 	void wait() {}
 };
-#define RUN_ONCE(fn) do { static bool first=true; if (first) fn(); first=false; } while(0)
+#define RUN_ONCE(fn) do { static bool first=true; if (first) { first=false; fn(); } } while(0)
 #define RUN_ONCE_FN(name) static void name##_core(); static void name() { RUN_ONCE(name##_core); } static void name##_core()
 #define synchronized(mutex) if (true)
 static inline size_t thread_get_id() { return 0; }

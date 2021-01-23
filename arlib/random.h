@@ -12,123 +12,42 @@
 extern HCRYPTPROV rand_seed_prov;
 #endif
 
-// this is PCG-XSH-RR with 64-bit state and 32-bit output, adapted from wikipedia
-// https://en.wikipedia.org/wiki/Permuted_congruential_generator
-// could use Romu instead http://www.romu-random.org/, but I like how PCG's state is just 64 bits
-class random_pcg : nocopy {
-	uint64_t state; // wikipedia initializes this to 0x4d595df4d0f33173
-	
-	static const uint64_t multiplier = 6364136223846793005;
-	static const uint64_t increment  = 1442695040888963407;
-	
-	//optimizes to a single 'ror' instruction on x86, and similar on other archs - even the &31 disappears
-	//(in fact, it needs the &31 - without it, gcc emits one opcode per operator)
-	static uint32_t ror32(uint32_t x, unsigned bits)
-	{
-		return (x>>bits) | (x<<(-bits&31));
-	}
-public:
-	uint32_t rand32()
-	{
-		uint64_t prev = state;
-		state = state*multiplier + increment;
-		return ror32((prev^(prev>>18))>>27, prev>>59);
-	}
-	uint64_t rand64()
-	{
-		return ((uint64_t)rand32() << 32) | rand32();
-	}
-	
-	void seed(uint64_t seed)
-	{
-		state = seed+increment;
-		rand32();
-	}
-};
-
-//recommended use:
-//random_t rand;
-//int foo = rand()%42;
-//this is not biased towards lower results, rand() returns an object with overloaded operator%
-class random_t : public random_pcg {
-	class randresult {
-		random_t& src;
-	public:
-		randresult(random_t& src) : src(src) {}
-		uint32_t operator%(uint32_t other)
-		{
-			return src.rand_mod(other);
-		}
-		uint32_t operator%(int other)
-		{
-			return src.rand_mod((uint32_t)other); // gives bad answers if given negative input, but there are no good answers for that
-		}
-		uint64_t operator%(uint64_t other)
-		{
-			return src.rand_mod(other);
-		}
-		operator uint32_t() { return src.rand32(); }
-		operator uint64_t() { return src.rand64(); }
-	};
-public:
-	
-	// Max size is 256. Despite the return value, it always succeeds.
-	static bool get_seed(void* out, size_t n)
-	{
+// Max size is 256. Despite the return value, it always succeeds.
+static bool rand_secure(void* out, size_t n)
+{
 #if defined(__linux__)
-		return getentropy(out, n) == 0; // cannot fail unless kernel < 3.17 (october 2014), bad pointer, or size > 256
+	return getentropy(out, n) == 0; // can't fail unless kernel < 3.17 (oct 2014), bad pointer, size > 256, or malicious seccomp/ptrace
 #elif defined(_WIN32) && _WIN32_WINNT >= _WIN32_WINNT_WIN7
-		return BCryptGenRandom(nullptr, (uint8_t*)out, n, BCRYPT_USE_SYSTEM_PREFERRED_RNG) == 0;
+	return BCryptGenRandom(nullptr, (uint8_t*)out, n, BCRYPT_USE_SYSTEM_PREFERRED_RNG) == 0;
 #elif defined(_WIN32) && _WIN32_WINNT < _WIN32_WINNT_WIN7
-		return CryptGenRandom(rand_seed_prov, n, (uint8_t*)out);
+	return CryptGenRandom(rand_seed_prov, n, (uint8_t*)out);
 #else
 	#error unsupported
 #endif
-	}
+}
+
+
+template<bool is_global = false>
+class random_base_t : nocopy {
+protected:
+	uint64_t state;
+public:
+	void seed() { rand_secure(&state, sizeof(state)); }
+	void seed(uint64_t num) { state = num; rand32(); }
 	
-	random_t()
-	{
-		uint64_t seed;
-		get_seed((uint8_t*)&seed, sizeof(seed));
-		this->seed(seed);
-	}
-	random_t(uint64_t seed) // Not recommended unless you need predictable output.
-	{
-		this->seed(seed);
-	}
+	uint32_t rand32();
+	uint64_t rand64();
+	uint32_t rand_mod(uint32_t limit);
+	uint64_t rand_mod(uint64_t limit);
 	
-	randresult operator()() { return randresult(*this); }
-	uint32_t rand_mod(uint32_t limit)
-	{
-		//if RAND_MAX+1 is not a multiple of 'limit', rand() mod limit becomes biased towards lower values
-		//to avoid that, find the highest multiple of limit <= RAND_MAX+1,
-		//and if the returned value is higher than that, discard it and create a new one
-		//alternatively and equivalently, that many values can be discarded from the lower end of the results
-		//the size of the discarded section must be (RAND_MAX+1) mod limit, and discarding low ones is easier
-		
-		//unfortunatly, RAND_MAX+1 is 2^32, which won't fit in a uint32
-		//however, for a >= b, a%b equals (a-b)%b, and UINT32_MAX+1 is always greater than limit
-		//the extra -1 +1 needed to avoid an overflow can also be avoided, by using how unsigned integer overflow is defined
-		//so the calculation needed is simply
-		uint32_t minvalid = ((uint32_t)-limit) % limit;
-		
-		while (true)
-		{
-			uint32_t candidate = rand32();
-			if (candidate < minvalid) continue;
-			return candidate%limit;
-		}
-	}
-	uint64_t rand_mod(uint64_t limit)
-	{
-		if (LIKELY(limit <= 0xFFFFFFFF)) return rand_mod((uint32_t)limit);
-		uint64_t minvalid = ((uint64_t)-limit) % limit;
-		
-		while (true)
-		{
-			uint64_t candidate = rand64();
-			if (candidate < minvalid) continue;
-			return candidate%limit;
-		}
-	}
+	uint32_t operator()(uint32_t mod) { return rand_mod(mod); }
+	uint64_t operator()(uint64_t mod) { return rand_mod(mod); }
+	// gives bad answers for negative input, but there are no good answers for that
+	uint32_t operator()(int mod) { return rand_mod((uint32_t)mod); }
 };
+class random_t : public random_base_t<false> {
+public:
+	random_t() { seed(); }
+	random_t(uint64_t num) { seed(num); } // Not recommended unless you need predictable output.
+};
+extern random_base_t<true> g_rand; // g_rand is thread safe, random_t is not

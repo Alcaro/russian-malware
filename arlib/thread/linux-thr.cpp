@@ -9,7 +9,7 @@ void runonce::run(function<void()> fn)
 	if (LIKELY(st == st_done)) return;
 	if (st == st_uninit)
 	{
-		st = lock_cmpxchg<lock_loose>(&futex, st_uninit, st_busy);
+		st = lock_cmpxchg<lock_loose, lock_loose>(&futex, st_uninit, st_busy);
 		if (st == st_uninit)
 		{
 			fn();
@@ -23,7 +23,7 @@ void runonce::run(function<void()> fn)
 	
 	// don't bother spinning, just sleep immediately
 	
-	lock_cmpxchg<lock_loose>(&futex, st_busy, st_busy_waiters); // ignore whether this succeeds
+	lock_cmpxchg<lock_loose, lock_loose>(&futex, st_busy, st_busy_waiters); // ignore whether this succeeds
 	do { futex_sleep_if_eq(&futex, st_busy_waiters); }
 	while (lock_read<lock_acq>(&futex) == st_busy_waiters);
 }

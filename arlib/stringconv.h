@@ -97,8 +97,7 @@ template<typename T> T try_fromstring(cstring s, T&& def)
 }
 
 
-template<typename T>
-string tostring_dbg(const T& item) { return tostring(item); }
+template<typename T> string tostring_dbg(const T& item) { return tostring(item); }
 
 template<typename T>
 string tostring_dbg(const arrayview<T>& item)
