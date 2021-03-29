@@ -4,8 +4,9 @@
 #include "test.h"
 #include "file.h"
 
-static FILE* log_file;
+static FILE* log_file = NULL;
 static mutex log_mut;
+static int log_count = 0;
 
 static void debug_log_raw(const char * text) // log_mut must be locked when calling this
 {
@@ -55,6 +56,9 @@ void debug_log_stack(const char * text)
 {
 	synchronized(log_mut)
 	{
+		if (log_count > 20) return;
+		log_count++;
+		
 		debug_log_raw(text);
 		
 		void* addrs[20];
@@ -108,6 +112,9 @@ void debug_log_stack(const char * text)
 {
 	synchronized(log_mut)
 	{
+		if (log_count > 20) return;
+		log_count++;
+		
 		debug_log_raw(text);
 		
 		void* addrs[20];
@@ -145,7 +152,16 @@ void debug_log_stack(const char * text)
 }
 #endif
 
-void debug_log(const char * text) { synchronized(log_mut) { debug_log_raw(text); } }
+void debug_log(const char * text)
+{
+	synchronized(log_mut) { 
+		if (log_count > 20) return;
+		log_count++;
+		
+		debug_log_raw(text);
+	}
+}
+
 void debug_warn(const char * text) { if (!debug_break()) debug_log(text); }
 void debug_fatal(const char * text) { if (!debug_break()) { debug_log(text); } abort(); }
 void debug_warn_stack(const char * text) { if (!debug_break()) debug_log_stack(text); }

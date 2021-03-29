@@ -1,4 +1,5 @@
 #pragma once
+#include "../file.h"
 #include "../process.h"
 #include "../set.h"
 
@@ -110,7 +111,7 @@ public:
 	//Created files will never exist on disk (except maybe in swap).
 	void fs_grant_tmp(cstring path, int max_size) { fs.grant_tmp(path, max_size); }
 	
-	void fs_grant_cwd(int max_write = 0) { fs_grant_cwd("./", max_write); }
+	void fs_grant_cwd(int max_write = 0) { fs_grant_cwd(file::cwd(), max_write); }
 	void fs_grant_cwd(cstring real, int max_write = 0) { fs_grant_at(real, "/@CWD/", max_write); }
 	
 	//WARNING: If the parent directory of a fs_hide() target is child-accessible, the hidden directory may be visible too.

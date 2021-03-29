@@ -342,8 +342,8 @@ public:
 		else return resolve(parent+sub);
 	}
 	
-	//Returns the path of the executable, including filename.
-	//The cstring is owned by Arlib and lives forever.
+	//Returns the path of the currently executing code, with a trailing slash. If compiled as a DLL, returns the DLL path.
+	//May be blank if the path can't be determined. The cstring is owned by Arlib and lives forever.
 	static cstring exepath();
 	//Returns the current working directory.
 	static cstring cwd();

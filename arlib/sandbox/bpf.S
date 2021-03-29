@@ -62,7 +62,7 @@ jeq #__NR_exit, accept
 jeq #__NR_exit_group, accept
 jeq #__NR_set_tid_address, accept
 jeq #__NR_set_robust_list, accept
-jeq #__NR_prlimit64, prlimit64
+jeq #__NR_prlimit64, accept
 
 jeq #__NR_fork, emulate
 jeq #__NR_vfork, emulate
@@ -156,16 +156,6 @@ jne #0x00007fff, emulate
 ld [arg2l]
 jne #0xffffefff, emulate
 jmp accept
-
-
-prlimit64:
-#most of this syscall is safe, everything I want to enforce is a hard limit and prlimit64 can't touch that
-#but block it anyways because why not
-ld [arg2h]
-jne #0, EINVAL
-ld [arg2l]
-jeq #RLIMIT_STACK, accept
-jmp ENOSYS
 
 
 clone:

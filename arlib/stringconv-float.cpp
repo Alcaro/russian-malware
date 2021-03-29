@@ -1,7 +1,7 @@
 #include "stringconv.h"
 #include <math.h>
 
-#if defined(__MINGW32__)
+#ifdef __MINGW32__
 float strtof_arlib(const char * str, char** str_end)
 {
 	int n = 0;
@@ -55,7 +55,6 @@ bool fromstring(cstring s, float& out)
 	out = tmp;
 	return ret;
 }
-#undef strtod
 
 
 static void flatten_zeroes(char* str);

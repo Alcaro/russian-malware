@@ -14,12 +14,6 @@ bool oimage::init_decode_png(arrayview<uint8_t> pngdata)
 	public:
 		pngreader(arrayview<uint8_t> bytes) : bytestream(bytes) {}
 		
-		uint32_t peektype()
-		{
-			if (remaining() < 8) return 0;
-			return u32bat(tell()+4);
-		}
-		
 		pngchunk chunk_raw()
 		{
 			pngchunk ret;

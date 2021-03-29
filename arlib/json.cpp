@@ -119,7 +119,7 @@ jsonparser::event jsonparser::next()
 			
 			// xor 128 because signed compare; xor 2 to fold " to beside the control chars and not check it separately
 			__m128i bad1 = _mm_cmplt_epi8(_mm_xor_si128(chs, _mm_set1_epi8(0x82)), _mm_set1_epi8((int8_t)(0x21^0x80)));
-			__m128i bad2 = _mm_cmpeq_epi8(chs, _mm_set1_epi8(0x5C)); // can't find any way to optimize out the \ check though
+			__m128i bad2 = _mm_cmpeq_epi8(chs, _mm_set1_epi8(0x5C)); // can't find any way to optimize out the \ check
 			__m128i bad = _mm_or_si128(bad1, bad2);
 			int mask = _mm_movemask_epi8(bad); // always in uint16 range, but gcc doesn't know that; keeping it as int optimizes better
 			if (mask == 0)

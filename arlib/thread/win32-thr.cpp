@@ -10,6 +10,11 @@ struct threaddata_win32 {
 static unsigned __stdcall threadproc(void* userdata)
 {
 	threaddata_win32* thdat = (threaddata_win32*)userdata;
+#ifdef __i386__
+#error investigate whether floating point accuracy differs in threads, https://blog.zaita.com/mingw64-compiler-bug/
+#error I create threads differently, so I may get different results from zaita
+#error must check on real Windows; from what I can see, Wine never implemented that part
+#endif
 	thdat->func();
 	delete thdat;
 	return 0;
@@ -44,10 +49,9 @@ unsigned int thread_num_cores()
 
 unsigned int thread_num_cores_idle()
 {
-	//this function should return physical core count, or cores minus 1 if no hyperthreading,
-	// but there doesn't seem to be an easy way to get number of real cores
-	//so this is good enough
-	unsigned int cores = thread_num_cores();
-	return (cores+1)/2;
+	// this function should return physical core count, or cores minus 1 if no hyperthreading,
+	//  but there doesn't seem to be an easy way to get number of real cores
+	// so this is good enough
+	return (thread_num_cores()+1)/2;
 }
 #endif

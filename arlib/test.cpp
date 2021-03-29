@@ -5,7 +5,7 @@
 #include "test.h"
 #include "array.h"
 #include "os.h"
-#include "init.h"
+#include "argparse.h"
 #include "runloop.h"
 
 #ifdef __unix__
@@ -350,7 +350,11 @@ int main(int argc, char* argv[])
 	args.add("all", &all_tests);
 	args.add("twice", &run_twice);
 	args.add("filter", &filter);
+#ifdef ARGUI_NONE
+	args.parse(argv);
+#else
 	arlib_init(args, argv);
+#endif
 	
 	printf(ESC_ERASE_LINE "Sorting tests...");
 	g_testlist = list_reverse(g_testlist); // with gcc's initializer run order, this makes them better ordered

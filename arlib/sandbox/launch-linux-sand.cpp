@@ -247,9 +247,9 @@ pid_t sandproc::launch_impl(const char * program, array<const char*> argv, array
 	struct rlimit rlim_as = { 1*1024*1024*1024, 1*1024*1024*1024 }; // this is the only one that affects mmap
 	require(setrlimit(RLIMIT_AS, &rlim_as)); // keep the value synced with sysinfo() in sysemu
 	
-	//why so many? because the rest of the root-namespace user is also included, which is often a few hundred
-	//http://elixir.free-electrons.com/linux/latest/source/kernel/fork.c#L1564
-	struct rlimit rlim_nproc = { 500, 500 };
+	//why so many? because the rest of the root-namespace user, including threads, is also included, which is often several hundred
+	//https://elixir.bootlin.com/linux/v5.10.9/source/kernel/fork.c#L1964
+	struct rlimit rlim_nproc = { 1000, 1000 };
 	require(setrlimit(RLIMIT_NPROC, &rlim_nproc));
 	
 	//nice value

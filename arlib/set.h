@@ -15,14 +15,14 @@ class set : public linqbase<set<T>> {
 	char tag(size_t id) const { return *(char*)(m_data+id); }
 	
 	T* m_data; // length is always same as m_valid, no need to duplicate its length
-	array<bool> m_valid;
+	bitarray m_valid;
 	size_t m_count;
 	
 	void rehash(size_t newsize)
 	{
 //debug("rehash pre");
 		T* prev_data = m_data;
-		array<bool> prev_valid = std::move(m_valid);
+		bitarray prev_valid = std::move(m_valid);
 		
 		m_data = xcalloc(newsize, sizeof(T));
 		m_valid.reset();

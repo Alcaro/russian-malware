@@ -1,7 +1,5 @@
 #ifdef __linux__
 #include "sandbox.h"
-#include "../process.h"
-#include "../file.h"
 #include "../set.h"
 #include "../stringconv.h"
 
@@ -28,6 +26,7 @@ static inline int memfd_create(const char * name, unsigned int flags) { return s
 
 void sandproc::filesystem::grant_native_redir(string cpath, string ppath, int max_write)
 {
+	if (ppath[0] != '/') abort();
 	mount& m = mounts.insert(cpath);
 	
 	string cend = cpath.rsplit<1>("/")[1];
@@ -148,8 +147,8 @@ int sandproc::filesystem::child_file(cstring pathname, int op_, int flags, mode_
 	size_t mlen = 0;
 	for (auto& miter : mounts)
 	{
-		if (miter.key[0] != '/') abort();
 //puts("  mount "+miter.key);
+		if (miter.key[0] != '/') abort();
 		if (miter.key.length() <= mlen) continue;
 		bool use;
 		if (miter.key.endswith("/"))
@@ -173,8 +172,8 @@ int sandproc::filesystem::child_file(cstring pathname, int op_, int flags, mode_
 			while (miter.key[mlen-1]!='/') mlen--;
 		}
 	}
-	if (!mlen) abort();
 //puts("  "+pathname+" "+tostring(mlen));
+	if (!mlen) abort();
 	
 	
 	switch (m->type)
@@ -401,7 +400,7 @@ void sandproc::fs_grant_syslibs(cstring exe)
 	if (exe)
 	{
 		string exepath = process::find_prog(exe);
-		if (exepath) fs.grant_native(exepath);
+		if (exepath) fs.grant_native(file::realpath(exepath));
 	}
 }
 #endif

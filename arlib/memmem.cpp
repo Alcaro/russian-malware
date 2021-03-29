@@ -20,7 +20,7 @@
 
 // Loads len (1 to 16) bytes from src to a __m128i. src doesn't need any particular alignment. The result's high bytes are undefined.
 __attribute__((target("sse2")))
-static forceinline __m128i load_sse2_small(const uint8_t * src, size_t len)
+static forceinline __m128i load_sse2_small_highundef(const uint8_t * src, size_t len)
 {
 #ifndef ARLIB_OPT
 	// Valgrind *really* hates the fast version.
@@ -70,7 +70,7 @@ static forceinline __m128i load_sse2_small(const uint8_t * src, size_t len)
 __attribute__((target("sse4.2")))
 static const uint8_t * memmem_sse42(const uint8_t * haystack, size_t haystacklen, const uint8_t * needle, size_t needlelen)
 {
-	__m128i needle_sse = load_sse2_small(needle, needlelen);
+	__m128i needle_sse = load_sse2_small_highundef(needle, needlelen);
 	
 	__m128i firstbyte = needle_sse;
 	firstbyte = _mm_unpacklo_epi8(firstbyte, firstbyte); // duplicate bottom byte, ignore upper 14
@@ -100,9 +100,9 @@ static const uint8_t * memmem_sse42(const uint8_t * haystack, size_t haystacklen
 		haystacklen -= step;
 	}
 	
-	// load_sse2_small fails for len=0, but haystacklen is known >= 1
+	// load_sse2_small_highundef fails for len=0, but haystacklen is known >= 1
 	// the only way for it to be 0 is if step=16, which means needlelen=1, but that returns after memchr
-	__m128i haystack_sse = load_sse2_small(haystack, haystacklen);
+	__m128i haystack_sse = load_sse2_small_highundef(haystack, haystacklen);
 	int pos = _mm_cmpestri(needle_sse, needlelen, haystack_sse, haystacklen, CMPSTR_FLAGS);
 	if (pos < (int)(haystacklen+1-needlelen))
 		return haystack + pos;
@@ -351,7 +351,7 @@ test("memmem", "", "string")
 }
 
 #ifdef __SSE2__
-test("load_sse2_small","","")
+test("load_sse2_small_highundef","","")
 {
 #ifndef _WIN32
 	uint8_t* page;
@@ -364,7 +364,7 @@ test("load_sse2_small","","")
 	auto test1 = [&](int start, int size) {
 		assert_gte(start, size);
 		uint8_t tmp[16];
-		_mm_storeu_si128((__m128i*)tmp, load_sse2_small(page+8192-start, size));
+		_mm_storeu_si128((__m128i*)tmp, load_sse2_small_highundef(page+8192-start, size));
 		
 		bytesr expected(page+8192-start, size);
 		bytesr actual(tmp, size);
@@ -379,7 +379,7 @@ test("load_sse2_small","","")
 	test1(4100, 16);
 #endif
 	
-	// used to verify the condition in load_sse2_small
+	// used to verify the condition in load_sse2_small_highundef
 	/*
 	int n=0;
 	for (int src=0;src<64;src++)

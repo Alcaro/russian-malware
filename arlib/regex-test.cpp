@@ -113,5 +113,7 @@ test("regex", "string", "regex")
 	assert_eq(cstring("foo bar baz").csplit(REGEX("\\b|a")).join(","), "foo, ,b,r, ,b,z");
 	assert_eq(cstring("foo bar baz").csplit<1>(REGEX(" |(?=\\n)")).join(","), "foo,bar baz");
 	assert_eq(cstring("foo\nbar baz").csplit<1>(REGEX(" |(?=\\n)")).join(","), "foo,\nbar baz");
+	assert_eq(cstring("").csplit<1>(REGEX("a")).size(), 1);
+	assert_eq(cstring("aabcaada").csplit(REGEX("a")).join(","), ",,bc,,d,");
 }
 #endif

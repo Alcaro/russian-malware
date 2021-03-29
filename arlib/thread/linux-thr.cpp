@@ -1,7 +1,9 @@
 #ifdef __linux__
 #include "thread.h"
 
-// pretty much same as the generic implementation, except I can use futex instead of the linked list - much easier
+// same idea as the generic implementation, but I can use futex instead of the linked list, much easier
+// (generic would've been equally simple if I had a semaphore with an infinite-releases function,
+//   but that'd make it bigger than a pointer, and takes a syscall to create on windows < vista)
 
 void runonce::run(function<void()> fn)
 {
@@ -13,7 +15,7 @@ void runonce::run(function<void()> fn)
 		if (st == st_uninit)
 		{
 			fn();
-			st = lock_xchg<lock_rel>(&futex, st_done);
+			st = lock_xchg<lock_rel>(&futex, st_done); // generic is acqrel, to read the linked list, but that's not needed here
 			if (st != st_busy)
 				futex_wake_all(&futex);
 			return;

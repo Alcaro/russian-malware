@@ -157,11 +157,11 @@ bool fromstringhex(cstring s, array<uint8_t>& val)
 
 static const char hexdigits[16] = { '0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F' };
 template<typename Ts, typename Tu>
-string tostring_int(Ts vals)
+string tostring_inner(Ts vals)
 {
 	Tu val = (vals < 0 ? -vals : vals);
 	uint8_t buf[20]; // can't write directly to string's inline buffer; [ui]64 can need 20+nul bytes, and writes must go backwards
-	uint8_t* bufend = buf+sizeof(buf);
+	uint8_t* bufend = buf+sizeof(buf); // (nul isn't needed in this function, string ctor gets length)
 	uint8_t* iter = bufend;
 	do {
 		*--iter = '0'+val%10;
@@ -171,7 +171,7 @@ string tostring_int(Ts vals)
 	return string(bytesr(iter, bufend-iter));
 }
 template<typename T>
-string tostringhex_int(T val, size_t mindigits)
+string tostringhex_inner(T val, size_t mindigits)
 {
 	uint8_t buf[16];
 	uint8_t* bufend = buf+sizeof(buf);
@@ -183,13 +183,13 @@ string tostringhex_int(T val, size_t mindigits)
 	while ((size_t)(bufend-iter) < mindigits) *--iter = '0';
 	return string(bytesr(iter, bufend-iter));
 }
-string tostring(  signed long long val) { return tostring_int<signed long long, unsigned long long>(val); }
-string tostring(unsigned long long val) { return tostring_int<unsigned long long, unsigned long long>(val); }
-string tostringhex(unsigned long long val, size_t mindigits) { return tostringhex_int<unsigned long long>(val, mindigits); }
+string tostring(  signed long long val) { return tostring_inner<signed long long, unsigned long long>(val); }
+string tostring(unsigned long long val) { return tostring_inner<unsigned long long, unsigned long long>(val); }
+string tostringhex(unsigned long long val, size_t mindigits) { return tostringhex_inner<unsigned long long>(val, mindigits); }
 #if SIZE_MAX < ULLONG_MAX
-string tostring(  signed long val) { return tostring_int<signed long, unsigned long>(val); }
-string tostring(unsigned long val) { return tostring_int<unsigned long, unsigned long>(val); }
-string tostringhex(unsigned long val, size_t mindigits) { return tostringhex_int<unsigned long>(val, mindigits); }
+string tostring(  signed long val) { return tostring_inner<signed long, unsigned long>(val); }
+string tostring(unsigned long val) { return tostring_inner<unsigned long, unsigned long>(val); }
+string tostringhex(unsigned long val, size_t mindigits) { return tostringhex_inner<unsigned long>(val, mindigits); }
 #endif
 string tostring(unsigned val, size_t mindigits)
 {
@@ -225,13 +225,26 @@ template<typename T> void testunhex(const char * S, T V)
 {
 	T a;
 	assert_eq(fromstringhex(S, a), true);
-	assert_eq(a, V);
+	test_nothrow { assert_eq(a, V); }
 }
 template<typename T> void testundec(const char * S, T V)
 {
 	T a;
-	assert_eq(fromstring(S, a), true);
-	test_nothrow { assert_eq(a, V); }
+	assert(fromstring(S, a));
+	
+	static_assert(sizeof(T) <= sizeof(size_t));
+	size_t ai = 0;
+	size_t Vi = 0;
+	memcpy(&ai, &a, sizeof(T));
+	memcpy(&Vi, &V, sizeof(T));
+	if (ai != Vi) // bitcast because -0.0 and nan equality is funny in float
+	{
+		test_nothrow
+		{
+			assert_eq(a, V);
+			if (a == V) assert_eq(ai, Vi); // extra checks to ensure only one of those two throw
+		}
+	}
 }
 
 test("string conversion", "", "string")
@@ -260,6 +273,7 @@ test("string conversion", "", "string")
 	testcall(testundec<double>("1e-999", 0));
 	testcall(testundec<double>("inf", HUGE_VAL));
 	testcall(testundec<double>("-inf", -HUGE_VAL));
+	testcall(testundec<double>("-0", -0.0));
 	testcall(testundec<float>("2.5", 2.5));
 	testcall(testundec<float>("2.5e+1", 25));
 #ifndef _WIN32 // some of these fail on Windows (Wine is more accurate than Windows, but not perfect)
@@ -270,18 +284,18 @@ test("string conversion", "", "string")
 	testcall(testundec<float>("inf", HUGE_VALF));
 	testcall(testundec<float>("-inf", -HUGE_VALF));
 	
-	// just to verify that all 10 exist, C's integer types are absurd
+	// just to verify that all 10 work, C's integer types are absurd
 	testcall(testundec<signed char     >("123", 123));
 	testcall(testundec<signed short    >("12345", 12345));
 	testcall(testundec<signed int      >("1234567890", 1234567890));
 	testcall(testundec<signed long     >("1234567890", 1234567890));
-	testcall(testundec<signed long long>("1234567890123456789", 1234567890123456789ull));
+	testcall(testundec<signed long long>("1234567890123456789", 1234567890123456789));
 	testcall(testundec<unsigned char     >("123", 123));
 	testcall(testundec<unsigned short    >("12345", 12345));
 	testcall(testundec<unsigned int      >("1234567890", 1234567890));
 	testcall(testundec<unsigned long     >("1234567890", 1234567890));
-	testcall(testundec<unsigned long long>("12345678901234567890", 12345678901234567890ull));
-	testcall(testunhex<unsigned char     >("aa", 0xaa));
+	testcall(testundec<unsigned long long>("12345678901234567890", 12345678901234567890u)); // occasional u suffixes because
+	testcall(testunhex<unsigned char     >("aa", 0xaa));       // 'warning: integer constant is so large that it is unsigned'
 	testcall(testunhex<unsigned char     >("AA", 0xAA));
 	testcall(testunhex<unsigned short    >("aaaa", 0xaaaa));
 	testcall(testunhex<unsigned short    >("AAAA", 0xAAAA));
@@ -296,13 +310,13 @@ test("string conversion", "", "string")
 	assert_eq(tostringhex(arrayview<uint8_t>(foo)), "12345678");
 	assert_eq(tostring_dbg(arrayview<uint8_t>(foo)), "[18,52,86,120]");
 	assert_eq(strlen(tostring_dbg("abc")), 3); // no [97,98,99,0] allowed
-	assert_eq(tostring(18446744073709551615ull), "18446744073709551615");
+	assert_eq(tostring(18446744073709551615u), "18446744073709551615");
 	assert_eq(tostring((int8_t)-128), "-128");
 	assert_eq(tostring((int16_t)-32768), "-32768");
-	assert_eq(tostring((int32_t)-2147483648u), "-2147483648"); // weird suffixes because -123 is operator-(123)
-	assert_eq(tostring((int64_t)-9223372036854775808ull), "-9223372036854775808"); // and 9223372036854775808 doesn't fit in int64_t
+	assert_eq(tostring((int32_t)-2147483648), "-2147483648");
+	assert_eq(tostring((int64_t)-9223372036854775808u), "-9223372036854775808");
 	assert_eq(tostringhex<4>(0x0123), "0123");
-	assert_eq(tostringhex(18446744073709551615ull), "FFFFFFFFFFFFFFFF");
+	assert_eq(tostringhex(18446744073709551615u), "FFFFFFFFFFFFFFFF");
 	
 	assert(fromstringhex("87654321", arrayvieww<uint8_t>(foo)));
 	assert_eq(foo[0], 0x87); assert_eq(foo[1], 0x65); assert_eq(foo[2], 0x43); assert_eq(foo[3], 0x21);

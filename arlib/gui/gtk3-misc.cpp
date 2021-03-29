@@ -3,7 +3,7 @@
 #include "../file.h"
 #include "../os.h"
 #include "../set.h"
-#include "../init.h"
+#include "../argparse.h"
 #include "../test.h"
 #ifdef ARLIB_TESTRUNNER
 #include "../process.h"
@@ -109,7 +109,7 @@ static void init_gui_shared_late()
 #endif
 }
 
-void _arlib_init_gui(char** argv)
+void arlib_init(nullptr_t, char** argv)
 {
 	init_gui_shared_early();
 	int argc = 0;
@@ -122,13 +122,13 @@ void _arlib_init_gui(char** argv)
 		fprintf(stderr, "%s: this program does not take arguments\n", argv[0]);
 	}
 }
-void _arlib_init_gui_manual_args(int* argc, char*** argv)
+void arlib_init_manual_args(int* argc, char*** argv)
 {
 	init_gui_shared_early();
 	gtk_init(argc, argv);
 	init_gui_shared_late();
 }
-void _arlib_init_gui(argparse& args, char** argv)
+void arlib_init(argparse& args, char** argv)
 {
 	init_gui_shared_early();
 	

@@ -13,26 +13,22 @@ static gameview* create(uint32_t width, uint32_t height, cstring windowtitle, ui
 #endif
 
 public:
-#ifndef _WIN32
 template<typename Taropengl>
 static gameview* create(Taropengl& gl, uint32_t width, uint32_t height, uint32_t glflags, cstring windowtitle)
 {
+#ifndef _WIN32
 	uintptr_t window;
 	if (!gl.create(width, height, root_parent(), &window, glflags)) return NULL;
 	return create_finish(window, width, height, windowtitle);
-}
 #else
-template<typename Taropengl>
-static gameview* create(Taropengl& gl, uint32_t width, uint32_t height, uint32_t glflags, cstring windowtitle)
-{
 	// GL only works on child windows on windows
 	uintptr_t parent;
 	uintptr_t* child;
 	gameview* ret = create(width, height, windowtitle, &parent, &child);
 	if (!gl.create(width, height, parent, child, glflags)) { delete ret; return NULL; }
 	return ret;
-}
 #endif
+}
 
 virtual void exit_cb(function<void()> cb) = 0; // Called when the window is closed. Defaults to stop().
 virtual bool running() = 0; // Returns false if the window was closed.

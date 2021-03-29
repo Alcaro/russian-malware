@@ -272,15 +272,15 @@ void DNS::sock_cb()
 	if (stream.u16b() != 0x0001) goto fail; // class IN
 	
 	if (read_name(stream) != q.domain) goto fail;
+again:
 	if (stream.remaining() < 2+2+4+2) return;
 	
-	//first answer
 	uint16_t type = stream.u16b();
-	if (type == 0x0005) // type CNAME
+	if (stream.u16b() != 0x0001) goto fail; // class IN
+	stream.u32b(); // TTL, ignore
+	
+	if (type == 0x0005) // type CNAME (cnames can be stacked, so this must be a loop)
 	{
-		if (stream.u16b() != 0x0001) goto fail; // class IN
-		stream.u32b(); // TTL, ignore
-		
 		size_t namelen;
 		namelen = stream.u16b();
 		if (stream.remaining() < namelen) goto fail;
@@ -289,13 +289,11 @@ void DNS::sock_cb()
 		ancount--;
 		string nextrecord = read_name(stream); // new relevant name
 		if (nextrecord != cname) goto fail;
-		
-		type = stream.u16b();
+		goto again;
 	}
-	if (type != 0x0001) goto fail; // type A
-	if (stream.u16b() != 0x0001) goto fail; // class IN
 	
-	stream.u32b(); // TTL, ignore
+	if (type != 0x0001) goto fail; // type A
+	
 	size_t iplen = stream.u16b();
 	if (stream.remaining() < iplen) goto fail;
 	if (ancount==1 && nscount==0 && arcount==0 && stream.remaining() != iplen) goto fail;
@@ -346,6 +344,18 @@ test("DNS", "udp,string,ipconv", "dns")
 			assert_eq(domain, "git.io");
 			assert_ne(ip, ""); // this domain returns eight values in answer section, must be parsed properly
 		}));
+	n_total++; dns.resolve("stacked.muncher.se", bind_lambda([&](string domain, string ip)
+		{
+			n_done++; if (n_done == n_total) loop->exit();
+			assert_eq(domain, "stacked.muncher.se");
+			assert_ne(ip, ""); // this domain is a CNAME
+		}));
+	n_total++; dns.resolve("devblogs.microsoft.com", bind_lambda([&](string domain, string ip)
+		{
+			n_done++; if (n_done == n_total) loop->exit();
+			assert_eq(domain, "devblogs.microsoft.com");
+			assert_ne(ip, ""); // this domain is a CNAME to another CNAME to a third CNAME
+		}));
 	n_total++; dns.resolve("", bind_lambda([&](string domain, string ip) // this must fail
 		{
 			n_done++; if (n_done == n_total) loop->exit();
@@ -356,15 +366,8 @@ test("DNS", "udp,string,ipconv", "dns")
 		{
 			n_done++; if (n_done == n_total) loop->exit();
 			assert_eq(domain, "localhost");
-			// silly way to say 'can be either of those, but must be one of them'. it works
+			// silly way to say 'can be either of those, but must be one of them'
 			if (ip != "::1") assert_eq(ip, "127.0.0.1");
-		}));
-	n_total++; dns.resolve("stacked.muncher.se", bind_lambda([&](string domain, string ip) // random domain that's on a CNAME
-		{
-			n_done++; if (n_done == n_total) loop->exit();
-			assert_eq(domain, "stacked.muncher.se");
-			// not gonna hardcode that IP, just accept anything
-			assert_ne(ip, "");
 		}));
 	n_total++; dns.resolve("127.0.0.1", bind_lambda([&](string domain, string ip)
 		{

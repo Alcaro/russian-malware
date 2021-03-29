@@ -44,14 +44,14 @@
 #define end_swap32 _byteswap_ulong
 #define end_swap64 _byteswap_uint64
 #else
-static inline uint16_t end_swap16(uint16_t n) { return n>>8 | n<<8; }
-static inline uint32_t end_swap32(uint32_t n)
+static uint16_t end_swap16(uint16_t n) { return n>>8 | n<<8; }
+static uint32_t end_swap32(uint32_t n)
 {
 	n = n>>16 | n<<16;
 	n = (n&0x00FF00FF)<<8 | (n&0xFF00FF00)>>8;
 	return n;
 }
-static inline uint64_t end_swap64(uint64_t n)
+static uint64_t end_swap64(uint64_t n)
 {
 	n = n>>32 | n<<32;
 	n = (n&0x0000FFFF0000FFFF)<<16 | (n&0xFFFF0000FFFF0000)>>16;
@@ -60,32 +60,32 @@ static inline uint64_t end_swap64(uint64_t n)
 }
 #endif
 
-inline uint8_t  readu_le8( const uint8_t* in) { return *in; }
-inline uint8_t  readu_be8( const uint8_t* in) { return *in; }
-inline uint16_t readu_le16(const uint8_t* in) { uint16_t ret; memcpy(&ret, in, sizeof(ret)); return END_BIG ? end_swap16(ret) : ret; }
-inline uint16_t readu_be16(const uint8_t* in) { uint16_t ret; memcpy(&ret, in, sizeof(ret)); return END_BIG ? ret : end_swap16(ret); }
-inline uint32_t readu_le32(const uint8_t* in) { uint32_t ret; memcpy(&ret, in, sizeof(ret)); return END_BIG ? end_swap32(ret) : ret; }
-inline uint32_t readu_be32(const uint8_t* in) { uint32_t ret; memcpy(&ret, in, sizeof(ret)); return END_BIG ? ret : end_swap32(ret); }
-inline uint64_t readu_le64(const uint8_t* in) { uint64_t ret; memcpy(&ret, in, sizeof(ret)); return END_BIG ? end_swap64(ret) : ret; }
-inline uint64_t readu_be64(const uint8_t* in) { uint64_t ret; memcpy(&ret, in, sizeof(ret)); return END_BIG ? ret : end_swap64(ret); }
+forceinline uint8_t  readu_le8( const uint8_t* in) { return *in; }
+forceinline uint8_t  readu_be8( const uint8_t* in) { return *in; }
+forceinline uint16_t readu_le16(const uint8_t* in) { uint16_t ret; memcpy(&ret, in, sizeof(ret)); return END_BIG ? end_swap16(ret) : ret; }
+forceinline uint16_t readu_be16(const uint8_t* in) { uint16_t ret; memcpy(&ret, in, sizeof(ret)); return END_BIG ? ret : end_swap16(ret); }
+forceinline uint32_t readu_le32(const uint8_t* in) { uint32_t ret; memcpy(&ret, in, sizeof(ret)); return END_BIG ? end_swap32(ret) : ret; }
+forceinline uint32_t readu_be32(const uint8_t* in) { uint32_t ret; memcpy(&ret, in, sizeof(ret)); return END_BIG ? ret : end_swap32(ret); }
+forceinline uint64_t readu_le64(const uint8_t* in) { uint64_t ret; memcpy(&ret, in, sizeof(ret)); return END_BIG ? end_swap64(ret) : ret; }
+forceinline uint64_t readu_be64(const uint8_t* in) { uint64_t ret; memcpy(&ret, in, sizeof(ret)); return END_BIG ? ret : end_swap64(ret); }
 
-inline void writeu_le8( uint8_t* target, uint8_t  n) { *target = n; }
-inline void writeu_be8( uint8_t* target, uint8_t  n) { *target = n; }
-inline void writeu_le16(uint8_t* target, uint16_t n) { n = END_BIG ? end_swap16(n) : n; memcpy(target, &n, 2); }
-inline void writeu_be16(uint8_t* target, uint16_t n) { n = END_BIG ? n : end_swap16(n); memcpy(target, &n, 2); }
-inline void writeu_le32(uint8_t* target, uint32_t n) { n = END_BIG ? end_swap32(n) : n; memcpy(target, &n, 4); }
-inline void writeu_be32(uint8_t* target, uint32_t n) { n = END_BIG ? n : end_swap32(n); memcpy(target, &n, 4); }
-inline void writeu_le64(uint8_t* target, uint64_t n) { n = END_BIG ? end_swap64(n) : n; memcpy(target, &n, 8); }
-inline void writeu_be64(uint8_t* target, uint64_t n) { n = END_BIG ? n : end_swap64(n); memcpy(target, &n, 8); }
+forceinline void writeu_le8( uint8_t* target, uint8_t  n) { *target = n; }
+forceinline void writeu_be8( uint8_t* target, uint8_t  n) { *target = n; }
+forceinline void writeu_le16(uint8_t* target, uint16_t n) { n = END_BIG ? end_swap16(n) : n; memcpy(target, &n, 2); }
+forceinline void writeu_be16(uint8_t* target, uint16_t n) { n = END_BIG ? n : end_swap16(n); memcpy(target, &n, 2); }
+forceinline void writeu_le32(uint8_t* target, uint32_t n) { n = END_BIG ? end_swap32(n) : n; memcpy(target, &n, 4); }
+forceinline void writeu_be32(uint8_t* target, uint32_t n) { n = END_BIG ? n : end_swap32(n); memcpy(target, &n, 4); }
+forceinline void writeu_le64(uint8_t* target, uint64_t n) { n = END_BIG ? end_swap64(n) : n; memcpy(target, &n, 8); }
+forceinline void writeu_be64(uint8_t* target, uint64_t n) { n = END_BIG ? n : end_swap64(n); memcpy(target, &n, 8); }
 
-inline sarray<uint8_t,1> pack_le8( uint8_t  n) { sarray<uint8_t,1> ret; writeu_le8( ret.ptr(), n); return ret; }
-inline sarray<uint8_t,1> pack_be8( uint8_t  n) { sarray<uint8_t,1> ret; writeu_be8( ret.ptr(), n); return ret; }
-inline sarray<uint8_t,2> pack_le16(uint16_t n) { sarray<uint8_t,2> ret; writeu_le16(ret.ptr(), n); return ret; }
-inline sarray<uint8_t,2> pack_be16(uint16_t n) { sarray<uint8_t,2> ret; writeu_be16(ret.ptr(), n); return ret; }
-inline sarray<uint8_t,4> pack_le32(uint32_t n) { sarray<uint8_t,4> ret; writeu_le32(ret.ptr(), n); return ret; }
-inline sarray<uint8_t,4> pack_be32(uint32_t n) { sarray<uint8_t,4> ret; writeu_be32(ret.ptr(), n); return ret; }
-inline sarray<uint8_t,8> pack_le64(uint64_t n) { sarray<uint8_t,8> ret; writeu_le64(ret.ptr(), n); return ret; }
-inline sarray<uint8_t,8> pack_be64(uint64_t n) { sarray<uint8_t,8> ret; writeu_be64(ret.ptr(), n); return ret; }
+forceinline sarray<uint8_t,1> pack_le8( uint8_t  n) { sarray<uint8_t,1> ret; writeu_le8( ret.ptr(), n); return ret; }
+forceinline sarray<uint8_t,1> pack_be8( uint8_t  n) { sarray<uint8_t,1> ret; writeu_be8( ret.ptr(), n); return ret; }
+forceinline sarray<uint8_t,2> pack_le16(uint16_t n) { sarray<uint8_t,2> ret; writeu_le16(ret.ptr(), n); return ret; }
+forceinline sarray<uint8_t,2> pack_be16(uint16_t n) { sarray<uint8_t,2> ret; writeu_be16(ret.ptr(), n); return ret; }
+forceinline sarray<uint8_t,4> pack_le32(uint32_t n) { sarray<uint8_t,4> ret; writeu_le32(ret.ptr(), n); return ret; }
+forceinline sarray<uint8_t,4> pack_be32(uint32_t n) { sarray<uint8_t,4> ret; writeu_be32(ret.ptr(), n); return ret; }
+forceinline sarray<uint8_t,8> pack_le64(uint64_t n) { sarray<uint8_t,8> ret; writeu_le64(ret.ptr(), n); return ret; }
+forceinline sarray<uint8_t,8> pack_be64(uint64_t n) { sarray<uint8_t,8> ret; writeu_be64(ret.ptr(), n); return ret; }
 
 #undef end_swap16 // delete these, so callers are forced to use the functions instead
 #undef end_swap32

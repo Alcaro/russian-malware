@@ -120,7 +120,7 @@ public:
 class runonce : nomove {
 #if defined(__linux__)
 	enum { st_uninit, st_busy, st_busy_waiters, st_done };
-	int futex = st_uninit;
+	int futex = st_uninit; // I don't need more than a byte, but futex is int only, so int it is
 public:
 	void run(function<void()> fn);
 #elif defined(_WIN32) && _WIN32_WINNT >= _WIN32_WINNT_LONGHORN

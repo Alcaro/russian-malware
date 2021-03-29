@@ -537,7 +537,8 @@ public:
 	}
 	
 	template<typename T>
-	void each_item(const T& out)
+	std::enable_if_t<std::is_invocable_v<T, cstring, jsondeserializer&>>
+	each_item(const T& out)
 	{
 		while (ev.action == jsonparser::map_key)
 		{
@@ -546,13 +547,34 @@ public:
 			if (ev.action == jsonparser::enter_map)
 			{
 				next_ev();
-				out(*this, key);
+				out(key, *this);
 				finish_item(1);
 			}
 			else
 			{
 				valid = false;
 				finish_item(0); // should do nothing, but may happen if the handler was wrong type and didn't consume the data
+			}
+			next_ev();
+		}
+	}
+	
+	template<typename T>
+	std::enable_if_t<std::is_invocable_v<T, cstring, cstring>>
+	each_item(const T& out)
+	{
+		while (ev.action == jsonparser::map_key)
+		{
+			string key = std::move(ev.str);
+			next_ev();
+			if (ev.action == jsonparser::str)
+			{
+				out(key, ev.str);
+			}
+			else
+			{
+				valid = false;
+				finish_item(0);
 			}
 			next_ev();
 		}

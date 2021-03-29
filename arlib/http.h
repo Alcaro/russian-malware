@@ -46,14 +46,14 @@ public:
 		req q;
 		
 		enum {
-			e_bad_url       = -1, // couldn't parse URL
-			e_different_url = -2, // can't use Keep-Alive between these, create a new http object
-			e_connect       = -3, // couldn't open TCP/SSL stream
-			e_broken        = -4, // server unexpectedly closed connection, or timeout
-			e_not_http      = -5, // the server isn't speaking HTTP
-			e_canceled      = -6, // request was canceled; used only internally, callback is never called with this reason
-			e_timeout       = -7, // limit_ms was reached
-			e_too_big       = -8, // limit_bytes was reached
+			e_bad_url        = -1, // couldn't parse URL
+			e_different_host = -2, // can't use Keep-Alive between these, create a new http object
+			e_connect        = -3, // couldn't open TCP/SSL stream
+			e_broken         = -4, // server unexpectedly closed connection, or timeout
+			e_not_http       = -5, // the server isn't speaking HTTP
+			e_canceled       = -6, // request was canceled; used only internally, callback is never called with this reason
+			e_timeout        = -7, // limit_ms was reached
+			e_too_big        = -8, // limit_bytes was reached
 			//may also be a normal http status code (200, 302, 404, etc)
 		};
 		int status = 0;
@@ -111,7 +111,7 @@ public:
 	//If the HTTP object is currently trying to send a request with this ID, it's cancelled.
 	//The callback won't be called, and unless the request has already been sent, it won't be.
 	//If multiple have that ID, at least one is canceled; it's unspecified which, or if one or multiple are removed.
-	//Returns whether anything happened.
+	//Returns whether the ID existed.
 	bool cancel(uintptr_t id);
 	
 	//Cancels and discards every unfinished operation, and resets this object to its freshly constructed state.
@@ -135,7 +135,11 @@ public:
 	//If the base URL has a #fragment, and the new one does not, the #fragment is preserved. This matches HTTP 3xx but not <a href>.
 	//parse_url does not know about default ports. If the returned port is -1, caller is responsible for substituting a suitable default.
 	static bool parse_url(cstring url, bool relative, location& out);
-	// TODO: create function to open socket, make http and websocket use it
+	
+	// Matches the application/x-www-form-urlencoded POST rules (or at least Firefox's interpretation thereof).
+	// Space becomes plus, *-._ and alphanumerics are left as is, everything else (including UTF-8) is percent escaped.
+	// I don't know which RFCs it matches - they're hard to read, they don't define whether % should be escaped.
+	static string urlencode(cstring in);
 	
 private:
 	void resolve(size_t id);

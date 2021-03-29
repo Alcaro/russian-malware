@@ -60,7 +60,7 @@ private:
 	bool m_errored = false;
 	event do_error() { m_errored=true; return { error }; }
 	
-	array<bool> m_nesting; // an entry is false for list, true for map; after [[{, this is false,false,true
+	bitarray m_nesting; // an entry is false for list, true for map; after [[{, this is false,false,true
 	
 	uint8_t nextch();
 	bool skipcomma(size_t depth = 1);

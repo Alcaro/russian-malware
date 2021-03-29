@@ -22,7 +22,7 @@ header = 'namespace resources {\nvoid init();\n'
 body_early += '#include "resources.h"\nnamespace resources {\n'
 body = ""
 body_late = ""
-constructor = "RUN_ONCE_FN(init_inner)\n{\n"
+constructor = ""
 constructor_late = ""
 asm = ""
 
@@ -40,6 +40,7 @@ if use_incbin:
 #  define ASM_RODATA(text) \
      __asm__(".section .rodata,\"a\",@progbits\n" text ".text\n")
 #  define ASM_LABEL(varname, size) \
+     ".globl " varname "\n" \
      ".size " varname ", " STR(size) "\n" \
      ".type " varname ", @object\n" \
      varname ":\n"
@@ -56,13 +57,13 @@ if use_incbin:
 #  define ASM_POINTER_SIZE 4
 #endif
 
-
 #  define ASM_INCLUDE_LIST(text) ASM_RODATA(text)
 #  define ASM_INCLUDE(varname, size, filename) \
      ASM_LABEL(varname, size) \
      ".incbin \"" filename "\"\n"
-
-
+"""
+	
+	body_imgdecode = """
 #if END_LITTLE
 #  define ifmt_argb8888_c ifmt_bgra8888_by_c
 #else
@@ -408,6 +409,8 @@ for fn in sorted(os.listdir("resources/")):
 	header += "extern const uint8_t "+varname_raw+"["+str(filesize)+"];\n"
 
 if imgbytes_decomp:
+	body += body_imgdecode
+	
 	try:
 		imgbytes_comp = open("resources/images.deflate","rb").read()
 	except:
@@ -429,8 +432,9 @@ if imgbytes_decomp:
 	               ", imgbuf_inflated+"+str(imgbuf_size_buf)+", images_deflate, sizeof(images_deflate));\n"
 
 header = header_early + header + "}\n"
-constructor = constructor + constructor_late + "}\n"
-constructor += "void init() { init_inner(); }\n"
+if constructor:
+	constructor = "RUN_ONCE_FN(init_inner)\n{\n" + constructor + constructor_late + "}\n"
+	constructor += "void init() { init_inner(); }\n"
 body = body_early + body + body_late + constructor + "}\n"
 
 if use_incbin and asm: body += 'ASM_INCLUDE_LIST(\n'+asm+');\n'

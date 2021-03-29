@@ -1,11 +1,11 @@
 #include "array.h"
 
-void array<bool>::set_slice(size_t start, size_t num, const array<bool>& other, size_t other_start)
+void bitarray::set_slice(size_t start, size_t num, const bitarray& other, size_t other_start)
 {
 	if (&other == this)
 	{
 		//TODO: optimize
-		array<bool> copy = other;
+		bitarray copy = other;
 		set_slice(start, num, copy, other_start);
 		return;
 	}
@@ -16,7 +16,7 @@ void array<bool>::set_slice(size_t start, size_t num, const array<bool>& other, 
 	}
 }
 
-void array<bool>::clear_unused(size_t start, size_t nbytes)
+void bitarray::clear_unused(size_t start, size_t nbytes)
 {
 	size_t low = start;
 	size_t high = nbytes*8;
@@ -31,7 +31,7 @@ void array<bool>::clear_unused(size_t start, size_t nbytes)
 	memset(ptr+low/8, 0, (high-low)/8);
 }
 
-void array<bool>::resize(size_t len)
+void bitarray::resize(size_t len)
 {
 	size_t prevlen = this->nbits;
 	this->nbits = len;
@@ -100,11 +100,11 @@ void array<bool>::resize(size_t len)
 //if(fail)abort();
 }
 
-array<bool> array<bool>::slice(size_t first, size_t count) const
+bitarray bitarray::slice(size_t first, size_t count) const
 {
 	if ((first&7) == 0)
 	{
-		array<bool> ret;
+		bitarray ret;
 		ret.resize(count);
 		memcpy(ret.bits(), this->bits() + first/8, (count+7)/8);
 		return ret;
@@ -112,7 +112,7 @@ array<bool> array<bool>::slice(size_t first, size_t count) const
 	else
 	{
 		//TODO: optimize
-		array<bool> ret;
+		bitarray ret;
 		ret.resize(count);
 		for (size_t i=0;i<count;i++) ret.set(i, this->get(first+i));
 		return ret;
@@ -234,7 +234,7 @@ test("array", "", "array")
 }
 
 
-static string tostring(array<bool> b)
+static string tostring(bitarray b)
 {
 	string ret;
 	for (size_t i=0;i<b.size();i++) ret += b[i]?"1":"0";
@@ -247,12 +247,12 @@ static string ones_zeroes(int ones, int zeroes)
 	for (int i=0;i<zeroes;i++) ret+="0";
 	return ret;
 }
-test("array<bool>", "", "array")
+test("bitarray", "", "array")
 {
 	for (size_t up=0;up<256;up+=23)
 	for (size_t down=0;down<=up;down+=23)
 	{
-		array<bool> b;
+		bitarray b;
 		for (size_t i=0;i<up;i++)
 		{
 			assert_eq(b.size(), i);
@@ -281,7 +281,7 @@ test("array<bool>", "", "array")
 	}
 	
 	{
-		array<bool> b;
+		bitarray b;
 		b.resize(8);
 		b[0] = true;
 		b[1] = false;
@@ -299,7 +299,7 @@ test("array<bool>", "", "array")
 	}
 	
 	{
-		array<bool> b;
+		bitarray b;
 		b.resize(65);
 		b.resize(64);
 		assert_eq(tostring(b), "0000000000000000000000000000000000000000000000000000000000000000");

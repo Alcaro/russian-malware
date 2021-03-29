@@ -22,12 +22,12 @@
 #include "bml.h"
 #include "json.h"
 
+#include "argparse.h"
 #include "base64.h"
 #include "bytestream.h"
 #include "crc32.h"
 #include "deflate.h"
 #include "image.h"
-#include "init.h"
 #include "process.h"
 #include "regex.h"
 #include "runloop.h"

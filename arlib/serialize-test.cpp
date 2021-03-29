@@ -156,7 +156,7 @@ template<typename... Ts>
 void assert_eq_unordered(cstring in, const char * tmpl, Ts... args)
 {
 	const char * parts[] = { args... };
-	array<bool> parts_used;
+	bitarray parts_used;
 	parts_used.resize(sizeof...(args));
 	
 	size_t off = 0;

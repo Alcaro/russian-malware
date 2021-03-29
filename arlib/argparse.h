@@ -3,11 +3,6 @@
 #include "stringconv.h"
 #include "file.h"
 
-// TODO: I don't think this thing optimizes out properly
-// TODO: this should be reduced to argument parsing only, it doesn't make sense in DLLs
-// may also want to replace libc rand() with a custom function based on random_t, so I won't write to shared state (srand)
-// (not sure how that'd interact with threading though - cmpxchg the state?)
-
 class argparse {
 	class arg_base {
 		friend class argparse;
@@ -29,7 +24,7 @@ class argparse {
 	public:
 		virtual ~arg_base() {}
 		
-		friend void _arlib_init_gui(argparse& args, char** argv);
+		friend void arlib_init(argparse& args, char** argv);
 	};
 	
 	template<typename T>
@@ -251,18 +246,5 @@ private:
 public:
 	void parse(const char * const * argv);
 	
-	friend void _arlib_init_gui(argparse& args, char** argv);
+	friend void arlib_init(argparse& args, char** argv);
 };
-
-// Most of Arlib is safe to call before initialization, but anything runloop-related is unsafe, as is libc rand() (it's unseeded).
-// Call exactly one of those three. Arlib will automatically parse a few arguments, like --display on Linux if GUI is enabled.
-void arlib_init(argparse& args, char** argv);
-void arlib_init(nullptr_t, char** argv); // Shorthand if your program takes no arguments. Will complain if any are given.
-// In case you want to handle arguments yourself. Arlib will still handle --display if argc/argv are given, but it's safe to pass NULLs.
-void arlib_init_manual_args(int* argc, char*** argv);
-
-
-//Called by arlib_init(). Don't use it yourself.
-void _arlib_init_gui(argparse& args, char** argv);
-void _arlib_init_gui(char** argv); // corresponds to the null version
-void _arlib_init_gui_manual_args(int* argc, char*** argv);

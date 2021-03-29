@@ -52,6 +52,19 @@ bool HTTP::parse_url(cstring url, bool relative, location& out)
 	return true;
 }
 
+string HTTP::urlencode(cstring in)
+{
+	// not optimized, but it's hard to optimize things with variable width output and complex patterns
+	string out;
+	for (uint8_t c : in.bytes())
+	{
+		if (LIKELY(isalnum(c) || c=='*' || c=='-' || c=='.' || c=='_')) out += c;
+		else if (c == ' ') out += '+';
+		else out += "%"+tostringhex(c);
+	}
+	return out;
+}
+
 void HTTP::send(req q, function<void(rsp)> callback)
 {
 	rsp_i& i = requests.append();
@@ -70,7 +83,7 @@ void HTTP::send(req q, function<void(rsp)> callback)
 		if (!parse_url(r.q.url, false, loc)) return resolve_err_v(requests.size()-1, rsp::e_bad_url);
 		if (loc.scheme != lasthost.scheme || loc.domain != lasthost.domain || loc.port != lasthost.port)
 		{
-			return resolve_err_v(requests.size()-1, rsp::e_different_url);
+			return resolve_err_v(requests.size()-1, rsp::e_different_host);
 		}
 		lasthost.path = loc.path;
 	}

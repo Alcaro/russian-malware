@@ -120,11 +120,15 @@ static int connect(cstring domain, int port)
 	}
 	freeaddrinfo(addr);
 	
+	// Nagle's algorithm - made sense in the 80s, but these days, the saved bandwidth isn't worth the added latency.
+	// Better combine stuff in userspace, syscalls are (relatively) expensive these days.
+	setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, true);
+	
 #ifndef _WIN32
 	setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, 1); // enable
-	setsockopt(fd, SOL_TCP, TCP_KEEPCNT, 3); // ping count before the kernel gives up
-	setsockopt(fd, SOL_TCP, TCP_KEEPIDLE, 30); // seconds idle until it starts pinging
-	setsockopt(fd, SOL_TCP, TCP_KEEPINTVL, 10); // seconds per ping once the pings start
+	setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, 3); // ping count before the kernel gives up
+	setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, 30); // seconds idle until it starts pinging
+	setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, 10); // seconds per ping once the pings start
 #else
 	struct tcp_keepalive keepalive = {
 		1,       // SO_KEEPALIVE

@@ -40,7 +40,7 @@ public:
 	
 #ifdef ARLIB_SSL
 	//Super simple function, just calls create() or create_ssl().
-	//Suitable as default implementation of a 'create socket' callback. Said callback should be expected to return a non-raw socket.
+	//Suitable as default implementation of a 'create socket' callback.
 	static socket* create_sslmaybe(bool ssl, cstring domain, int port, runloop* loop);
 #endif
 	
@@ -142,7 +142,7 @@ public:
 	static socket* wrap_ssl_raw_bearssl(socket* inner, cstring domain, runloop* loop);
 #endif
 	
-	static socket* unsafe_ssl_not_available(); // gives a linker error if used
+	static socket* unsafe_ssl_not_available(); // unimplemented, gives a linker error if used
 #endif // ARLIB_SSL
 };
 

@@ -2,10 +2,10 @@
 
 #if (defined(_WIN32) && _WIN32_WINNT < _WIN32_WINNT_LONGHORN) || (defined(__unix__) && !defined(__linux__))
 // design criteria:
-// - safe and correct, of course
+// - safe and correct for every possible combination of threads, of course
 // - zero malloc and syscalls if uncontented (stack allocations and cmpxchg are fine)
 // - sizeof(runonce) <= sizeof(void*)
-// - performance given multiple waiters can safely be ignored
+// - given multiple waiters, there must be no timeouts or infinite spinning, but using malloc/syscall is fine
 //
 // data use:
 // 0 - not initialized
@@ -38,6 +38,7 @@
 //   delete event
 
 // it's hard to test things like this...
+
 void runonce::run(function<void()> fn)
 {
 	struct state {

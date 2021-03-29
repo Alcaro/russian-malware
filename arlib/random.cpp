@@ -14,10 +14,6 @@ static uint32_t ror32(uint32_t x, unsigned bits)
 {
 	return (x>>bits) | (x<<(-bits&31));
 }
-static uint32_t permute(uint64_t state)
-{
-	return ror32((state^(state>>18))>>27, state>>59);
-}
 
 // this is PCG-XSH-RR with 64-bit state and 32-bit output, adapted from wikipedia
 // https://en.wikipedia.org/wiki/Permuted_congruential_generator
@@ -25,7 +21,11 @@ static uint32_t permute(uint64_t state)
 
 static const uint64_t multiplier = 6364136223846793005; // I don't know how this number was calculated
 static const uint64_t increment  = 1442695040888963407; // "or an arbitrary odd constant" ~wikipedia
-static const uint64_t increment_g= 1442695040888963409;
+
+static uint32_t permute(uint64_t state)
+{
+	return ror32((state^(state>>18))>>27, state>>59);
+}
 
 template<>
 uint32_t random_base_t<false>::rand32()
@@ -34,18 +34,20 @@ uint32_t random_base_t<false>::rand32()
 	state = prev*multiplier + increment;
 	return permute(prev);
 }
+#ifdef ARLIB_THREAD
 template<>
 uint32_t random_base_t<true>::rand32()
 {
 	uint64_t prev = lock_read<lock_loose>(&state);
 	while (true)
 	{
-		uint64_t prev2 = lock_cmpxchg<lock_loose,lock_loose>(&state, prev, prev*multiplier + increment_g);
+		uint64_t prev2 = lock_cmpxchg<lock_loose,lock_loose>(&state, prev, prev*multiplier + increment);
 		if (prev == prev2) break;
 		prev = prev2;
 	}
 	return permute(prev);
 }
+#endif
 template<bool is_global>
 uint64_t random_base_t<is_global>::rand64()
 {
@@ -61,7 +63,7 @@ uint32_t random_base_t<is_global>::rand_mod(uint32_t limit)
 	// alternatively and equivalently, that many values can be discarded from the lower end of the results
 	// the size of the discarded section must be (RAND_MAX+1) mod limit, and discarding low ones is easier
 	
-	// unfortunatly, RAND_MAX+1 is 2^32, which won't fit in a uint32
+	// unfortunately, RAND_MAX+1 is 2^32, which won't fit in a uint32
 	// however, for a >= b, a%b equals (a-b)%b, and UINT32_MAX+1 is always greater than limit
 	// the extra -1 +1 needed to avoid an overflow can also be avoided, by using how unsigned integer overflow is defined
 	// so the calculation needed is simply
@@ -89,9 +91,12 @@ uint64_t random_base_t<is_global>::rand_mod(uint64_t limit)
 }
 
 template class random_base_t<false>;
+#ifdef ARLIB_THREAD
 template class random_base_t<true>;
-
 random_base_t<true> g_rand;
+#else
+random_base_t<false> g_rand;
+#endif
 oninit_static() { g_rand.seed(); }
 
 

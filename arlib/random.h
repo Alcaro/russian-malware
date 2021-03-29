@@ -50,4 +50,8 @@ public:
 	random_t() { seed(); }
 	random_t(uint64_t num) { seed(num); } // Not recommended unless you need predictable output.
 };
+#ifdef ARLIB_THREAD
 extern random_base_t<true> g_rand; // g_rand is thread safe, random_t is not
+#else
+extern random_base_t<false> g_rand;
+#endif

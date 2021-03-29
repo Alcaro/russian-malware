@@ -1,10 +1,6 @@
-#include "init.h"
+#include "argparse.h"
 #include "runloop.h"
 #include "stringconv.h"
-#ifdef __unix__
-#include <sys/resource.h>
-#endif
-#include "test.h" // TODO: define RUNNING_ON_VALGRIND at some better place
 #include <time.h>
 
 string argparse::get_usage()
@@ -182,35 +178,6 @@ void argparse::parse_post()
 	}
 }
 
-void arlib_init(argparse& args, char** argv)
-{
-#ifndef ARGUI_NONE
-	_arlib_init_gui(args, argv);
-#else
-	args.parse(argv);
-#endif
-}
-
-void arlib_init_manual_args(int* argc, char*** argv)
-{
-#ifndef ARGUI_NONE
-	_arlib_init_gui_manual_args(argc, argv);
-#endif
-}
-
-void arlib_init(nullptr_t, char** argv)
-{
-#ifndef ARGUI_NONE
-	_arlib_init_gui(argv);
-#else
-	if (argv[1])
-	{
-		fprintf(stderr, "%s: this program does not take any arguments\n", argv[0]);
-		exit(1);
-	}
-#endif
-}
-
 
 #include "test.h"
 
@@ -371,7 +338,7 @@ test("argument parser", "string,array", "argparse")
 	
 	//examples extracted from https://www.gnu.org/software/libc/manual/html_node/Example-of-Getopt.html
 	//0/1 as bool because the example does so
-	//redundant with the above, but why not
+	//redundant to the above, but why not
 	
 	test_getopt(0, 0, NULL,  NULL);
 	test_getopt(1, 1, NULL,  NULL,     "-a", "-b");

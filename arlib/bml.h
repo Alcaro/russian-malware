@@ -34,7 +34,7 @@ private:
 	string m_orig_data; // m_data points into here
 	cstring m_data;
 	cstring m_thisline;
-	array<bool> m_indent_step;
+	bitarray m_indent_step;
 	string m_indent;
 	cstring m_inlines;
 	bool m_exit;

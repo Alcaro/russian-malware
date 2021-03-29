@@ -95,6 +95,7 @@ static uint32_t crc32_pclmul(arrayview<uint8_t> data, uint32_t crc)
 		len -= 16;
 	}
 	
+	
 	const uint8_t * ptr8 = (uint8_t*)ptr;
 	if (len & 8)
 	{
@@ -116,6 +117,32 @@ static uint32_t crc32_pclmul(arrayview<uint8_t> data, uint32_t crc)
 		state = do_fold(_mm_xor_si128(state, _mm_cvtsi32_si128(*(uint8_t*)ptr8)), fold_8);
 		ptr8 += 1;
 	}
+	
+	// alternative implementation, bigger and no meaningful perf difference
+	//
+	//__m128i folds[8] = {
+	//	_mm_set_epi32(0, crc32_poly_exp(  0-64), 0, crc32_poly_exp(0)),
+	//	_mm_set_epi32(0, crc32_poly_exp(  8-64), 0, crc32_poly_exp(8)),
+	//	_mm_set_epi32(0, crc32_poly_exp( 16-64), 0, crc32_poly_exp(16)),
+	//	_mm_set_epi32(0, crc32_poly_exp( 24-64), 0, crc32_poly_exp(24)),
+	//	_mm_set_epi32(0, crc32_poly_exp( 32-64), 0, crc32_poly_exp(32)),
+	//	_mm_set_epi32(0, crc32_poly_exp( 40-64), 0, crc32_poly_exp(40)),
+	//	_mm_set_epi32(0, crc32_poly_exp( 48-64), 0, crc32_poly_exp(48)),
+	//	_mm_set_epi32(0, crc32_poly_exp( 56-64), 0, crc32_poly_exp(56)),
+	//};
+	//
+	//__attribute__((target("sse2")))
+	//static forceinline __m128i load_sse2_small_highzero(const uint8_t * src, size_t len)
+	//{
+	//	static const uint8_t mask[32] = {
+	//		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	//		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+	//	};
+	//	return _mm_and_si128(load_sse2_small_highundef(src, len), _mm_loadu_si128((__m128i*)(mask+16-len)));
+	//}
+	//
+	//state = do_fold(_mm_xor_si128(state, load_sse2_small_highzero(ptr8, len&7)), folds[len&7]);
+	//ptr8 += len&7;
 	
 	if (len >= 16)
 		state = _mm_xor_si128(state, _mm_loadu_si128((__m128i*)ptr8));
@@ -228,7 +255,11 @@ test("crc32", "", "crc32")
 	bench(buf, 24, 16777216, 0x12B39209);
 	bench(buf, 16, 16777216, 0x893D9AFF);
 	bench(buf, 8, 16777216,  0xE1D018DA);
+	bench(buf, 7, 16777216,  0xD1EAB21F);
+	bench(buf, 6, 16777216,  0x5EBF9E66);
+	bench(buf, 5, 16777216,  0x6E0D1896);
 	bench(buf, 4, 16777216,  0x69740160);
+	bench(buf, 3, 16777216,  0x7DA9EE56);
 	bench(buf, 2, 16777216,  0xA11A972E);
 	bench(buf, 1, 16777216,  0xC46E20C8);
 	bench(buf, 0, 16777216,  0x00000000);

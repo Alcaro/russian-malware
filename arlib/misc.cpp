@@ -105,14 +105,14 @@ void debugc8(const char * prefix, __m128i vals) { printf("%s ", prefix); debugc8
 //  (doesn't matter on linux where libstdc++ already exists)
 //for tests:
 //  need to override them, so they can be counted, leak checked, and rejected in test_nomalloc
-//  Valgrind overrides my new/delete override with an LD_PRELOAD,  but Valgrind has its own leak checker,
-//    and new is only used for classes with vtables that don't make sense to use in test_nomalloc anyways
+//  Valgrind overrides my new/delete override with an LD_PRELOAD, but Valgrind has its own leak checker,
+//   and new is only used for classes with vtables that don't make sense to use in test_nomalloc anyways
 //  (I can disable valgrind's override with -s, but that's obviously not worth it.)
 #if defined(__MINGW32__) || defined(ARLIB_TESTRUNNER)
 void* operator new(std::size_t n) _GLIBCXX_THROW(std::bad_alloc) { return malloc(n); }
 //Valgrind 3.13 overrides operator delete(void*), but not delete(void*,size_t)
 //do not inline into free(p) until valgrind is fixed
-#ifndef __MINGW32__ // mingw marks it inline, which obviously can't be used with noinline (but mingw doesn't need valgrind workarounds)
+#ifndef __MINGW32__ // mingw marks it inline, which obviously can't be used with noinline, but mingw doesn't need valgrind workarounds
 __attribute__((noinline))
 #endif
 void operator delete(void* p) noexcept { free(p); }

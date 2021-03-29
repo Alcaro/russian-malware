@@ -144,8 +144,6 @@ public:
 	forceinline void seek(size_t pos) { at = start+pos; }
 	forceinline void skip(ssize_t off) { at += off; }
 	
-	forceinline uint32_t u32lat(size_t pos) { return readu_le32(start+pos); }
-	forceinline uint32_t u32bat(size_t pos) { return readu_be32(start+pos); }
 	forceinline arrayview<uint8_t> peek_at(size_t pos, size_t len) { return arrayview<uint8_t>(start+pos, len); }
 	
 	// for bytestream_dbg

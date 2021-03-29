@@ -63,8 +63,8 @@ static bool unpack_huffman_dfl(uint16_t * out, const uint8_t * in, size_t in_len
 	//  "One distance code of zero bits means that there are no distance codes used at all (the data is all literals)."
 	// if everything with a reasonable and unambiguous definition in 1951 is legal, then all incomplete huffman tables are legal,
 	//  if the unused bit sequences never show up
-	// zlib matches neither behavior; accepts a huffman table containing multiple zeroes and nothing else,
-	//  as well as one 1-bit symbol and the rest zeroes
+	// zlib matches neither behavior; it accepts a huffman table containing multiple zeroes and nothing else,
+	//  as well as one 1-bit symbol and the rest zeroes, but anything else is rejected
 	// this one matches zlib
 	// https://github.com/madler/zlib/blob/cacf7f1d4e3d44d871b605da3b647f07d718623f/inftrees.c#L130-L138
 	// https://tools.ietf.org/html/rfc1951#page-13
@@ -76,6 +76,7 @@ static bool unpack_huffman_dfl(uint16_t * out, const uint8_t * in, size_t in_len
 		// (zlib implements this check differently, but our results are the same)
 		assert_reached();
 	}
+	// used_bits can be 0, 0x8000, or 0x10000
 	
 	size_t out_tree = 1<<HUFF_FAST_BITS;
 	memset(out, 0xFF, sizeof(uint16_t)<<HUFF_FAST_BITS);
@@ -137,8 +138,11 @@ static bool unpack_huffman_dfl(uint16_t * out, const uint8_t * in, size_t in_len
 		}
 	}
 	
-	if (used_bits != 0x10000)
+	if (UNLIKELY(used_bits != 0x10000))
 	{
+		// used_bits can be 0, 0x8000, or 0x10000, and not the last one in this branch
+		// if 0, erase all; if 0x8000, erase only odd indices, up to out_tree
+		// I can't find any solution better than the obvious one - just wipe all slots that are 0xFFFF
 		for (size_t i=0;i<out_tree;i++)
 		{
 			if (out[i] == 0xFFFF)
@@ -235,7 +239,7 @@ inflator::ret_t inflator::inflate()
 		[[fallthrough]];
 		case st_blockinit:
 			bits_refill_fast();
-			if (UNLIKELY(m_in_nbits < 3+7)) // empty block with default huffman tables is 3+7 bits
+			if (UNLIKELY(m_in_nbits < 3+7)) // empty block with default huffman tables is 3+7 bits; literal can also use 3+7
 			{
 				assert_reached();
 				m_state = st_blockinit;
@@ -335,7 +339,7 @@ inflator::ret_t inflator::inflate()
 						uint32_t hclen = (huff_sizes>>10) + 4;
 						
 						// DEFLATE can represent 288 symbols and 32 distance codes, but only 286 resp. 30 are valid. why
-						// RFC 1951 seems to explicitly allow HDIST >= 30 (though using them is forbidden), but zlib rejects it
+						// RFC 1951 seems to explicitly allow HDIST > 30 (though using them is forbidden), but zlib rejects it
 						if (UNLIKELY(hlit > 286 || hdist > 30)) RET_FAIL();
 						
 						bits_refill_all();

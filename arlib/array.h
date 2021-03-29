@@ -663,7 +663,48 @@ public:
 };
 
 
-template<> class array<bool> {
+//A refarray acts mostly like a normal array. The difference is that it stores pointers rather than the elements themselves;
+//as such, you can't cast to arrayview or pointer, but you can keep pointers or references to the elements, or insert something virtual.
+template<typename T> class refarray {
+	array<autoptr<T>> items;
+public:
+	explicit operator bool() const { return (bool)items; }
+	T& operator[](size_t n) { return *items[n]; }
+	template<typename... Ts>
+	T& append(Ts... args)
+	{
+		T* ret = new T(std::move(args)...);
+		items.append(ret);
+		return *ret;
+	}
+	void append_take(T& item) { items.append(&item); }
+	void append_take(T* item) { items.append(item); }
+	void append_take(autoptr<T> item) { items.append(std::move(item)); }
+	void remove(size_t index) { items.remove(index); }
+	void reset() { items.reset(); }
+	size_t size() { return items.size(); }
+	
+private:
+	class enumerator {
+		autoptr<T>* ptr;
+	public:
+		enumerator(autoptr<T>* ptr) : ptr(ptr) {}
+		
+		T& operator*() { return **ptr; }
+		enumerator& operator++() { ++ptr; return *this; }
+		bool operator!=(const enumerator& other) { return ptr != other.ptr; }
+	};
+public:
+	enumerator begin() { return enumerator(items.ptr()); }
+	enumerator end() { return enumerator(items.ptr() + items.size()); }
+};
+
+
+template<> class array<bool> {}; // TODO: delete once I'm confident nothing uses this, mar14 or later
+
+// bitarray - somewhat like array<bool>, but stores eight bits per byte, not one.
+// Also contains small string optimization, won't allocate until sizeof(void*)*8.
+class bitarray {
 protected:
 	//extra variable to silence a warning
 	//  division 'sizeof (uint8_t* {aka unsigned char*}) / sizeof (uint8_t {aka unsigned char})'
@@ -671,6 +712,7 @@ protected:
 	static const size_t ptr_size = sizeof(uint8_t*);
 	static const size_t n_inline = ptr_size/sizeof(uint8_t)*8;
 	
+	// unused but allocated bits must, at all points, be clear
 	union {
 		uint8_t bits_inline[n_inline/8];
 		uint8_t* bits_outline;
@@ -689,14 +731,14 @@ protected:
 	}
 	
 	class entry {
-		array<bool>& parent;
+		bitarray& parent;
 		size_t index;
 		
 	public:
 		operator bool() const { return parent.get(index); }
 		entry& operator=(bool val) { parent.set(index, val); return *this; }
 		
-		entry(array<bool>& parent, size_t index) : parent(parent), index(index) {}
+		entry(bitarray& parent, size_t index) : parent(parent), index(index) {}
 	};
 	friend class entry;
 	
@@ -706,8 +748,8 @@ protected:
 		// neither GCC nor Clang can emit bt with a memory operand (and, oddly enough, GCC only emits bt reg,reg on -O2, not -Os)
 		// bt can accept integer arguments, but the assembler errors out if the argument is >= 256,
 		//  and silently emits wrong machine code for arguments >= operand size
-		// bt docs say operation is same as the C version, except it's implementation defined whether it uses u8, u16 or u32
-		// but our buffer is power of two sized, so that's fine
+		// bt docs say operation is same as the C version, except it's implementation defined whether it uses u8, u16 or u32 units
+		// but our buffer size is always a multiple of 4, so that's fine
 		bool ret;
 		__asm__("bt {%2,%1|%1,%2}" : "=@ccc"(ret) : "m"(*(const uint8_t(*)[])bits()), "r"(n) : "cc");
 		return ret;
@@ -736,7 +778,7 @@ protected:
 #endif
 	
 	//does not resize
-	void set_slice(size_t start, size_t num, const array<bool>& other, size_t other_start);
+	void set_slice(size_t start, size_t num, const bitarray& other, size_t other_start);
 	void clear_unused(size_t start, size_t nbytes);
 	
 	size_t alloc_size(size_t len)
@@ -774,7 +816,7 @@ public:
 		set(this->nbits-1, item);
 	}
 	
-	array<bool> slice(size_t first, size_t count) const;
+	bitarray slice(size_t first, size_t count) const;
 	
 private:
 	void destruct()
@@ -786,7 +828,7 @@ private:
 		this->nbits = 0;
 		memset(bits_inline, 0, sizeof(bits_inline));
 	}
-	void construct(const array<bool>& other)
+	void construct(const bitarray& other)
 	{
 		nbits = other.nbits;
 		if (nbits > n_inline)
@@ -800,27 +842,26 @@ private:
 			memcpy(bits_inline, other.bits_inline, sizeof(bits_inline));
 		}
 	}
-	void construct(array<bool>&& other)
+	void construct(bitarray&& other)
 	{
 		memcpy((void*)this, (void*)&other, sizeof(*this));
-		other.nbits = 0;
-		memset(other.bits_inline, 0, sizeof(other.bits_inline));
+		other.construct();
 	}
 public:
 	
-	array() { construct(); }
-	array(const array<bool>& other) { construct(other); }
-	array(array<bool>&& other) { construct(std::move(other)); }
-	~array() { destruct(); }
+	bitarray() { construct(); }
+	bitarray(const bitarray& other) { construct(other); }
+	bitarray(bitarray&& other) { construct(std::move(other)); }
+	~bitarray() { destruct(); }
 	
-	array& operator=(const array<bool>& other)
+	bitarray& operator=(const bitarray& other)
 	{
 		destruct();
 		construct(other);
 		return *this;
 	}
 	
-	array& operator=(array<bool>&& other)
+	bitarray& operator=(bitarray&& other)
 	{
 		destruct();
 		construct(std::move(other));
@@ -830,42 +871,6 @@ public:
 	explicit operator bool() { return size(); }
 };
 
-
-//A refarray acts mostly like a normal array. The difference is that it stores pointers rather than the elements themselves;
-//as such, you can't cast to arrayview or pointer, but you can keep pointers or references to the elements, or insert something virtual.
-template<typename T> class refarray {
-	array<autoptr<T>> items;
-public:
-	explicit operator bool() const { return (bool)items; }
-	T& operator[](size_t n) { return *items[n]; }
-	template<typename... Ts>
-	T& append(Ts... args)
-	{
-		T* ret = new T(std::move(args)...);
-		items.append(ret);
-		return *ret;
-	}
-	void append_take(T& item) { items.append(&item); }
-	void append_take(T* item) { items.append(item); }
-	void append_take(autoptr<T> item) { items.append(std::move(item)); }
-	void remove(size_t index) { items.remove(index); }
-	void reset() { items.reset(); }
-	size_t size() { return items.size(); }
-	
-private:
-	class enumerator {
-		autoptr<T>* ptr;
-	public:
-		enumerator(autoptr<T>* ptr) : ptr(ptr) {}
-		
-		T& operator*() { return **ptr; }
-		enumerator& operator++() { ++ptr; return *this; }
-		bool operator!=(const enumerator& other) { return ptr != other.ptr; }
-	};
-public:
-	enumerator begin() { return enumerator(items.ptr()); }
-	enumerator end() { return enumerator(items.ptr() + items.size()); }
-};
 
 #define X(T) COMMON_INST(array<T>);
 ALLINTS(X)
