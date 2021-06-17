@@ -228,6 +228,9 @@ static int atoi_simple(const char * text)
 //trusting everything to set O_CLOEXEC isn't enough, this is a sandbox
 bool process::closefrom(int lowfd)
 {
+	// TODO: change to close_range(lowfd, UINT_MAX, 0) on kernel >= 5.9
+	// or, for Valgrind compat, close_range(lowfd, 1023, 0)
+	
 	//getdents[64] is documented do-not-use and opendir should be used instead.
 	//However, we're in (the equivalent of) a signal handler, and opendir is not signal safe.
 	//Therefore, raw kernel interface it is.
@@ -387,7 +390,7 @@ bool process::launch(string prog, arrayview<string> args, bool override_argv0)
 	
 	if (ch_stdin ) ch_stdin ->init(loop);
 	if (ch_stdout) ch_stdout->init(loop);
-	if (ch_stderr) ch_stderr->init(loop);
+	if (ch_stderr && ch_stderr != ch_stdout) ch_stderr->init(loop);
 	
 	array<int> fds;
 	fds.append(ch_stdin  ? ch_stdin ->pipe[0] : open("/dev/null", O_RDONLY));

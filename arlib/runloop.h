@@ -41,6 +41,15 @@
 //   (if yes, use a global object's ctor to assign the GUI runloop to the main thread)
 // - allows plenty of cleanups across all of Arlib; grep for TODO
 // should also remove the idle/relative/absolute/repeat distinction, oneshot relative only; the others are too rare
+// the above should be done once c++20 coroutines are in place, they'll require rewriting the entire thing already
+// c++20 coro will also allow me to delete most of those callback functions, instead tracking which sockets have a coro trying to read
+
+// for Windows, I should base it mostly or exclusively on alertable I/O / APC completion routines (ReadFileEx, WSARecv),
+//  since they seem to be the most general mechanism (few other things allow awaiting a pipe)
+// they also allow me to exceed the MAXIMUM_WAIT_OBJECTS limit, 64 is way too low
+// the alternative would be I/O completion ports, which allows completing the operation on a thread it wasn't started on,
+//  but I'm not gonna do that anyways
+// they also interact poorly with the message pump prior to windows 10 and seem harder to use, so alert it is
 
 //A runloop keeps track of a number of file descriptors, calling their handlers whenever the relevant operation is available.
 //Event handlers must handle the event. If they don't, the handler may be called again forever and block everything else.

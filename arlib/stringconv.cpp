@@ -232,23 +232,42 @@ template<typename T> void testundec(const char * S, T V)
 	T a;
 	assert(fromstring(S, a));
 	
-	static_assert(sizeof(T) <= sizeof(size_t));
-	size_t ai = 0;
-	size_t Vi = 0;
-	memcpy(&ai, &a, sizeof(T));
-	memcpy(&Vi, &V, sizeof(T));
-	if (ai != Vi) // bitcast because -0.0 and nan equality is funny in float
+	if ((T)0.5 == (T)0)
 	{
 		test_nothrow
 		{
-			assert_eq(a, V);
-			if (a == V) assert_eq(ai, Vi); // extra checks to ensure only one of those two throw
+			assert_eq(a, V); // if it's an integer type, just assert normally
+		}
+		return;
+	}
+	
+	// for float, bitcast, -0.0 and nan equality is funny
+	static_assert(sizeof(T) <= sizeof(uint64_t)); // uint64 because double is funny
+	uint64_t ai = 0;
+	uint64_t Vi = 0;
+	memcpy(&ai, &a, sizeof(T));
+	memcpy(&Vi, &V, sizeof(T));
+	if (ai != Vi)
+	{
+		test_nothrow
+		{
+			string as = tostring(a)+" "+tostring(ai);
+			string Vs = tostring(V)+" "+tostring(Vi);
+			assert_eq(as, Vs);
 		}
 	}
 }
 
 test("string conversion", "", "string")
 {
+	uint8_t u8;
+	int32_t i32;
+	int64_t i64;
+	uint32_t u32;
+	uint64_t u64;
+	float f;
+	double d;
+	
 	testcall(testundec<int>("123", 123));
 	testcall(testundec<int>("0123", 123)); // no octal allowed
 	testcall(testundec<int>("00123", 123));
@@ -273,7 +292,23 @@ test("string conversion", "", "string")
 	testcall(testundec<double>("1e-999", 0));
 	testcall(testundec<double>("inf", HUGE_VAL));
 	testcall(testundec<double>("-inf", -HUGE_VAL));
+	assert(!fromstring("+inf", f));
+	assert(!fromstring("NAN", f));
+	assert(!fromstring("INF", f));
+	assert(!fromstring("-INF", f));
+	assert(!fromstring("inf"+string::nul(), f));
+	assert(!fromstring("-inf"+string::nul(), f));
+	assert(!fromstring("nan"+string::nul(), f));
+	testcall(testundec<double>("nan", NAN));
 	testcall(testundec<double>("-0", -0.0));
+	testcall(testundec<double>("1.2e+08", 120000000.0)); // no octal allowed in exponent either
+	testcall(testundec<double>("1.2e+0", 1.2));
+	testcall(testundec<double>("0", 0.0));
+	testcall(testundec<double>("-0", -0.0));
+	testcall(testundec<double>("0.0", 0.0));
+	testcall(testundec<double>("-0.0", -0.0));
+	testcall(testundec<double>("1e-999", 0.0));
+	testcall(testundec<double>("-1e-999", -0.0));
 	testcall(testundec<float>("2.5", 2.5));
 	testcall(testundec<float>("2.5e+1", 25));
 #ifndef _WIN32 // some of these fail on Windows (Wine is more accurate than Windows, but not perfect)
@@ -281,8 +316,7 @@ test("string conversion", "", "string")
 #endif
 	testcall(testundec<float>("33554450", 33554448.0));
 	testcall(testundec<float>("33554451", 33554452.0));
-	testcall(testundec<float>("inf", HUGE_VALF));
-	testcall(testundec<float>("-inf", -HUGE_VALF));
+	testcall(testundec<float>("nan", NAN));
 	
 	// just to verify that all 10 work, C's integer types are absurd
 	testcall(testundec<signed char     >("123", 123));
@@ -334,13 +368,6 @@ test("string conversion", "", "string")
 	assert(!fromstringhex("1234567", bar)); // odd length
 	assert(!fromstringhex("0x123456", bar)); // no 0x allowed
 	
-	uint8_t u8;
-	int32_t i32;
-	int64_t i64;
-	uint32_t u32;
-	uint64_t u64;
-	float f;
-	double d;
 	u32 = 42; assert(!fromstring("", u32)); assert_eq(u32, 0); // this isn't an integer
 	i32 = 42; assert(!fromstring("", i32)); assert_eq(i32, 0);
 	u32 = 42; assert(!fromstringhex("", u32)); assert_eq(u32, 0);
@@ -359,40 +386,28 @@ test("string conversion", "", "string")
 	assert( fromstring("-0", i32)); // but if -1 is valid, -0 should be too
 	assert(!fromstring("+1", u32)); // no + prefix allowed
 	assert(!fromstring("+1", i32));
-	assert(!fromstring("+1", f));
 	assert(!fromstring(" 42", u32));
 	assert(!fromstring("0x42", u32));
 	assert(!fromstringhex(" 42", u32));
 	assert(!fromstringhex("0x42", u32));
-	assert(!fromstring(" 42", f));
-	assert(!fromstring("0x42", f));
 	
+	assert(!fromstring("+1", f)); // no + prefix allowed
+	assert(!fromstring(" 42", f));
 	assert(!fromstring("0x123", f));
 	assert(!fromstring("+0x123", f));
 	assert(!fromstring("-0x123", f));
 	assert(!fromstring("0X123", f));
 	assert(!fromstring("+0X123", f));
 	assert(!fromstring("-0X123", f));
+	assert(!fromstring("00x123", f));
+	assert(!fromstring("+00x123", f));
+	assert(!fromstring("-00x123", f));
 	assert(!fromstring("1e", f));
 	assert(!fromstring("1e+", f));
 	assert(!fromstring("1e-", f));
 	assert(!fromstring("1.", f));
 	assert(!fromstring(".1", f));
 	assert(!fromstring(".", f));
-	assert( fromstring("0", f)); assert_eq(f, 0.0); assert(!signbit(f));
-	assert( fromstring("-0", f)); assert_eq(f, -0.0); assert(signbit(f));
-	assert( fromstring("0.0", f)); assert_eq(f, 0.0); assert(!signbit(f));
-	assert( fromstring("-0.0", f)); assert_eq(f, -0.0); assert(signbit(f));
-	assert( fromstring("1e-999", f)); assert_eq(f, 0.0); assert(!signbit(f));
-	assert( fromstring("-1e-999", f)); assert_eq(f, -0.0); assert(signbit(f));
-	assert( fromstring("inf", f)); assert(isinf(f));
-	assert(!fromstring("+inf", f));
-	assert( fromstring("-inf", f)); assert(isinf(f));
-	assert( fromstring("nan", f)); assert(isnan(f));
-	assert(!fromstring("NAN", f));
-	assert(!fromstring("INF", f));
-	assert(!fromstring("-INF", f));
-	assert( fromstring("nan", d)); assert(isnan(d));
 	
 	// 0.0000000000000000000000000703853100000000000000000000000000000000 <- input
 	// 0.0000000000000000000000000703853069185120912085918801714030697411 <- float closest to the input

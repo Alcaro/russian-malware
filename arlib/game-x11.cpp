@@ -16,7 +16,7 @@ class gameview_x11;
 gameview_x11* g_gameview = NULL;
 // I get segfaults if I XCloseDisplay without glXDestroyContext, or dlclose(libGL.so) then XCloseDisplay
 // easiest fix is to not XCloseDisplay; it's a memory leak, but if this module is an executable, it doesn't matter
-// and if it's a dll, it most likely shouldn't be using gameview in the first place
+// and if it's a dll, it shouldn't be using gameview in the first place; it sets some global state on the X connection
 //ondeinit() { if (window_x11.display) XCloseDisplay(window_x11.display); }
 
 class gameview_x11 : public gameview {
@@ -72,8 +72,7 @@ static void global_init()
 	
 	runloop::global()->set_fd(ConnectionNumber(window_x11.display), [](uintptr_t){ process_events(); });
 	
-	Bool ignore;
-	XkbSetDetectableAutoRepeat(window_x11.display, true, &ignore);
+	XkbSetDetectableAutoRepeat(window_x11.display, true, NULL);
 	
 	// this may be useful on Solaris, but I can't find any trace of it doing anything anywhere else
 	// https://bugzilla.gnome.org/show_bug.cgi?id=76681

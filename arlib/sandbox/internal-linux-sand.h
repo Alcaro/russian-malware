@@ -4,11 +4,8 @@
 //#include <sys/socket.h>
 
 //kernel features that aren't used yet, but may be useful here, or the underlying process module:
-//[4.17 / june 2018] MAP_FIXED_NOREPLACE, for preload_action early mmap
-//[5.0 / march 2019] SECCOMP_RET_USER_NOTIF - instead of SIGSYS, another process gets the syscall arguments
-//  worth investigating if that'd get rid of signal handler perf penalties
-//  target process can follow the pointer args via process_vm_readv
-//    how to protect against pid reuse?
+//[4.17 / june 2018] MAP_FIXED_NOREPLACE, so the last page can be mapped early, ensuring it's not used during execve
+//  (can't unconditionally replace that page; if ASLR put the bottom of the stack there, shredding that would be inadvisable)
 //[5.1 / may 2019] pidfd_send_signal
 //[5.2 / july 2019] clone(CLONE_PIDFD)
 //[5.3 / september 2019] select() on pidfd, and reading exit status
@@ -16,34 +13,42 @@
 //[5.9 / october 2020] close_range()
 //  simplifies my closefrom(), current one is pretty ugly
 //[5.10 / december 2020] nonblocking pidfd (maybe? not sure)
-//[5.11 / unreleased] PR_SET_SYSCALL_USER_DISPATCH
-//  may allow getting rid of the CLONE_CHILD_SETTID hack - though likely at a perf penalty, and a whole bunch of complexity
-//[unmerged?] CLONE_WAIT_PID
-//  makes waitpid(-1) not care about that child, allowing use of GSubprocess
-//[root-only] eBPF
-//  moving some policy from broker to BPF would be an improvement
-//  but to my knowledge, non-classic BPF is still true-root only (CLONE_NEWUSER isn't enough)
-//  due to the 99999 Spectre variants, CLONE_NEWUSER or lower will likely never have access to eBPF
-//[no patch exists] make execveat accept NULL as a blank string
-//  that last mappable page hack is terrible
-//[no patch exists] RESOLVE_BENEATH
+//[5.13 / june 2021?] Landlock, another sandboxing mechanism
+//  Landlock is not a complete sandbox in 5.13, but it's a good start, and it seems to complement seccomp-bpf quite well
+//  more specifically, banning FS_READ_DIR on / should restrict the filesystem well enough that I don't need the last mappable page hack,
+//    and it may also offer a variant of RESOLVE_BENEATH (not sure)
+//[not usable in its current state] RESOLVE_BENEATH
 //  RESOLVE_BENEATH will improve performance by not involving broker for the vast majority of open()s
-//  it's still open/openat/sigreturn, but it's way better than open/sendto/recvfrom/openat/sendmsg/recvmsg/sigreturn
+//  it's still open/openat/sigreturn, but it's way better than open/sendto/recvfrom/openat/sendmsg/sigreturn
 //  can only be used for readonly open, max_write is mandatory
 //  it was added to kernel 5.6 (march 2020) via openat2 - but its flags are in a struct, so I can't do anything
+//[no patch exists] a way to block all filesystem access (syscall or prctl, or chroot to a directory guaranteed to exist and be empty)
+//  so I can delete that last mappable page hack in execveat, and stop worrying about other filesystem operations
+//  (openat would still exist, but that's easy to seccomp off)
 //[no patch exists] deep argument inspection for seccomp-bpf https://lwn.net/Articles/799557/
-//  this would allow using RESOLVE_BENEATH, purging the last mappable page hack, and fix various other ugliness
-//[unmerged] Landlock; an alternative to seccomp-bpf, somewhat higher level
-//  seccomp-bpf is quite limited, and needs some weird tricks; perhaps a completely different approach would be better
+//  this would allow using RESOLVE_BENEATH, as well as purging the last mappable page hack, and probably fix some other ugliness
+//[no patch exists] make execveat treat NULL as a blank string
+//  yet another way to delete that last mappable page hack
+//[no patch exists] pidfd for SECCOMP_RET_USER_NOTIF and process_vm_readv
+//  would change open/sendto/recvfrom/openat/sendmsg/sigreturn to open/usernotif/openat/vm_readv/usernotif-return
+//  the current pid-based mechanism allows leaking the address space of unsandboxed processes, if the pid is reused
+//  could also be solved with an unsandboxed broker in the child's pid namespace,
+//    but the extra process may cost more performance than the removed syscalls save
+//[not usable in its current state] eBPF
+//  moving some policy from broker to BPF would be an improvement
+//  but due to the 99999 Spectre variants, CLONE_NEWUSER or lower will likely never have access to eBPF; needs true root
+//[unmerged] CLONE_WAIT_PID
+//  makes waitpid(-1) not care about that child, allowing use of GSubprocess
+//some of the above are multiple ways to accomplish the same goal; duplicates will be kept until any solution is implemented
 
 //currently, the minimum kernel is 4.6 (may 2016), to use CLONE_NEWCGROUP
 //the maximum kernel feature used is also 4.6, nothing optional is used
 
-//allowing openat() is currently risk-free, if used with AT_BENEATH
-//pidfd is also safe, since openat() is blocked
+//allowing openat() is currently risk-free, if used with RESOLVE_BENEATH
+//giving child access to pidfd is also safe, since openat() is blocked
 //however, openat(pidfd, ...) could give access to various strange things, which must be prohibited
-// RESOLVE_NO_MAGICLINKS and RESOLVE_BENEATH would most likely be sufficient
-// alternatively, check if pidfd is still a /proc entry; if not, it's safe
+//  probably harmless with RESOLVE_NO_MAGICLINKS
+//  alternatively, check if pidfd is still a /proc entry; if not, it's safe
 
 enum broker_req_t {
 	br_nop,       // [req only] does nothing, doesn't respond (unused)

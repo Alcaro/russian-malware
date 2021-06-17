@@ -25,7 +25,8 @@ class set : public linqbase<set<T>> {
 		bitarray prev_valid = std::move(m_valid);
 		
 		m_data = xcalloc(newsize, sizeof(T));
-		m_valid.reset();
+		static_assert(sizeof(T) >= 1); // otherwise the tags mess up (zero-size objects are useless in sets, 
+		m_valid.reset();               // and I'm not sure if they're expressible in standard C++, but no reason not to check)
 		m_valid.resize(newsize);
 		
 		for (size_t i=0;i<prev_valid.size();i++)
@@ -265,7 +266,7 @@ public:
 	//messing with the set during iteration half-invalidates all iterators
 	//a half-invalid iterator may return values you've already seen and may skip values, but will not crash or loop forever
 	//exception: you may not dereference a half-invalid iterator, use operator++ first
-	//'for (T i : my_set) { my_set.remove(i); }' is safe, though it may not necessarily remove everything
+	//'for (T i : my_set) { my_set.remove(i); }' is safe, but is not guaranteed to remove everything
 	iterator begin() const { return iterator(this, 0); }
 	iterator end() const { return iterator(this, -1); }
 

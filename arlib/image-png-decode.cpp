@@ -77,6 +77,8 @@ bool oimage::init_decode_png(arrayview<uint8_t> pngdata)
 	uint8_t interlace_meth = IHDR.u8();
 	
 	if (width == 0 || height == 0 || width >= 0x80000000 || height >= 0x80000000) goto fail;
+	if ((uint64_t)width * height >= 0x80000000 / sizeof(uint32_t)) goto fail; // ensure width*height doesn't overflow
+	// huge images will still OOM, but at least they won't corrupt memory
 	if (bits_per_sample >= 32 || color_type > 6 || comp_meth != 0 || filter_meth != 0 || interlace_meth > 1) goto fail;
 	if (bits_per_sample > 8) goto fail; // bpp=16 is allowed by the png standard, but not by this program
 	if (interlace_meth) goto fail; // TODO: implement this

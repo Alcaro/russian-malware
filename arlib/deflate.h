@@ -12,7 +12,7 @@ public: // so tests can access sizeof(huff_table_123)
 	bool m_in_last; // logically belongs beside m_in_at, but that'd yield padding, better rearrange it
 	
 	uint32_t m_in_nbits;
-	uint64_t m_in_bits_buf; // The bottom 'nbits' bits contain valid data. Anything above that is zeroes.
+	uint64_t m_in_bits_buf; // The bottom m_in_nbits bits contain valid data. Anything above that is zeroes.
 	
 	const uint8_t * m_in_at;
 	const uint8_t * m_in_end;
@@ -131,7 +131,7 @@ public:
 	// The function may buffer an arbitrary amount of data internally, unless last=true in set_input;
 	//   it is not guaranteed to emit every possible byte of output before asking for more input.
 	// This object handles raw DEFLATE data; it will return errors or garbage data if given a zlib or gzip header.
-	// This object does not support buffer sizes below 32KB.
+	// This object does not support buffer sizes below 32KB, unless the complete output is less than that.
 	ret_t inflate();
 	
 	// Returns number of bytes in the last output buffer. If there's only one chunk (either because it was reallocated,

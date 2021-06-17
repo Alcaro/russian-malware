@@ -23,7 +23,7 @@ public:
 	//Once the connection is established, it reports writability to its runloop. However, writes before that will succeed.
 	static socket* create(cstring domain, int port, runloop* loop);
 #ifdef ARLIB_SSL
-	static socket* create_ssl(cstring domain, int port, runloop* loop); // TODO: choosable backend, server
+	static socket* create_ssl(cstring domain, int port, runloop* loop); // TODO: server
 #endif
 	// To avoid amplification attacks, any homemade protocol must have the first packet longer than the first reply.
 	// For example, it can contain a 256 character message explaining that this is a 256 byte message to avoid amplification attacks.

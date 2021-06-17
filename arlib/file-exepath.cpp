@@ -25,7 +25,7 @@ struct exepath_finder {
 		while ((ent = readdir(dir)))
 		{
 			// for . and .., sscanf will fail, return 0, and leave low/high unchanged
-			// easiest way to ensure the range check is false is initialize high to 0, and check it before low
+			// easiest way to ensure this doesn't break anything is initialize high to 0, and check it before low, so check is false
 			uintptr_t low;
 			uintptr_t high = 0;
 			sscanf(ent->d_name, "%zx-%zx", &low, &high);

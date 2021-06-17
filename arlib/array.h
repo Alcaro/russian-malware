@@ -242,16 +242,17 @@ public:
 		memcpy((void*)(this->items+b), tmp, sizeof(T));
 	}
 	
-	//unstable sort - default because equivalent-but-nonidentical states are rare
+	//unstable sort - default because equivalent but nonidentical states are rare
 	template<typename Tless>
 	void sort(const Tless& less)
 	{
-		//TODO: less lazy
+		// TODO: less lazy
 		ssort(less);
 	}
 	
 	void sort()
 	{
+		// TODO: if integer, use radix sort
 		sort([](const T& a, const T& b) { return a < b; });
 	}
 	
@@ -260,7 +261,8 @@ public:
 	template<typename Tless>
 	void ssort(const Tless& less)
 	{
-		//insertion sort
+		// insertion sort; not the fastest, but it's adaptive, it's simple, and its constant factors are good
+		// no real point upgrading to something faster, stable sort is rare
 		for (size_t a=1;a<this->count;a++)
 		{
 			if (!less(this->items[a], this->items[a-1]))

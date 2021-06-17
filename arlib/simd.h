@@ -37,16 +37,22 @@
 # endif
 
 // implemented using macros in misc.cpp
-void debugd8(__m128i vals); void debugd16(__m128i vals); void debugd32(__m128i vals); void debugd64(__m128i vals);
-void debugu8(__m128i vals); void debugu16(__m128i vals); void debugu32(__m128i vals); void debugu64(__m128i vals);
-void debugx8(__m128i vals); void debugx16(__m128i vals); void debugx32(__m128i vals); void debugx64(__m128i vals);
-void debugf32(__m128 vals); void debugf64(__m128d vals); void debugc8(__m128i vals);
-void debugd8(const char * prefix, __m128i vals); void debugd16(const char * prefix, __m128i vals); 
-void debugu8(const char * prefix, __m128i vals); void debugu16(const char * prefix, __m128i vals); 
-void debugx8(const char * prefix, __m128i vals); void debugx16(const char * prefix, __m128i vals); 
-void debugd32(const char * prefix, __m128i vals); void debugd64(const char * prefix, __m128i vals); 
-void debugu32(const char * prefix, __m128i vals); void debugu64(const char * prefix, __m128i vals); 
-void debugx32(const char * prefix, __m128i vals); void debugx64(const char * prefix, __m128i vals); 
-void debugf32(const char * prefix, __m128 vals); void debugf64(const char * prefix, __m128d vals); 
-void debugc8(const char * prefix, __m128i vals);
+// I'd prefer passing __m128i directly, but that makes 32bit mingw (and possibly others) throw warnings about
+// 'note: The ABI for passing parameters with 16-byte alignment has changed in GCC 4.6'
+// that I can't figure out how to shut up
+void debugd8(const __m128i& vals);  void debugu8(const __m128i& vals);  void debugx8(const __m128i& vals);
+void debugd16(const __m128i& vals); void debugu16(const __m128i& vals); void debugx16(const __m128i& vals);
+void debugd32(const __m128i& vals); void debugu32(const __m128i& vals); void debugx32(const __m128i& vals);
+void debugd64(const __m128i& vals); void debugu64(const __m128i& vals); void debugx64(const __m128i& vals);
+
+void debugd8(const char * prefix, const __m128i& vals); void debugd16(const char * prefix, const __m128i& vals); 
+void debugu8(const char * prefix, const __m128i& vals); void debugu16(const char * prefix, const __m128i& vals); 
+void debugx8(const char * prefix, const __m128i& vals); void debugx16(const char * prefix, const __m128i& vals); 
+void debugd32(const char * prefix, const __m128i& vals); void debugd64(const char * prefix, const __m128i& vals); 
+void debugu32(const char * prefix, const __m128i& vals); void debugu64(const char * prefix, const __m128i& vals); 
+void debugx32(const char * prefix, const __m128i& vals); void debugx64(const char * prefix, const __m128i& vals); 
+
+void debugf32(const __m128& vals);  void debugf32(const char * prefix, const __m128& vals);
+void debugf64(const __m128d& vals); void debugf64(const char * prefix, const __m128d& vals); 
+void debugc8(const __m128i& vals); void debugc8(const char * prefix, const __m128i& vals);
 #endif

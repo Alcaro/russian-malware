@@ -205,6 +205,7 @@ public:
 	};
 	output* set_stdout(output& outp) { ch_stdout = &outp; return &outp; }
 	output* set_stderr(output& outp) { ch_stderr = &outp; return &outp; }
+	output* set_stdout_stderr(output& outp) { ch_stdout = &outp; ch_stderr = &outp; return &outp; }
 	
 	
 #ifdef __linux__

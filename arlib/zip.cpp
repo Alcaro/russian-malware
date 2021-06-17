@@ -8,22 +8,14 @@
 #include "deps/miniz.c"
 
 //files in directories are normal files with / in the name
-//directories themselves are represented as size-0 files with names ending with /, no special flags except minimum version
+//directories themselves are represented as size-0 files with 0x10 bit on external attributes, and usually name ending with /
 
-//TODO: reject zips where any byte is part of multiple files (counting CDR as a file), or where any byte is not part of anything
+//TODO: reject zips where any byte is part of multiple files (or CDR and a file), no chance it's not malicious
+//TODO: simplify and delete this thing; more bytestream, probably in a binary format
+//TODO: do something better than 'write empty string to delete', makes it hard to create folders and empty files
 
-
-//TODO: simplify and delete this one
-//should use bytestream, possibly via something serialize.h-like
-
-//static inline uint8_t  end_swap(uint8_t  n) { return n;  }
 static inline uint16_t end_swap(uint16_t n) { return __builtin_bswap16(n); }
 static inline uint32_t end_swap(uint32_t n) { return __builtin_bswap32(n); }
-//static inline uint64_t end_swap(uint64_t n) { return __builtin_bswap64(n); }
-//static inline int8_t  end_swap(int8_t  n) { return (int8_t )end_swap((uint8_t )n); }
-//static inline int16_t end_swap(int16_t n) { return (int16_t)end_swap((uint16_t)n); }
-//static inline int32_t end_swap(int32_t n) { return (int32_t)end_swap((uint32_t)n); }
-//static inline int64_t end_swap(int64_t n) { return (int64_t)end_swap((uint64_t)n); }
 
 //Given class U, where U supports operator T() and operator=(T), intwrap<U> enables all the integer operators.
 //Most are already supported by casting to the integer type, but this one adds the assignment operators too.
@@ -458,7 +450,7 @@ bool zip::clean()
 	bool any = false;
 	for (size_t i=0;i<filenames.size();i++)
 	{
-		if (filenames[i].startswith("__MACOSX/"))
+		if (filenames[i].startswith("__MACOSX/") || filenames[i].endswith("/.DS_Store") || filenames[i].iendswith("/thumbs.db"))
 		{
 			filenames.remove(i);
 			filedat.remove(i);
@@ -538,7 +530,7 @@ array<uint8_t> zip::pack() const
 		const file& f = filedat[i];
 		centdirrec cdr = {
 			/*signature*/    centdirrec::signature_expected,
-			/*verused*/      63, // don't think anything really cares about this, just use latest
+			/*verused*/      63, // I don't think anything cares about this, just use latest
 			/*vermin*/       fileminver(f),
 			/*bitflags*/     strascii(filenames[i]) ? 0 : 1<<11,
 			/*compmethod*/   f.method,
@@ -552,7 +544,14 @@ array<uint8_t> zip::pack() const
 			/*len_fcomment*/ 0,
 			/*disknr*/       0,
 			/*attr_int*/     0,
-			/*attr_ext*/     0, // APPNOTE.TXT doesn't document this, other packers I checked are huge mazes. just gonna ignore it
+			// the ZIP specification defines the low byte of external attributes to be the MS-DOS directory attribute byte
+			// aka https://docs.microsoft.com/en-us/windows/win32/fileio/file-attribute-constants
+			// upper three bytes are undefined and contradictorily used
+			// Windows Explorer uses the lower 16 bits as is, probably all 32 but hard to test
+			// Unix tools usually put the permission bits, as well as __S_IFDIR, in upper 16 (0o644 << 16)
+			// at least one OSX tool sometimes sets the 0x4000 flag for some unknown purpose (which Windows misreads as F_A_ENCRYPTED)
+			// only the is-directory flag makes sense in a zip, others should not be present in a distributable archive
+			/*attr_ext*/     filenames[i].endswith("/") ? 0x10 : 0x00,
 			/*header_start*/ headerstarts[i],
 		};
 		arrayview<uint8_t> cdrb((uint8_t*)&cdr, sizeof(cdr));

@@ -37,13 +37,11 @@ static socketint_t mksocket(int domain, int type, int protocol) { return socket(
 namespace {
 
 #ifdef _WIN32
-RUN_ONCE_FN(initialize)
+oninit_static()
 {
 	WSADATA wsaData;
 	WSAStartup(MAKEWORD(2, 2), &wsaData); // why
 }
-#else
-static void initialize() {}
 #endif
 
 static int fixret(int ret)
@@ -98,8 +96,6 @@ static addrinfo * parse_hostname(cstring domain, uint16_t port, bool udp)
 
 static int connect(cstring domain, int port)
 {
-	initialize();
-	
 	addrinfo * addr = parse_hostname(domain, port, false);
 	if (!addr) return -1;
 	
@@ -472,8 +468,6 @@ socket* socket::create_ssl(cstring domain, int port, runloop* loop)
 
 socket* socket::create_udp(cstring domain, int port, runloop* loop)
 {
-	initialize();
-	
 	addrinfo * addr = parse_hostname(domain, port, true);
 	if (!addr) return NULL;
 	
@@ -546,8 +540,6 @@ fail:
 
 socketlisten* socketlisten::create(int port, runloop* loop, function<void(autoptr<socket>)> callback)
 {
-	initialize();
-	
 	socketint_t fd = -1;
 	if (fd<0) fd = socketlisten_create_ip6(in6addr_any, port);
 #if defined(_WIN32) && _WIN32_WINNT < _WIN32_WINNT_LONGHORN

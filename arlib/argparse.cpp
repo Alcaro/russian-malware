@@ -288,8 +288,10 @@ static void test_getopt(bool a, bool b, const char * c, const char * nonopts, Ar
 test("argument parser", "string,array", "argparse")
 {
 	// If Arlib in any way disagrees with GNU getopt, Arlib is wrong.
-	// Currently, this one can't differentiate blank arguments from missing.
-	// This should be fixed as soon as I figure out how to represent that.
+	// Exception: getopt allows abbreviating long option names if no other option starts with these characters.
+	// This just feels silly; too high risk previously-working shell scripts stop working if a new option is added so --co is now ambiguous.
+	// Another difference is that this one can't differentiate blank arguments from missing.
+	// This is a bug and will be fixed as soon as I figure out how to represent that.
 	
 	testcall(test_one("a",   "",        "--bool"));
 	testcall(test_one("A",   "",        "--str=value"));

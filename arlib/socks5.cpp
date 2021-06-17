@@ -66,8 +66,8 @@ public:
 				for (int i=0;i<end;i++)
 				{
 					static const uint8_t buf_exp[] = {
-						/*ver*/05, /*auth*/00,
-						/*ver*/05, /*reply=success*/00, /*reserved*/00, /*addrtype (not checked here)*/
+						/*ver*/5, /*auth*/0,
+						/*ver*/5, /*reply=success*/0, /*reserved*/0, /*addrtype (not checked here)*/
 					};
 					if (buf[i] != buf_exp[6-phase_bytes+i])
 					{

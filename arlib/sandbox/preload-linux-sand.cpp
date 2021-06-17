@@ -102,8 +102,16 @@ static inline int munmap(void* addr, size_t length)
 #define ALIGN_MULT 4096
 #define ALIGN_MASK (ALIGN_MULT-1)
 #define ALIGN_OFF(ptr) ((uintptr_t)(ptr) & ALIGN_MASK)
+#if !defined(__has_builtin)
+#define __has_builtin(x) false
+#endif
+#if __has_builtin(__builtin_align_up)
+#define ALIGN_DOWN(ptr) __builtin_align_down(ptr, ALIGN_MULT)
+#define ALIGN_UP(ptr) __builtin_align_up(ptr, ALIGN_MULT)
+#else
 #define ALIGN_DOWN(ptr) ((ptr) - ALIGN_OFF(ptr))
 #define ALIGN_UP(ptr) (ALIGN_DOWN(ptr) + (ALIGN_OFF(ptr) ? ALIGN_MULT : 0))
+#endif
 
 static inline Elf64_Ehdr* map_binary(int fd, uint8_t*& base, uint8_t* hbuf, size_t buflen)
 {
@@ -187,11 +195,11 @@ static inline void update_auxv(Elf64_auxv_t* auxv, uint8_t* ld_base, Elf64_Ehdr*
 		{
 			auxv[i].a_un.a_val = ehdr->e_phnum;
 		}
-		//AT_BASE looks like it should be relevant, but is actually NULL
+		//AT_BASE looks like it should be relevant, but it's actually NULL
 		if (auxv[i].a_type == AT_ENTRY)
 		{
 			//a_un is a union, but it only has one member. Apparently the rest were removed to allow
-			// a 64bit program to use the 32bit structs. Even though auxv isn't accessible on wrong
+			// a 64bit program to use the 32bit structs, even though auxv isn't accessible on wrong
 			// bitness. I guess someone removed all pointers, sensible or not.
 			//Backwards compatibility, fun for everyone...
 			auxv[i].a_un.a_val = (uintptr_t)(funcptr)(ld_base + ehdr->e_entry);
@@ -204,12 +212,13 @@ extern "C" void preload_action(char** argv, char** envp);
 extern "C" void preload_error(const char * why); // doesn't return
 extern "C" funcptr bootstrap_start(void** stack)
 {
-	int* argc = (int*)stack;
+	int argc = *(int*)stack;
 	char* * argv = (char**)(stack+1);
-	char* * envp = argv+*argc+1;
+	char* * envp = argv+argc+1;
 	void* * tmp = (void**)envp;
-	while (*tmp) tmp++;
-	Elf64_auxv_t* auxv = (Elf64_auxv_t*)(tmp+1);
+	do;
+	while (*tmp++); // no argument count for envp, have to loop through it
+	Elf64_auxv_t* auxv = (Elf64_auxv_t*)tmp;
 	
 	preload_action(argv, envp);
 	

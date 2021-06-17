@@ -258,7 +258,7 @@ void DNS::sock_cb()
 	string ret = "";
 	
 	{
-	if (stream.u16b() != 0x8180) goto fail; // QR, RD, RA
+	if ((stream.u16b()&~0x0080) != 0x8100) goto fail; // QR, RD, RA (RA optional)
 	if (stream.u16b() != 0x0001) goto fail; // QDCOUNT
 	uint16_t ancount = stream.u16b(); // git.io gives eight different IPs
 	if (ancount < 0x0001) goto fail; // ANCOUNT

@@ -13,7 +13,7 @@
 #include <linux/memfd.h> // documented as sys/memfd.h, but that doesn't exist
 
 //#include <linux/ioprio.h> // ioprio_set - header doesn't exist for me, copying the content
-//I believe they count as userspace ABI, i.e. this is fine
+//I believe they count as userspace ABI, i.e. no meaningful license constraints
 
 #define IOPRIO_CLASS_SHIFT	(13)
 #define IOPRIO_PRIO_MASK	((1UL << IOPRIO_CLASS_SHIFT) - 1)
@@ -273,10 +273,12 @@ pid_t sandproc::launch_impl(const char * program, array<const char*> argv, array
 	//discard the response, we know it's { br_ping, {0,0,0}, "" }, we only care whether we got one at all
 	
 	//revoke filesystem
+	//ideally there'd be a completely empty directory somewhere, but I can't find one
+	// (the only filesystem syscall seccomp permits is execveat, which is restricted in other ways, but defense in depth)
 	require(chroot("/proc/sys/debug/"));
 	require(chdir("/"));
 	
-	require_eq(install_seccomp(), true);
+	require_b(install_seccomp());
 	
 	static const char * const new_envp[] = {
 		"TERM=xterm", // some programs check this to know whether they can color, some check ioctl(TCGETS), some check both
@@ -286,7 +288,7 @@ pid_t sandproc::launch_impl(const char * program, array<const char*> argv, array
 		NULL
 	};
 	
-	//0x00007FFF'FFFFF000 isn't mappable, apparently sticking SYSCALL (0F 05) at 0x00007FFF'FFFFFFFE
+	//page 0x00007FFF'FFFFFnnn isn't mappable, apparently sticking SYSCALL (0F 05) at 0x00007FFF'FFFFFFFE
 	// will return to an invalid address and blow up
 	//http://elixir.free-electrons.com/linux/v4.11/source/arch/x86/include/asm/processor.h#L832
 	//doesn't matter what the last page is, as long as there is one

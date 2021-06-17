@@ -535,7 +535,7 @@ static jsonparser::event test1e[]={
 };
 
 static const char * test2 =
-"[ 1, 2.5e+1, 3 ]"
+"[ 1, 2.5e+1, 3, 4.5e+0, 6.7e+08 ]"
 ;
 
 static jsonparser::event test2e[]={
@@ -543,6 +543,8 @@ static jsonparser::event test2e[]={
 		{ e_num, "1" },
 		{ e_num, "2.5e+1" },
 		{ e_num, "3" },
+		{ e_num, "4.5e+0" },
+		{ e_num, "6.7e+08" },
 	{ e_exit_list },
 	{ e_finish }
 };

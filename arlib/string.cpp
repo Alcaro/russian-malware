@@ -23,7 +23,7 @@ extern const uint8_t char_props[256] = {
 	0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, // Fx
 };
 
-void string::resize(uint32_t newlen)
+void string::resize(size_t newlen)
 {
 	switch (!inlined()<<1 | (newlen>max_inline()))
 	{
@@ -64,7 +64,7 @@ void string::resize(uint32_t newlen)
 	}
 }
 
-void string::init_from_outline(const uint8_t * str, uint32_t len)
+void string::init_from_outline(const uint8_t * str, size_t len)
 {
 	if (len <= max_inline())
 	{
@@ -78,7 +78,7 @@ void string::init_from_outline(const uint8_t * str, uint32_t len)
 	}
 }
 
-void string::init_from_large(const uint8_t * str, uint32_t len)
+void string::init_from_large(const uint8_t * str, size_t len)
 {
 	m_inline_len_w() = -1;
 	
@@ -101,7 +101,7 @@ void string::init_from(const cstring& other)
 void string::reinit_from(arrayview<uint8_t> data)
 {
 	const uint8_t * str = data.ptr();
-	uint32_t len = data.size();
+	size_t len = data.size();
 	
 	if (str >= this->ptr() && str <= this->ptr()+this->length())
 	{
@@ -657,7 +657,6 @@ uint32_t cstring::codepoint_at(uint32_t& idx) const
 {
 	const uint8_t * bytes = ptr();
 	uint32_t remaining = length()-idx;
-	if (UNLIKELY(remaining == 0)) { debug_warn_stack("codepoint_at eof"); return -1; } // TODO: delete on mar1
 	
 	uint8_t head = bytes[idx];
 	if (LIKELY(head < 0x80)) { idx++; return head; }
@@ -673,7 +672,7 @@ uint32_t cstring::codepoint_at(uint32_t& idx) const
 	
 	if (bits >= 0xC280 && bits <= 0xDFBF) {}
 	else if (bits >= 0xE0A080 && (bits^0x020000) <= 0xEF9FBF) bits &= ~0x200000; // otherwise that bit becomes 0x8000 in codepoint
-	else if (bits >= 0xF0908080 && bits <= 0xF48FBFBF) {} // ignore top byte in other cases, the fixed bits are zero or masked off
+	else if (bits >= 0xF0908080 && bits <= 0xF48FBFBF) {} // for other top bytes, the fixed bits are zero or masked off
 	else
 	{
 		idx++;

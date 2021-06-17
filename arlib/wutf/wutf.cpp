@@ -121,7 +121,7 @@ static void redirect_machine(LPBYTE victim, LPBYTE replacement)
 #elif defined(_M_X64) || defined(__x86_64__)
 static void redirect_machine(LPBYTE victim, LPBYTE replacement)
 {
-	// this destroys %rax, but ABI prohibits caller from using it
+	// this destroys %rax, but ABI prohibits caller from using it anyways
 	// https://msdn.microsoft.com/en-us/library/9z1stfyw.aspx
 	victim[0] = 0x48; victim[1] = 0xB8;   // mov %rax, <64 bit constant>
 	*(LPBYTE*)(victim+2) = replacement;
@@ -146,7 +146,13 @@ void WuTF_redirect_function(WuTF_funcptr victim, WuTF_funcptr replacement)
 
 void WuTF_enable()
 {
+	// TODO: windows 10 v1903 added proper utf8 support
+	// https://docs.microsoft.com/en-us/windows/uwp/design/globalizing/use-utf8-code-page
+	// doesn't seem settable via code, need to figure out how to get it into the makefiles
+	// (or should I emit some funny sections via a .cpp?)
+	// latest windows supporting the feature officially makes me a lot more comfortable hacking up old windowses
 	if (GetACP() == CP_UTF8) return;
+	
 	//it's safe to call this multiple times, that just replaces some bytes with their current values
 	//if wutf becomes more complex, add a static bool initialized
 #define STRINGIFY_(x) #x
@@ -155,7 +161,8 @@ void WuTF_enable()
 	HMODULE ntdll = GetModuleHandle("ntdll.dll");
 	//list of possibly relevant functions in ntdll.dll (pulled from 'strings ntdll.dll'):
 	//some are documented at https://msdn.microsoft.com/en-us/library/windows/hardware/ff553354%28v=vs.85%29.aspx
-	//many are implemented in terms of other functions, often rooting in the ones I've hijacked
+	//many are implemented in terms of each other, often rooting in the ones I've hijacked
+	//several others are just for legacy support and have few or no callers
 	// RtlAnsiCharToUnicodeChar
 	// RtlAnsiStringToUnicodeSize
 	// RtlAnsiStringToUnicodeString

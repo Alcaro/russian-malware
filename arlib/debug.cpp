@@ -12,7 +12,7 @@ static void debug_log_raw(const char * text) // log_mut must be locked when call
 {
 	fputs(text, stderr);
 	if (!log_file) log_file = fopen(file::exepath()+"/arlib-debug.log", "at");
-	if (log_file) fputs(text, log_file);
+	if (log_file) { fputs(text, log_file); fflush(log_file); }
 }
 
 #ifdef __unix__

@@ -15,14 +15,15 @@
 //    them; it will also fail-open if a new resource kind is introduced
 //- Many lockdown functions temporarily disable privileges, rather than completely delete them
 //- There's little or no documentation on which privileges are required for the operations I need
-//    (okay, Linux doesn't document that very clearly either, but strace exists and the kernel ABI is stable, so it can be reverse engineered)
+//    (Linux doesn't document that very clearly either, but strace exists and the kernel ABI is stable, so it can be reverse engineered)
+//      (it occasionally changes between userspace upgrades, forcing a re-RE, but it's a rare and usually easy operation)
 //- The lockdown functions are often annoying to call, involving variable-width arrays in
 //    structures, and LCIDs that likely vary between reboots
 //I cannot trust such a system. I only trust whitelists, like Linux seccomp.
 //Even Chrome couldn't find anything comprehensive; they use everything they can find (restricted token, job object, desktop,
 // SetProcessMitigationPolicy, firewall, etc), but some operations, such as accessing FAT32 volumes, still pass through.
 //It feels like the Windows sandboxing functions are designed for trusted code operating on untrusted data, rather than untrusted code,
-// or for memory safe languages, or some similarly absurd constraint.
+// or for memory safe languages, or some similarly inapplicable constraint.
 //Since I can't create satisfactory results in such an environment, I won't even try.
 
 #ifdef __linux__

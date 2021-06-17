@@ -140,27 +140,24 @@ public:
 			handles[n++] = (HANDLE)pair.key;
 		
 		uint32_t wait_ret;
+		// use alertable wait, in case application code uses ReadFileEx (future Arlib code will probably also need it)
 #ifdef ENABLE_MSGPUMP
 		if (is_global)
 		{
-			wait_ret = MsgWaitForMultipleObjectsEx(n, handles, delay, QS_ALLEVENTS, MWMO_INPUTAVAILABLE);
+			wait_ret = MsgWaitForMultipleObjectsEx(n, handles, delay, QS_ALLEVENTS, MWMO_ALERTABLE|MWMO_INPUTAVAILABLE);
 		}
 		else
 #endif
 		{
-			if (n == 0) { wait_ret = WAIT_TIMEOUT; Sleep(delay); }
-			else wait_ret = WaitForMultipleObjects(n, handles, false, delay);
+			if (n == 0) { wait_ret = WAIT_TIMEOUT; SleepEx(delay, true); }
+			else wait_ret = WaitForMultipleObjectsEx(n, handles, false, delay, true);
 		}
 		
-		if (wait_ret != WAIT_TIMEOUT)
-		{
 #ifdef ENABLE_MSGPUMP
-			if (wait_ret == n)
-				_window_process_events();
-			else
+		_window_process_events();
 #endif
-				events[(uintptr_t)handles[wait_ret]](handles[wait_ret]);
-		}
+		if (wait_ret < n)
+			events[(uintptr_t)handles[wait_ret]](handles[wait_ret]);
 	}
 	
 #ifdef ARLIB_THREAD

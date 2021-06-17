@@ -1,6 +1,10 @@
 #include "stringconv.h"
 #include <math.h>
 
+#if __GNUC__ >= 11 && !defined(_WIN32)
+#warning change to std::{to,from}_chars (but only on linux, no libstdc++ on windows)
+#endif
+
 #ifdef __MINGW32__
 float strtof_arlib(const char * str, char** str_end)
 {
@@ -29,13 +33,12 @@ static bool fromstring_float(cstring s, double& out, double(*strtod)(const char*
 	out = 0;
 	auto tmp_s = s.c_str();
 	const char * tmp_cp = tmp_s;
-	const char * tmp_cp_digit = tmp_cp;
-	if (*tmp_cp_digit == '-') tmp_cp_digit++;
+	const char * tmp_cp_digit = tmp_cp + (*tmp_cp == '-');
 	if (UNLIKELY(!isdigit(*tmp_cp_digit)))
 	{
-		if (!strcmp(tmp_cp, "inf")) { out = HUGE_VAL; return true; }
-		if (!strcmp(tmp_cp, "-inf")) { out = -HUGE_VAL; return true; }
-		if (!strcmp(tmp_cp, "nan")) { out = NAN; return true; }
+		if (s == "inf") { out = HUGE_VAL; return true; }
+		if (s == "-inf") { out = -HUGE_VAL; return true; }
+		if (s == "nan") { out = NAN; return true; }
 		return false;
 	}
 	if (UNLIKELY(tmp_cp_digit[0] == '0' && (tmp_cp_digit[1]|0x20) == 'x')) return false;

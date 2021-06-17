@@ -1,6 +1,7 @@
 #include "crc32.h"
 #include "simd.h"
 
+// not the fastest to compile, but it works
 static inline constexpr uint32_t crc32_poly_exp(int dist)
 {
 	uint32_t out = 1;

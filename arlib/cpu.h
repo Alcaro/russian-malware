@@ -3,20 +3,23 @@
 
 // __builtin_cpu_supports relies on a setup function that takes about 2KB of statically linked machine code,
 //   mostly to make up its own feature bit order, and to calculate cpu model and other rarely useful information
+// it also optimizes poorly
 // better reinvent it
 #define __builtin_cpu_supports ("use runtime__SSE2__ instead"/0)
 
 #ifdef _MSC_VER
 # ifdef _M_I386
 #  define __i386__ 1
+#  if _M_IX86_FP >= 1
+#   define __SSE__ 1
+#  endif
+#  if _M_IX86_FP >= 2
+#   define __SSE2__ 1
+#  endif
 # endif
 # ifdef _M_AMD64
 #  define __x86_64__ 1
-# endif
-# if _M_IX86_FP >= 1
 #  define __SSE__ 1
-# endif
-# if _M_IX86_FP >= 2
 #  define __SSE2__ 1
 # endif
 # ifdef __AVX__ // conveniently, msvc's AVX names match the GCC names
@@ -30,7 +33,6 @@
 # ifdef __AVX512F__
 #  define __FMA__ 1
 # endif
-# error check whether the above tests work, especially _M_IX86_FP on x64
 #endif
 
 extern uint32_t arlib_runtime_cpu[];
@@ -170,5 +172,6 @@ extern uint32_t arlib_runtime_cpu[];
 #endif
 
 // AVX512 is not implemented, since I don't have a computer supporting that
+// half of the cpuid bits refer to hardware features only the kernel should care about, so they're absent above
 
 #endif

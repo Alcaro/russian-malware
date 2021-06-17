@@ -1,13 +1,6 @@
 #include "random.h"
 #include "thread.h"
 
-#if defined(_WIN32) && _WIN32_WINNT < _WIN32_WINNT_WIN7
-HCRYPTPROV rand_seed_prov;
-oninit() { CryptAcquireContextA(&rand_seed_prov, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT|CRYPT_SILENT); }
-ondeinit() { CryptReleaseContext(rand_seed_prov, 0); }
-#endif
-
-
 //optimizes to a single ror instruction on x86, and similar on other archs - even the &31 disappears
 //(in fact, it needs the &31 - without it, gcc emits one opcode per operator)
 static uint32_t ror32(uint32_t x, unsigned bits)
@@ -17,9 +10,8 @@ static uint32_t ror32(uint32_t x, unsigned bits)
 
 // this is PCG-XSH-RR with 64-bit state and 32-bit output, adapted from wikipedia
 // https://en.wikipedia.org/wiki/Permuted_congruential_generator
-// could use Romu instead http://www.romu-random.org/, but I like how PCG's state is just 64 bits
 
-static const uint64_t multiplier = 6364136223846793005; // I don't know how this number was calculated
+static const uint64_t multiplier = 6364136223846793005; // I don't know how this number was chosen
 static const uint64_t increment  = 1442695040888963407; // "or an arbitrary odd constant" ~wikipedia
 
 static uint32_t permute(uint64_t state)
@@ -136,6 +128,9 @@ test("random seeding","","random")
 	assert_ne(n[0], 0);
 	assert_ne(n[1], 0);
 	assert_ne(n[2], 0);
+	assert_ne(n[0], (uint64_t)-1);
+	assert_ne(n[1], (uint64_t)-1);
+	assert_ne(n[2], (uint64_t)-1);
 	assert_ne(n[0], n[1]);
 	assert_ne(n[0], n[2]);
 	assert_ne(n[1], n[2]);

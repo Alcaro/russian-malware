@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <new>
 
 //list of synchronization points: http://pubs.opengroup.org/onlinepubs/009695399/basedefs/xbd_chap04.html#tag_04_10
 
@@ -49,8 +50,7 @@ static void * threadproc(void * userdata)
 static void thread_create_inner(function<void()>&& start, pthread_attr_t* attr)
 {
 	threaddata_pthread* thdat = xmalloc(sizeof(threaddata_pthread));
-	memset(thdat, 0, sizeof(*thdat));
-	thdat->func = std::move(start);
+	new(&thdat->func) function<void()>(std::move(start));
 	
 	pthread_t thread;
 	if (pthread_create(&thread, attr, threadproc, thdat) != 0) abort();

@@ -63,7 +63,7 @@ if use_incbin:
      ".incbin \"" filename "\"\n"
 """
 	
-	body_imgdecode = """
+	body_imgdecode = r"""
 #if END_LITTLE
 #  define ifmt_argb8888_c ifmt_bgra8888_by_c
 #else

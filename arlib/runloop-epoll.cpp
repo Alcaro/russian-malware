@@ -17,6 +17,9 @@ public:
 	#define WR_EV (EPOLLOUT|EPOLLRDHUP|EPOLLHUP|EPOLLERR)
 	
 	int epoll_fd;
+#ifdef ARLIB_TESTRUNNER
+	bool entered = false;
+#endif
 	bool exited;
 	
 	struct fd_cbs {
@@ -252,12 +255,20 @@ public:
 	
 	void enter() override
 	{
+#ifdef ARLIB_TESTRUNNER
+		assert(!entered);
+		entered = true;
+#endif
 		exited = false;
 		while (!exited) step(true);
 	}
 	
 	void exit() override
 	{
+#ifdef ARLIB_TESTRUNNER
+		assert(entered);
+		entered = false;
+#endif
 		exited = true;
 	}
 	

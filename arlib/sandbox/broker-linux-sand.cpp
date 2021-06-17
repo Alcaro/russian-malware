@@ -17,7 +17,7 @@
 //TODO: when (if) AT_BENEATH is merged, hand out fds to the mount points to the child and allow openat(O_RDONLY|AT_BENEATH)
 //do not allow O_RDWR, max_write is mandatory
 //this will improve performance by not involving broker for the vast majority of open()s
-//it's still open/openat/sigreturn, but it's way better than open/sendto/recvfrom/openat/sendmsg/recvmsg/sigreturn
+//it's still open/openat/sigreturn, but it's way better than open/sendto/recvfrom/openat/sendmsg/sigreturn
 
 #include <sys/syscall.h>
 #include <linux/memfd.h>
