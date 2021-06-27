@@ -160,6 +160,14 @@ void argparse::parse(const char * const * argv)
 		{
 			// no leading -
 			single_arg("", arg, al_mandatory, NULL);
+			if (m_early_stop)
+			{
+				while (*argv)
+				{
+					single_arg("", *argv, al_mandatory, NULL);
+					argv++;
+				}
+			}
 		}
 	}
 	

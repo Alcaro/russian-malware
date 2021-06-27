@@ -8,6 +8,14 @@
 #include "simd.h"
 #include "thread/atomic.h"
 
+#ifdef __GNUC__
+#define LIKELY(expr)    __builtin_expect(!!(expr), true)
+#define UNLIKELY(expr)  __builtin_expect(!!(expr), false)
+#else
+#define LIKELY(expr)    (expr)
+#define UNLIKELY(expr)  (expr)
+#endif
+
 typedef void(*funcptr)();
 
 namespace {

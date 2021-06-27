@@ -47,11 +47,11 @@ protected:
 	//Closes all open file descriptors in the process, except those which are numerically strictly less than lowfd.
 	//For example, closefrom(3) would close everything except stdin/stdout/stderr.
 	static bool closefrom(int lowfd);
-	//Sets the file descriptor table to fds, closing all existing fds.
+	//Sets the file descriptor table to 'fds', closing all other fds.
 	//If an entry is -1, the corresponding fd is closed. Duplicates in the input are allowed.
 	//Returns false on failure, but keeps doing its best anyways.
 	//Will mangle the input array. While suboptimal, it's the only way to avoid a post-fork malloc.
-	//The CLOEXEC flag is set to 'cloexec' on all fds.
+	//The CLOEXEC flag is set to 'cloexec' on all remaining fds.
 	static bool set_fds(arrayvieww<int> fds, bool cloexec = false);
 	
 	//Like execlp, this searches PATH for the given program.
@@ -60,22 +60,22 @@ protected:
 	//stdio_fd is an array of { stdin, stdout, stderr } and should be sent to set_fds (possibly with a few additions) post-fork.
 	//May modify its arguments arbitrarily.
 	//Must return the child's pid, or -1 on failure.
-#ifdef ARLIB_SANDBOX
+#ifdef ARLIB_OVERRIDEABLE_PROCESS
 	virtual
 #endif
 	pid_t launch_impl(const char * program, array<const char*> argv, array<int> stdio_fd);
 	
 public:
 	
-	//unfortunately, nothing else supports doing multiple handlers like this
+	//unfortunately, nothing else supports chaining multiple handlers like this
 	typedef void (*sigaction_t)(int signo, siginfo_t* info, void* context);
 	//Call this to make Arlib not install its SIGCHLD handler. Instead, the caller must install a SIGCHLD handler,
 	//  and must call the returned function pointer from said handler.
 	//Calling that function for non-Arlib processes is fine, it does nothing.
 	//Must be done before the first call to process::launch(). May only be done once.
 	static sigaction_t claim_sigchld();
-	//Makes Arlib's SIGCHLD handler call the given function. Works even if the above is done.
-	//Must be done before the first call to process::launch(), or to claim_sigchld's return value. May only be done once.
+	//Makes Arlib's SIGCHLD handler call the given function. Works independent of the above.
+	//Must be done before the first call to process::launch(), and before first call to claim_sigchld's return value. May only be done once.
 	static void next_sigchld(sigaction_t handler);
 private:
 #endif
@@ -222,7 +222,7 @@ public:
 	//TODO: implement
 	void detach();
 	
-#ifdef ARLIB_SANDBOX
+#ifdef ARLIB_OVERRIDEABLE_PROCESS
 	virtual
 #endif
 	~process();

@@ -3,7 +3,6 @@
 #include "array.h"
 #include "hash.h"
 #include "simd.h"
-#include"os.h"
 #include <string.h>
 
 // define my own ctype, because table lookup is faster than libc call that probably ends up in a table lookup anyways,
@@ -35,20 +34,22 @@ extern const uint8_t char_props[256];
 // 0x01 - hex digit (0-9A-Fa-f)
 // 0x02 - uppercase (A-Z)
 // 0x04 - lowercase (a-z)
-// 0x08 - unused (testing &0x60 is as cheap as &0x08, and I'm not sure what else would be common enough to spend these bits on)
-// 0x10 - unused (best I can think of would be ispunct or underscore, but they'd have only one or two callers each across my projects)
-// 0x20 - letter (A-Za-z - 20 rather than 06 to optimize tolower and toupper. Can be removed if I need another bit in the table.)
+// 0x08 - underscore (_)
+// 0x10 - unused
+// 0x20 - letter (A-Za-z)
 // 0x40 - digit (0-9)
-// 0x80 - space (\t\n\r ) (0x80 bit is the cheapest to test, and isspace is the most common isctype())
-inline bool isspace(uint8_t c) { return char_props[c] & 0x80; } // C standard says \f \v are space, but this one disagrees
-inline bool isdigit(uint8_t c) { return char_props[c] & 0x40; }
-inline bool isalpha(uint8_t c) { return char_props[c] & 0x20; } // C standard also says they must give sensible answers for EOF,
-inline bool islower(uint8_t c) { return char_props[c] & 0x04; } //  but I don't use EOF, so I'll stick to the 256 byte values only
-inline bool isupper(uint8_t c) { return char_props[c] & 0x02; }
-inline bool isalnum(uint8_t c) { return char_props[c] & 0x60; }
-inline bool isxdigit(uint8_t c) { return char_props[c] & 0x01; }
-inline uint8_t tolower(uint8_t c) { return c|(char_props[c]&0x20); }
-inline uint8_t toupper(uint8_t c) { return c&~(char_props[c]&0x20); }
+// 0x80 - space (\t\n\r ) - contrary to libc isspace, \f\v are not considered space
+static inline bool isspace(uint8_t c) { return char_props[c] & 0x80; }
+static inline bool isdigit(uint8_t c) { return char_props[c] & 0x40; }
+static inline bool isalpha(uint8_t c) { return char_props[c] & 0x20; } // also contrary to libc, these functions handle byte values only,
+static inline bool islower(uint8_t c) { return char_props[c] & 0x04; } // not EOF
+static inline bool isupper(uint8_t c) { return char_props[c] & 0x02; }
+static inline bool isalnum(uint8_t c) { return char_props[c] & 0x60; }
+static inline bool isxdigit(uint8_t c) { return char_props[c] & 0x01; }
+static inline uint8_t tolower(uint8_t c) { return c|(char_props[c]&0x20); }  // other than 0x20, all bit assignments are arbitrary
+static inline uint8_t toupper(uint8_t c) { return c&~(char_props[c]&0x20); } // some bits are tested differently on some platforms,
+static inline bool isualpha(uint8_t c) { return char_props[c] & 0x28; }      // but I don't think there's a size or perf difference
+static inline bool isualnum(uint8_t c) { return char_props[c] & 0x68; }
 
 
 
@@ -193,7 +194,7 @@ public:
 #endif
 	}
 	
-	template<typename T, typename Ttest = std::enable_if_t<std::is_same_v<T,const char*> || std::is_same_v<T,char*>>>
+	template<typename T, typename = std::enable_if_t<std::is_same_v<T,const char*> || std::is_same_v<T,char*>>>
 	cstring(T str) { init_from_nocopy(str); }
 	template<size_t N> cstring(const char (&str)[N]) { init_from_nocopy_literal<N>(str); }
 	template<size_t N> cstring(char (&str)[N]) { init_from_nocopy(str); } // hack on a hack - char buf[32] isn't a literal

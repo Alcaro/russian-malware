@@ -110,3 +110,28 @@ ifeq ($(OS),windows)
     $(warning alternatively, if MSYSTEM $(MSYSTEM) is nonempty, use that)
   endif
 endif
+
+#OBJMANGLE(rule,sources) - takes C/C++ source files and returns the mangled name under the specified rule
+OBJMANGLE = $(patsubst %,obj/$1___$(OBJNAME)___%.o,$(subst /,__,$2))
+#SOURCENAME(obj) - takes a .o file, returned from OBJMANGLE, and returns the corresponding source file
+#does not handle multi-file inputs, use $(foreach)
+SOURCENAME = $(strip $(subst __,/,$(lastword $(subst ___,$(SPACE),$(patsubst obj/%.o,%,$1)))))
+#DOMAINNAME(obj) - takes a .o file, returned from OBJMANGLE, and returns the corresponding domain
+DOMAINNAME = $(firstword $(subst ___,$(SPACE),$(patsubst obj/%.o,%,$1)))
+
+ifeq ($(OS),linux)
+  OBJNAME := linux
+endif
+ifeq ($(OS),windows)
+  OBJNAME := windows$(WINBITS)
+endif
+
+ifneq ($(OPT),0)
+  OBJNAME := $(OBJNAME)-opt
+endif
+ifneq ($(ASAN),)
+  OBJNAME := $(OBJNAME)-asan
+endif
+ifneq ($(SELFTEST),)
+  OBJNAME := $(OBJNAME)-test
+endif

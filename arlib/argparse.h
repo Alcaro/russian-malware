@@ -43,6 +43,7 @@ class argparse {
 	string m_appname;
 	refarray<arg_base> m_args;
 	function<void(cstring error)> m_onerror;
+	bool m_early_stop = false;
 #ifndef ARGUI_NONE
 	bool m_accept_cli = false;
 	bool m_has_gui = false;
@@ -134,6 +135,8 @@ public:
 		return *arg;
 	}
 	arg_strmany& add(cstring name, array<string>* target) { return add('\0', name, target); }
+	
+	arg_strmany& add_early_stop(array<string>* target) { m_early_stop = true; return add('\0', "", target); }
 	
 private:
 	class arg_int : public arg_t<arg_int> {

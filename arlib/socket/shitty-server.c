@@ -95,7 +95,7 @@ static int listen_create(int port)
 static bool add_seccomp()
 {
 	static const struct sock_filter filter[] = {
-/* source code (assemble with bpfasm.py in the sandbox):
+/* source code (assemble with <https://github.com/Alcaro/Arlib/tree/master/subproj/gravelcube/sandbox/bpfasm.py>):
 
 let arch = (offsetof(struct seccomp_data, arch))
 let sysno = (offsetof(struct seccomp_data, nr))

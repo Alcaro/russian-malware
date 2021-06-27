@@ -17,30 +17,27 @@ static void malloc_fail(size_t size)
 	debug_fatal(buf);
 }
 
-#undef malloc
 anyptr xmalloc(size_t size)
 {
 	_test_malloc();
 	if (size >= 0x80000000) malloc_fail(size);
-	void* ret = malloc(size);
+	void* ret = try_malloc(size);
 	if (size && !ret) malloc_fail(size);
 	return ret;
 }
-#undef realloc
 anyptr xrealloc(anyptr ptr, size_t size)
 {
 	if ((void*)ptr) _test_free();
 	if (size) _test_malloc();
 	if (size >= 0x80000000) malloc_fail(size);
-	void* ret = realloc(ptr, size);
+	void* ret = try_realloc(ptr, size);
 	if (size && !ret) malloc_fail(size);
 	return ret;
 }
-#undef calloc
 anyptr xcalloc(size_t size, size_t count)
 {
 	_test_malloc();
-	void* ret = calloc(size, count);
+	void* ret = try_calloc(size, count);
 	if (size && count && !ret) malloc_fail(size*count);
 	return ret;
 }
@@ -112,7 +109,7 @@ void debugc8(const char * prefix, const __m128i& vals) { printf("%s ", prefix); 
 //   and new is only used for classes with vtables that don't make sense to use in test_nomalloc anyways
 //  (I can disable valgrind's override by compiling with -s, but that has the obvious side effects.)
 #if defined(__MINGW32__) || defined(ARLIB_TESTRUNNER)
-void* operator new(std::size_t n) _GLIBCXX_THROW(std::bad_alloc) { return malloc(n); }
+void* operator new(std::size_t n) _GLIBCXX_THROW(std::bad_alloc) { return try_malloc(n); }
 //Valgrind 3.13 overrides operator delete(void*), but not delete(void*,size_t)
 //do not inline into free(p) until valgrind is fixed
 #ifndef __MINGW32__ // mingw marks it inline, which obviously can't be used with noinline, but mingw doesn't need valgrind workarounds
@@ -215,6 +212,27 @@ test("bitround", "", "")
 	assert_eq(ilog2(127), 6);
 	assert_eq(ilog2(128), 7);
 	assert_eq(ilog2(255), 7);
+	
+	auto test1 = [](uint64_t n)
+	{
+		testctx(tostring(n))
+		{
+			if (n)
+				assert_eq(ilog10(n), snprintf(NULL,0, "%" PRIu64, n)-1);
+			if ((uint32_t)n)
+				assert_eq(ilog10((uint32_t)n), snprintf(NULL,0, "%" PRIu32, (uint32_t)n)-1);
+		}
+	};
+	for (uint64_t i=1;i!=0;i*=2)
+	{
+		test1(i-1);
+		test1(i);
+	}
+	for (uint64_t i=1;i!=7766279631452241920;i*=10) // 7766279631452241920 = (uint64_t)100000000000000000000
+	{
+		test1(i-1);
+		test1(i);
+	}
 }
 
 test("test_nomalloc", "", "")

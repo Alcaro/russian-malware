@@ -51,10 +51,6 @@
 #include "wutf/wutf.h"
 #endif
 
-#ifdef ARLIB_SANDBOX
-#include "sandbox/sandbox.h"
-#endif
-
 #ifdef ARLIB_SOCKET
 #include "socket/socket.h"
 #include "dns.h"

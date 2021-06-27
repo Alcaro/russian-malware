@@ -6,7 +6,7 @@
 
 // TODO: rewrite this thing
 // - creating a socket should be async, this DNS-then-forward wrapper is silly (socks5 should be async too)
-// - backpressure; socketbuf is flawed at best, socket::write must be async
+// - backpressure; socketbuf is flawed at best, socket::write must report completion
 // - concurrency pushback; object X may only handle one concurrent event
 //     for example a GUI program that sends HTTP requests; nested GUI event handling is impossible to reason about
 //     another example: simply an echo server
@@ -18,38 +18,19 @@
 //   - object X may call into object Y, which also handles events
 //   - all relevant overhead must be optimized out as far as possible
 //   - an async function must be cancellable, without leaking anything important
-//   proposed solution:
-//     there is such a thing as an async context, which contains zero or more sockets
-//     an async context is usually idle, meaning it's trying to read all its sockets
-//     while the handler is running (including waiting for an async write), incoming data on those sockets is ignored
-//     you can also submit a function<async void()> to a context, which marks that context busy and runs the function
-//       TODO: what if it's busy already?
-//     timers and gui events do not belong in an async context, and cannot be async
-//   this can be done by giving async functions a lock argument, whose dtor releases the context, unless moved into a lambda capture
-//   however, that is very error prone, and requires nesting lambdas forever
-//   it'd be a lot easier with c++20 coroutines, which will probably be available in gcc 11, and most likely to me in 2022
-//   cancellation can probably be done by running that coro and forcing the object to return failure, unless coros allow something better
-// - make socket handler less easy to screw up
-//     for example, if a HTTP handler reads only half of the output from a SSL socket, its ready callback must run again immediately
-//     this is currently SSL's responsibility, and the exact rules are pretty subtle - I doubt I did it right everywhere
-//   proposed solution: sockets have an is_ready() function, and runloop loops that as necessary
-//                      would also allow removing the gameview::tmp_step lamehack
-// - decide if I want the runloop in a thread local variable, instead of passing it around and calling runloop::global everywhere
-//   advantages: less boilerplate; no need to store runloop pointers everywhere; DECL_TIMER becomes trivial
-//   disadvantages: TLS is tricky, especially regarding destructors; it's a global variable (though runloop::global is global already);
-//                  may complicate testing; explicit is better
-//   (if yes, use a global object's ctor to assign the GUI runloop to the main thread)
-// - allows plenty of cleanups across all of Arlib; grep for TODO
-// should also remove the idle/relative/absolute/repeat distinction, oneshot relative only; the others are too rare
-// the above should be done once c++20 coroutines are in place, they'll require rewriting the entire thing already
-// c++20 coro will also allow me to delete most of those callback functions, instead tracking which sockets have a coro trying to read
-
-// for Windows, I should base it mostly or exclusively on alertable I/O / APC completion routines (ReadFileEx, WSARecv),
-//  since they seem to be the most general mechanism (few other things allow awaiting a pipe)
-// they also allow me to exceed the MAXIMUM_WAIT_OBJECTS limit, 64 is way too low
-// the alternative would be I/O completion ports, which allows completing the operation on a thread it wasn't started on,
-//  but I'm not gonna do that anyways
-// they also interact poorly with the message pump prior to windows 10 and seem harder to use, so alert it is
+// proposed solution:
+//   instead of adding sockets to a runloop, add read/write operations (callers will rarely or never read+write on same fd)
+//   implemented using io_uring (Linux 5.1, march 2019)
+//     usable extensions: IORING_OP_SENDMSG 5.3 sep 2019, IORING_OP_TIMEOUT 5.4 nov 2019, IORING_OP_ASYNC_CANCEL 5.5 january 2020,
+//       IORING_OP_READ 5.6 march 2020 (does same thing as IORING_OP_READV, just easier to use)
+//   for windows, alertable I/O / APC completion routines (ReadFileEx, WSARecv)
+//     WSARecv is documented Vista+, but so is recv, so docs are untrustworthy - needs testing
+//     if it is Vista+, sockets will stay with WFMO on XP (ReadFileEx is known good on XP)
+//   need to research cancellation a bit more - I need a way to ensure kernel does not use the relevant buffer after I've deallocated it
+//   it'll map less well to gtk/glib runloop, but that's glibs problem
+// needs c++20 coroutines, available in gcc 11 and clang 9, and available to me in ubuntu 22.04; anything else would be lambda nesting hell
+// I'll also put the runloop in a thread-local variable, passing it around everywhere is annoying
+//   may make testing slightly harder, but no big deal
 
 //A runloop keeps track of a number of file descriptors, calling their handlers whenever the relevant operation is available.
 //Event handlers must handle the event. If they don't, the handler may be called again forever and block everything else.

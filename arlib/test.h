@@ -219,7 +219,7 @@ static void assert_all_reached()
 	}
 }
 
-#elif defined(__GNUC__)
+#elif defined(__GNUC__) && defined(__linux__)
 // and this one is even worse, but I couldn't find anything better that GCC supports
 //  (other than gcov, which doesn't integrate with my testing framework, and interacts poorly with same-line if-return).
 // Both implementations give false negatives if compiler deletes the code as provably unreachable,
@@ -262,6 +262,8 @@ static void assert_all_reached()
 	} while(0)
 #else
 // is this even possible without gcc extensions or a custom build step?
+#define assert_reached()
+#define assert_all_reached() test_inconclusive("assert_reached() isn't implemented on this platform")
 #endif
 
 #define main not_quite_main

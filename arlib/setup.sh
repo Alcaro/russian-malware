@@ -50,7 +50,6 @@ cat > Makefile <<-EOF
 	ARSOCKET = 0
 	ARSOCKET_SSL = openssl
 	ARSOCKET_SSL_WINDOWS = schannel
-	ARSANDBOX = 0
 	ARTERMINAL = 1
 	
 	include arlib/Makefile

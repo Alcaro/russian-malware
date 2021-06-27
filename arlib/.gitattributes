@@ -1,3 +1,2 @@
 deps/**            linguist-vendored
 opengl/glsym-all.h linguist-generated
-sandbox/bpf.inc    linguist-generated

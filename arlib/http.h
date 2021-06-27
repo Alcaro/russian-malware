@@ -19,7 +19,7 @@ public:
 		//These headers are added automatically, if not already present:
 		//Connection: keep-alive
 		//Host: <from url>
-		//Content-Length: <from body> (if not GET)
+		//Content-Length: <from body> (if method is POST)
 		//Content-Type: application/json if body starts with [ or {, and method is POST
 		//           or application/x-www-form-urlencoded, if method is POST and body is something else
 		array<string> headers; // TODO: multimap
@@ -33,7 +33,7 @@ public:
 		// Passed unchanged in the rsp object, and used for cancel(). Otherwise not used.
 		uintptr_t id = 0;
 		
-		//If the server sends this much data (including headers/etc), or hasn't finished in the given time, fail.
+		//If the server sends this much data (including headers/etc), or hasn't finished in the given time (including DNS lookup), fail.
 		//They're approximate; a request may succeed if the server sends slightly more than this.
 		uint64_t limit_ms = 5000;
 		size_t limit_bytes = 1048576;

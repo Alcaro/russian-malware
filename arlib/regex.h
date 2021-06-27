@@ -1231,7 +1231,9 @@ public:
 		return {};
 	}
 #ifdef HAVE_ARLIB
-	static match_t<n_capture> search(cstring str)
+	// must not take a temporary, that's a use-after-free
+	static match_t<n_capture> search(cstring&& str) = delete;
+	static match_t<n_capture> search(const cstring& str)
 	{
 		return search((char*)str.bytes().ptr(), (char*)str.bytes().ptr()+str.length());
 	}

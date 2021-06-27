@@ -56,15 +56,18 @@ long double strtold_arlib(const char * str, char** str_end);
 #include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>
-#include <stdio.h>
+#include <string.h>
 #include <limits.h>
 #include <inttypes.h>
 #include <utility>
+#ifndef ARLIB_STANDALONE
+#include <stdio.h>
 #include "function.h"
 #include "cpu.h"
+#endif
 
-#define rand use_g_rand_instead
-#define srand g_rand_doesnt_need_this
+int rand() __attribute__((deprecated("use g_rand instead")));
+void srand(unsigned) __attribute__((deprecated("g_rand doesn't need this")));
 
 #ifdef STDOUT_DELETE
 #define puts(x) do{}while(0)
@@ -121,7 +124,6 @@ defer_holder<T> dtor(T&& f)
 #define UNLIKELY(expr)  (expr)
 #define MAYBE_UNUSED
 #define KEEP_OBJECT
-#define __GNUC__ 0
 #endif
 
 #ifndef __has_builtin
@@ -264,10 +266,6 @@ void free_test(void* ptr);
 #define _test_free()
 #endif
 
-#ifdef runtime__SSE2__
-#include <mm_malloc.h> // contains an inline function that calls malloc
-#endif
-
 // These six act as their base functions if they return non-NULL, except they return anyptr and don't need explicit casts.
 // On NULL, try_ returns NULL, while xmalloc kills the process.
 
@@ -280,15 +278,15 @@ void free_test(void* ptr);
 
 anyptr xmalloc(size_t size);
 inline anyptr try_malloc(size_t size) { _test_malloc(); return malloc(size); }
-#define malloc(x) use_xmalloc_or_try_malloc_instead(x)
+void* malloc(size_t) __attribute__((deprecated("use xmalloc or try_malloc instead")));
 
 anyptr xrealloc(anyptr ptr, size_t size);
 inline anyptr try_realloc(anyptr ptr, size_t size) { if ((void*)ptr) _test_free(); if (size) _test_malloc(); return realloc(ptr, size); }
-#define realloc(x,y) use_xrealloc_or_try_realloc_instead(x,y)
+void* realloc(void*,size_t) __attribute__((deprecated("use xrealloc or try_realloc instead")));
 
 anyptr xcalloc(size_t size, size_t count);
 inline anyptr try_calloc(size_t size, size_t count) { _test_malloc(); return calloc(size, count); }
-#define calloc(x,y) use_xcalloc_or_try_calloc_instead(x,y)
+void* calloc(size_t,size_t) __attribute__((deprecated("use xcalloc or try_calloc instead")));
 
 
 //cast to void should be enough to shut up warn_unused_result, but...
@@ -336,6 +334,7 @@ protected:
 	NO_MOVE(nomove);
 };
 
+#ifndef ARLIB_STANDALONE
 template<typename T>
 class autoptr : nocopy {
 	T* ptr = NULL;
@@ -462,6 +461,7 @@ public:
 void* memmem_arlib(const void * haystack, size_t haystacklen, const void * needle, size_t needlelen) __attribute__((pure));
 #define memmem memmem_arlib
 #endif
+#endif
 
 
 
@@ -472,9 +472,10 @@ template<typename T> inline T memxor_t(const uint8_t * a, const uint8_t * b)
 	return an^bn;
 }
 // memeq is small after optimization, but looks big to the inliner, so forceinline it
-// if caller doesn't know size, caller should also be forceinlined
+// if caller doesn't know size, caller should also be forceinlined too
 forceinline bool memeq(const void * a, const void * b, size_t len)
 {
+#ifdef __GNUC__
 	if (!__builtin_constant_p(len)) return !memcmp(a, b, len);
 	
 #if defined(__i386__) || defined(__x86_64__)
@@ -508,6 +509,7 @@ forceinline bool memeq(const void * a, const void * b, size_t len)
 #else
 #error enable the above on platforms where unaligned mem access is fast
 #endif
+#endif
 	
 	return !memcmp(a, b, len);
 }
@@ -532,11 +534,11 @@ forceinline void rep_movsb(uint8_t * & dest, const uint8_t * & src, size_t count
 	);
 	src = rsi;
 	dest = rdi;
-// TODO: test
-//#elif defined(_MSC_VER)
-//	__movsb(dest, src, count);
-//	dest += count;
-//	src += count;
+#elif defined(_MSC_VER)
+#error test
+	__movsb(dest, src, count);
+	dest += count;
+	src += count;
 #else
 	if (count & 2) { *dest++ = *src++; *dest++ = *src++; }
 	if (count & 1) { *dest++ = *src++; }
@@ -567,7 +569,7 @@ template<typename T> static inline T bitround(T in)
 	
 	abort();
 #else
-	in -= (bool)in; // so bitround(0) becomes 1, rather than integer overflow and back to 0
+	in -= (bool)in; // so bitround(0) becomes 1, rather than integer underflow and back to 0
 	in |= in >> 1;
 	in |= in >> 2;
 	in |= in >> 4;
@@ -578,8 +580,9 @@ template<typename T> static inline T bitround(T in)
 	return in;
 #endif
 }
-//undefined behavior if 'in' is negative or zero
-template<typename T> static inline T ilog2(T in)
+
+//undefined behavior if 'in' is negative or zero; to make zero return 0, add |1 to input
+template<typename T> static inline uint8_t ilog2(T in)
 {
 #if defined(__GNUC__)
 	static_assert(sizeof(unsigned) == 4);
@@ -624,6 +627,27 @@ template<typename T> static inline T ilog2(T in)
 #endif
 }
 
+//undefined behavior if 'in' is negative or zero; to make zero return 0, add |1 to input
+template<typename T> static inline uint8_t ilog10(T in);
+class ilog10_tab // implementation detail, class ensures the binary doesn't contain multiple copies of these tables
+{
+	template<typename T> friend uint8_t ilog10(T in);
+	static constexpr const uint8_t approx[] = {
+		0,0,0,0,0,0,1,1,1,2,2,2,2,3,3,3,4,4,4,5,5,5,5,6,6,6,7,7,7,8,8,8,
+		8,9,9,9,10,10,10,11,11,11,11,12,12,12,13,13,13,14,14,14,14,15,15,15,16,16,16,17,17,17,17,18,
+	};
+	static constexpr const uint64_t powers[] = {
+		10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000,
+		1000000000, 10000000000, 100000000000, 1000000000000, 10000000000000, 100000000000000,
+		1000000000000000, 10000000000000000, 100000000000000000, 1000000000000000000, 10000000000000000000u
+	};
+};
+template<typename T> static inline uint8_t ilog10(T in)
+{
+	// implementation based on https://stackoverflow.com/questions/25892665/performance-of-log10-function-returning-an-int#25934909
+	uint8_t digits = ilog10_tab::approx[ilog2(in)];
+	return digits + (in >= (T)ilog10_tab::powers[digits]);
+}
 
 #define ALLINTS(x) \
 	x(signed char) \
@@ -655,6 +679,7 @@ template<typename T> static inline T ilog2(T in)
 #define SIMD_LOOP_TAIL // nop
 #endif
 
+#ifndef ARLIB_STANDALONE
 #ifdef __GNUC__
 #define oninit() __attribute__((constructor)) static void JOIN(oninit,__LINE__)()
 #define oninit_early() __attribute__((constructor(101))) static void JOIN(oninit,__LINE__)()
@@ -693,13 +718,16 @@ public:
 #define oninit_static oninit
 #define oninit_static_early oninit_early
 #endif
+#endif
 
 // Linux kernel has a macro for this, but non-expressions (like member names) in macros look wrong
 template<typename Tc, typename Ti> Tc* container_of(Ti* ptr, Ti Tc:: * memb)
 {
-	// null math is technically UB, but every known compiler will do the right thing
 	// https://wg21.link/P0908 proposes a better solution, but it was forgotten and not accepted
 	Tc* fake_object = NULL;
+#ifdef __GNUC__
+	asm("nop" : "+r"(fake_object)); // doing math on a null is UB, but good luck proving anything across an asm
+#endif                              // (both gcc and clang optimize it out)
 	size_t offset = (uintptr_t)&(fake_object->*memb) - (uintptr_t)fake_object;
 	return (Tc*)((uint8_t*)ptr - offset);
 }
@@ -725,6 +753,31 @@ public:
 };
 static inline range_t range(size_t stop) { return range_t(0, stop, 1); }
 static inline range_t range(size_t start, size_t stop, size_t step = 1) { return range_t(start, stop, step); }
+
+#ifdef __MINGW32__
+// force these to be imported from msvcrt, not mingwex, to save a bunch of kilobytes
+#define _GLIBCXX_MATH_H 1 // disable any subsequent #include <math.h>, it's full of using std::sin that conflicts with my overloads
+#include <cmath>
+
+#define MATH_FN(name) \
+	extern "C" __attribute__((dllimport)) double name(double); \
+	extern "C" __attribute__((dllimport)) float name##f(float); \
+	static inline float name(float a) { return name##f(a); } /* calling sinf would be better, but it's harmless, and useful in templates */
+#define MATH_FN_2(name) \
+	extern "C" __attribute__((dllimport)) double name(double,double); \
+	extern "C" __attribute__((dllimport)) float name##f(float,float); \
+	static inline float name(float a, float b) { return name##f(a, b); }
+
+MATH_FN(sin) MATH_FN(cos)
+MATH_FN(exp) MATH_FN(log) MATH_FN(log10)
+MATH_FN_2(pow) MATH_FN(sqrt)
+MATH_FN(ceil) MATH_FN(floor)
+
+using std::isinf;
+using std::isnan;
+using std::isnormal;
+using std::signbit;
+#endif
 
 // WARNING: Hybrid EXE/DLL is not supported by Windows. If it's ran as an EXE, it's a perfectly normal EXE, other than
 //  its nonempty exports section; however, if used as a DLL, it has to reimplement some OS facilities, yielding several limitations:
@@ -793,28 +846,3 @@ static inline void arlib_hybrid_dll_init() {}
 // 'documentation' includes the function and parameter names, not just comments; there is only one
 // plausible behavior for cstring::length(), so additional comments would just be noise.
 // https://i.redd.it/3adwp98dswi21.jpg
-
-#ifdef __MINGW32__
-// force these to be imported from msvcrt, not mingwex, saves a bunch of kilobytes (pow is 2.5KB for whatever reason)
-#define _GLIBCXX_MATH_H 1 // disable any subsequent #include <math.h>, it's full of using std::sin; that conflicts with my overloads
-#include <cmath>
-
-#define MATH_FN(name) \
-	extern "C" __attribute__((dllimport)) double name(double); \
-	extern "C" __attribute__((dllimport)) float name##f(float); \
-	static inline float name(float a) { return name##f(a); } /* sinf would be better, but it's harmless, and useful in templates */
-#define MATH_FN_2(name) \
-	extern "C" __attribute__((dllimport)) double name(double,double); \
-	extern "C" __attribute__((dllimport)) float name##f(float,float); \
-	static inline float name(float a, float b) { return name##f(a, b); }
-
-MATH_FN(sin) MATH_FN(cos)
-MATH_FN(exp) MATH_FN(log) MATH_FN(log10)
-MATH_FN_2(pow) MATH_FN(sqrt)
-MATH_FN(ceil) MATH_FN(floor)
-
-using std::isinf;
-using std::isnan;
-using std::isnormal;
-using std::signbit;
-#endif

@@ -21,12 +21,12 @@ static void debug_log_raw(const char * text) // log_mut must be locked when call
 #include <unistd.h>
 #include <fcntl.h>
 
-//method from https://src.chromium.org/svn/trunk/src/base/debug/debugger_posix.cc
+//method from https://src.chromium.org/viewvc/chrome/trunk/src/base/debug/debugger_posix.cc
 static bool has_debugger()
 {
 	char buf[4096];
 	int fd = open("/proc/self/status", O_RDONLY);
-	if (!fd) return false;
+	if (fd < 0) return false;
 	
 	ssize_t bytes = read(fd, buf, sizeof(buf)-1);
 	close(fd);

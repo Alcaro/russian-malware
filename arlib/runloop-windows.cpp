@@ -149,12 +149,13 @@ public:
 		else
 #endif
 		{
-			if (n == 0) { wait_ret = WAIT_TIMEOUT; SleepEx(delay, true); }
+			if (n == 0) { SleepEx(delay, true); wait_ret = WAIT_TIMEOUT; }
 			else wait_ret = WaitForMultipleObjectsEx(n, handles, false, delay, true);
 		}
 		
 #ifdef ENABLE_MSGPUMP
-		_window_process_events();
+		if (is_global)
+			_window_process_events();
 #endif
 		if (wait_ret < n)
 			events[(uintptr_t)handles[wait_ret]](handles[wait_ret]);

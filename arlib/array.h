@@ -229,6 +229,8 @@ public:
 		return *this;
 	}
 	
+	arrayview<T> slice(size_t first, size_t count) const { return arrayview<T>(this->items+first, count); }
+	arrayview<T> skip(size_t n) const { return slice(n, this->count-n); }
 	arrayvieww<T> slice(size_t first, size_t count) { return arrayvieww<T>(this->items+first, count); }
 	arrayvieww<T> skip(size_t n) { return slice(n, this->count-n); }
 	

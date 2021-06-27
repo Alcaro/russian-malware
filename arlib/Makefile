@@ -36,7 +36,7 @@ ifeq (,$(wildcard arlib/string.cpp))
 endif
 
 ifneq ($(ARMAKEHEAD),1)
-include arlib/Makefile-head
+  include arlib/Makefile-head
 endif
 
 ARTYPE ?= exe
@@ -44,7 +44,6 @@ ARGUI ?= 0
 AROPENGL ?= 0
 AROPENGL_D3DSYNC ?= 1
 ARTHREAD ?= 0
-ARSANDBOX ?= 0
 ARWUTF ?= 0
 ARSOCKET ?= 0
 #ARSOCKET_SSL ?= openssl # leave them unset, there are some ?= further down
@@ -91,7 +90,7 @@ endif
 # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=53431
 CCXXFLAGS += -Wno-comment
 
-# don't call pkg-config twice if present in CONF_xFLAGS
+# don't call pkg-config every time CONF_xFLAGS is used, if parent project's makefile sets it
 CONF_CFLAGS := $(CONF_CFLAGS)
 CONF_LFLAGS := $(CONF_LFLAGS)
 CONF_CXXFLAGS := $(CONF_CXXFLAGS)
@@ -119,7 +118,6 @@ ifeq ($(OS),linux)
     CONF_CFLAGS += -fpic
     CONF_LFLAGS += -rdynamic
   endif
-  OBJNAME := $(OBJNAME)linux
 endif
 
 ifeq ($(OS),windows)
@@ -134,7 +132,6 @@ ifeq ($(OS),windows)
     CONF_LFLAGS += -Wl,--dynamicbase
     $(warning hybrid DLL is a poorly tested configuration, prepare for bugs)
   endif
-  OBJNAME := $(OBJNAME)windows$(WINBITS)
   #surprisingly, this is still not default as of mingw 8.1.0 (to check, objdump -x | grep DllCharacteristics, 0x0100 bit is nxcompat)
   CONF_LFLAGS += -Wl,--nxcompat -ladvapi32
   ifeq ($(ARXPSUPPORT),1)
@@ -220,7 +217,6 @@ ifneq ($(OPT),0)
   ifeq ($(OPT),spd)
     CONF_CFLAGS += -O3
   endif
-  OBJNAME := $(OBJNAME)-opt
 else
   #OPT=1 DEBUG=1 should prioritize optimization over debugging; OPT=1 DEBUG=1 then 'strip' should be identical to OPT=1 DEBUG=0
   #so this one is gated on OPT=0, not DEBUG=1
@@ -236,23 +232,12 @@ ifeq ($(PROFILE),use)
 endif
 
 ifneq ($(ASAN),)
-  OBJNAME := $(OBJNAME)-asan
   CONF_CFLAGS += -fsanitize=address
   #ASan must be first
   CONF_LFLAGS := -lasan $(CONF_LFLAGS)
 endif
 
-DEFINES += ARLIB_OBJNAME=$(OBJNAME)
-
 OUTNAME = $(PROGRAM)$(EXESUFFIX)
-
-#OBJMANGLE(rule,sources) - takes C/C++ source files and returns the mangled name under the specified rule
-OBJMANGLE = $(patsubst %,obj/$1___$(OBJNAME)___%.o,$(subst /,__,$2))
-#SOURCENAME(obj) - takes a .o file, returned from OBJMANGLE, and returns the corresponding source file
-#does not handle multi-file inputs, use $(foreach)
-SOURCENAME = $(strip $(subst __,/,$(lastword $(subst ___,$(SPACE),$(patsubst obj/%.o,%,$1)))))
-#DOMAINNAME(obj) - takes a .o file, returned from OBJMANGLE, and returns the corresponding domain
-DOMAINNAME = $(firstword $(subst ___,$(SPACE),$(patsubst obj/%.o,%,$1)))
 
 CFLAGS_DEFAULT ?=
 CFLAGS_NOWARN += -w
@@ -267,8 +252,9 @@ ifneq ($(SELFTEST),)
   ifneq ($(ARLIB_MAIN),)
     CFLAGS_ARLIB += -DARLIB_TEST -DARLIB_TEST_ARLIB
   endif
-  OBJNAME := $(OBJNAME)-test
 endif
+
+DEFINES += ARLIB_OBJNAME=$(OBJNAME)
 
 ifeq ($(ARGUI),1)
   SOURCES_ARLIB += arlib/gui/*.cpp
@@ -354,10 +340,6 @@ ifeq ($(ARTHREAD),1)
     CONF_CFLAGS += -pthread
     CONF_LFLAGS += -pthread
   endif
-endif
-
-ifeq ($(ARSANDBOX),1)
-  include arlib/sandbox/Makefile
 endif
 
 ifeq ($(ARWUTF),1)

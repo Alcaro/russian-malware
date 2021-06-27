@@ -225,11 +225,13 @@ static int atoi_simple(const char * text)
 	return ret;
 }
 
-//trusting everything to set O_CLOEXEC isn't enough, this is a sandbox
+//everything should set O_CLOEXEC, but let's be paranoid
 bool process::closefrom(int lowfd)
 {
-	// TODO: change to close_range(lowfd, UINT_MAX, 0) on kernel >= 5.9
-	// or, for Valgrind compat, close_range(lowfd, 1023, 0)
+#ifdef __NR_close_range
+	// available on kernel >= 5.9, october 2020
+	if (syscall(__NR_close_range, lowfd, UINT_MAX, 0) == 0) return true;
+#endif
 	
 	//getdents[64] is documented do-not-use and opendir should be used instead.
 	//However, we're in (the equivalent of) a signal handler, and opendir is not signal safe.

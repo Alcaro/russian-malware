@@ -159,8 +159,8 @@ again:
 	}
 	
 	if (!httpHost) tosend.push("Host: ", loc.domain, "\r\n");
-	if (method != "GET" && !httpContentLength) tosend.push("Content-Length: ", tostring(q.body.size()), "\r\n");
-	if (method != "GET" && !httpContentType)
+	if (method == "POST" && !httpContentLength) tosend.push("Content-Length: ", tostring(q.body.size()), "\r\n");
+	if (method == "POST" && !httpContentType)
 	{
 		if (q.body && (q.body[0] == '[' || q.body[0] == '{'))
 			tosend.push("Content-Type: application/json\r\n");
