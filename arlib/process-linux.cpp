@@ -32,7 +32,7 @@
 //  falsely be told that its child is dead, and will waitpid(); to fix THAT one, the waitpid() call has to use WNOHANG,
 //  and if the child is still alive, tell the SIGCHLD handler to keep monitoring that PID
 //
-//with that many increasingly-complex and hard-to-test cases, it is possible I missed a few
+//with this many increasingly-complex and hard-to-test cases, it is possible I missed a few
 //
 //pid_t pid = waitpid(-1, ...) would be a reasonable proposal, but that's a process-global resource,
 //  and I can't be confident that using it won't mess up some other library
@@ -53,6 +53,7 @@
 //
 //conclusion: signal handlers are difficult and should be deleted as soon as possible
 //  i.e. kernel 5.3 (september 2019), so I can use pidfd instead
+//  (which admittedly isn't very portable to other Unixen either.)
 //
 //see also
 //https://www.macieira.org/blog/2012/07/forkfd-part-1-launching-processes-on-unix/

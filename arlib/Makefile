@@ -148,67 +148,6 @@ ifeq ($(OS),windows)
   endif
 endif
 
-ifeq ($(V),)
-  Q = @
-  ECHOQ = @echo
-else
-  Q =
-  ifeq ($(HOST_SHELL),cmd)
-    ECHOQ = @ver>nul
-  else
-    ECHOQ = @true
-  endif
-endif
-
-OPTFLAGS += -Os -fomit-frame-pointer -fmerge-all-constants -fno-math-errno -fvisibility=hidden -fno-semantic-interposition
-OPTFLAGS += -ffunction-sections
-# -fdata-sections inhibits some optimizations, and more importantly, turns .bss into .data on Windows
-# better split it to more .cpp files
-#OPTFLAGS += -fdata-sections
-OPTFLAGS += -fno-ident
-# pseudo relocations are some kind of linker magic, documented at https://sourceware.org/binutils/docs/ld/Options.html
-# they show up only if a global variable or constant is imported from a DLL (rare and possibly bad idea) using
-#  PE-level linking rather than LoadLibrary (common but not guaranteed) without declspec(dllimport) (rare and definitely bad idea)
-# rare and bad idea means I want to know about it, so let's disable it
-# I can create them using (for example) __argc or _timezone, but only by not including its header, or by breaking it with a #define
-# (buggy third party libraries would also be an option)
-# additionally, without pseudo relocs, it's safe to set -mcmodel=small, making things a bit faster and smaller
-# (source: https://gcc.gnu.org/legacy-ml/gcc-patches/2013-03/msg00858.html)
-# --disable-auto-import seems to be synonymous to --disable-runtime-pseudo-reloc these days
-ifeq ($(OS),windows)
-  CONF_LFLAGS += -Wl,--disable-auto-import,--disable-runtime-pseudo-reloc
-  ifeq ($(WINBITS),64)
-    # this one errors out on 32bit
-    OPTFLAGS += -mcmodel=small
-  else
-    # for the 64bit div/mod functions
-    # do this for 32bit only, so I notice if something else sneaks in
-    CONF_LFLAGS += -static-libgcc
-  endif
-endif
-OPTFLAGS += -DNDEBUG -DARLIB_OPT
-CONF_CXXFLAGS += -fno-threadsafe-statics
-OPTLFLAGS += -Wl,--gc-sections,--build-id=none,--relax,--sort-common
-ifneq ($(OS),windows)
-  OPTLFLAGS += -Wl,--hash-style=gnu
-endif
-#OPTLFLAGS += -Wl,--print-map
-ifneq ($(DEBUG),1)
-  #DEBUG means still working on it, so -Werror isn't appropriate yet
-  #unused variables, bad indent, etc is super common in WIP code
-  #it'd be better if I could disable Werror for anyone who has a newer gcc than me and just wants to get it working,
-  # but I can't think of a good way to detect who's me and who's not
-  OPTFLAGS += -Werror
-  ifneq ($(STRIP),0)
-    ifeq ($(SELFTEST),)
-      OPTLFLAGS += -s
-    endif
-  endif
-endif
-ifeq ($(STRIP),1)
-  CONF_LFLAGS += -s
-endif
-
 CFLAGS += -g
 ifneq ($(OPT),0)
   CONF_CFLAGS += $(OPTFLAGS)
@@ -417,11 +356,11 @@ CONF_CXXFLAGS := $(CONF_CXXFLAGS) $(CONF_CFLAGS)
 TRUE_CFLAGS := -std=c99 $(CCXXFLAGS) $(CONF_CFLAGS) $(CFLAGS)
 # C++20/etc wishlist:
 # - Coroutines, for runloop-related stuff (nearly every single socket-related operation is ugly)
-#    present in GCC 11, but needs -fcoroutines
+#    present in GCC 11
 # - Template string literals (for the regex parser, and so I can create a string formatting function)
 #    present in GCC 9
 # - Concepts (also for the regex parser, the errors are absurd)
-# - Consteval (still for the regex parser, that template mess is terrible)
+# - consteval (still for the regex parser, that template mess is terrible)
 #    present in GCC 10
 # - Down with typename http://wg21.link/p0634r3
 #    present in GCC 9
@@ -430,10 +369,11 @@ TRUE_CFLAGS := -std=c99 $(CCXXFLAGS) $(CONF_CFLAGS) $(CFLAGS)
 # - Ban non-twos-complement signed - will probably enable various other language improvements
 # - void foo(auto arg) (shorthand for template<typename T> void foo(T arg) - simplifies function::bind_member)
 # - Designated initializers (foo_t foo = { .a = 42, .b = 123 })
-# - <charconv>, to speed up tostring(float) (though I'll need to keep the current one around anyways, for Windows)
+# - complete <charconv>, to speed up tostring(float) (though I'll need to keep the current one around anyways, for Windows)
 #    present in GCC 11
+# - std::stacktrace (C++23), to delete the testcall macro (and probably simplify debug.cpp)
 # - [[trivially_relocatable]] http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p1144r3.html
-# - Lambdas without braces/return, function<int(int)> mul2 = [](int i) => i*2; (useful for LINQ)
+# - Lambdas without braces/return, function<int(int)> mul2 = [](int i) => i*2; https://wg21.link/p0573 (useful for LINQ)
 # - Zero-overhead deterministic exceptions http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2018/p0709r0.pdf
 # - Compile-time reflection (that SERIALIZE macro is a little too limited, and the error messages are worse than from the regexes)
 # - Single-implementation interfaces (public functions and nothing else in header, member variables hidden)
@@ -445,7 +385,7 @@ TRUE_CFLAGS := -std=c99 $(CCXXFLAGS) $(CONF_CFLAGS) $(CFLAGS)
 # - Something to get rid of the unused variable warning from for (size_t n : range(42)) - Ranges TS, maybe?
 # - Overloading operator[] depending on whether it's a read or write access, int x = std::map[key_t] mutating is silly
 #     not sure if map[key].foo.bar() should count as read or write, so probably not happening, but I can wish
-# - Modules, if they're good (I haven't looked into them, but it's easy to make a bad module system)
+# - Modules, if they're good (I haven't looked into them, it's easy to make a bad module system)
 TRUE_CXXFLAGS := -std=c++17 -fno-rtti $(CCXXFLAGS) $(CONF_CXXFLAGS) $(CXXFLAGS)
 TRUE_LFLAGS := $(CONF_LFLAGS) $(LFLAGS)
 

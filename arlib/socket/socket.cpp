@@ -506,7 +506,7 @@ static MAYBE_UNUSED socketint_t socketlisten_create_ip4(u_long ip, int port)
 	sa.sin_port = htons(port);
 	
 	socketint_t fd = mksocket(AF_INET, SOCK_STREAM, 0);
-	if (fd < 0) goto fail;
+	if (fd < 0) return -1;
 	
 	if (bind(fd, (struct sockaddr*)&sa, sizeof(sa)) < 0) goto fail;
 	if (listen(fd, 10) < 0) goto fail;

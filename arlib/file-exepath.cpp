@@ -10,11 +10,12 @@ struct exepath_finder {
 	string path;
 	
 	// can't oninit() to initialize a string, must use a ctor; it blows up if oninit runs before string's own ctor
-	// luckily, oninit_static isn't necessary on Linux
 	// (no, I don't know why string ctor isn't optimized into the data section; it is if constexpr)
 	exepath_finder()
 	{
 #ifdef ARTYPE_DLL
+		// dladdr() can return this information, but it doesn't always contain path, so better use something else
+		
 		char linkpath[64];
 		strcpy(linkpath, "/proc/self/map_files/");
 		
@@ -40,7 +41,7 @@ struct exepath_finder {
 		closedir(dir);
 		if (!ent)
 		{
-		fallback:
+		fallback: // should be unreachable
 			strcpy(linkpath, "/proc/self/exe");
 		}
 #else
@@ -81,6 +82,7 @@ oninit_static()
 {
 	HMODULE hmod;
 #ifdef ARTYPE_DLL
+	// TODO: check if I can use __ImageBase instead
 	GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
 	                   (LPCSTR)(void*)&file::exepath, &hmod);
 #else

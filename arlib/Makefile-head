@@ -111,13 +111,17 @@ ifeq ($(OS),windows)
   endif
 endif
 
-#OBJMANGLE(rule,sources) - takes C/C++ source files and returns the mangled name under the specified rule
-OBJMANGLE = $(patsubst %,obj/$1___$(OBJNAME)___%.o,$(subst /,__,$2))
-#SOURCENAME(obj) - takes a .o file, returned from OBJMANGLE, and returns the corresponding source file
-#does not handle multi-file inputs, use $(foreach)
-SOURCENAME = $(strip $(subst __,/,$(lastword $(subst ___,$(SPACE),$(patsubst obj/%.o,%,$1)))))
-#DOMAINNAME(obj) - takes a .o file, returned from OBJMANGLE, and returns the corresponding domain
-DOMAINNAME = $(firstword $(subst ___,$(SPACE),$(patsubst obj/%.o,%,$1)))
+ifeq ($(V),)
+  Q = @
+  ECHOQ = @echo
+else
+  Q =
+  ifeq ($(HOST_SHELL),cmd)
+    ECHOQ = @ver>nul
+  else
+    ECHOQ = @true
+  endif
+endif
 
 ifeq ($(OS),linux)
   OBJNAME := linux
@@ -135,3 +139,61 @@ endif
 ifneq ($(SELFTEST),)
   OBJNAME := $(OBJNAME)-test
 endif
+
+OPTFLAGS += -Os -fomit-frame-pointer -fmerge-all-constants -fno-math-errno -fvisibility=hidden -fno-semantic-interposition
+OPTFLAGS += -ffunction-sections
+# -fdata-sections inhibits some optimizations, and more importantly, turns .bss into .data on Windows
+# better split it to more .cpp files
+#OPTFLAGS += -fdata-sections
+OPTFLAGS += -fno-ident
+# pseudo relocations are some kind of linker magic, documented at https://sourceware.org/binutils/docs/ld/Options.html
+# they show up only if a global variable or constant is imported from a DLL (rare and possibly bad idea) using
+#  PE-level linking rather than LoadLibrary (common but not guaranteed) without declspec(dllimport) (rare and definitely bad idea)
+# rare and bad idea means I want to know about it, so let's disable it
+# I can create them using (for example) __argc or _timezone, but only by not including its header, or by breaking it with a #define
+# (buggy third party libraries would also be an option)
+# additionally, without pseudo relocs, it's safe to set -mcmodel=small, making things a bit faster and smaller
+# (source: https://gcc.gnu.org/legacy-ml/gcc-patches/2013-03/msg00858.html)
+# --disable-auto-import seems to be synonymous to --disable-runtime-pseudo-reloc these days
+ifeq ($(OS),windows)
+  CONF_LFLAGS += -Wl,--disable-auto-import,--disable-runtime-pseudo-reloc
+  ifeq ($(WINBITS),64)
+    # this one errors out on 32bit
+    OPTFLAGS += -mcmodel=small
+  else
+    # for the 64bit div/mod functions
+    # do this for 32bit only, so I notice if something else sneaks in
+    CONF_LFLAGS += -static-libgcc
+  endif
+endif
+OPTFLAGS += -DNDEBUG -DARLIB_OPT
+
+CONF_CXXFLAGS += -fno-threadsafe-statics
+OPTLFLAGS += -Wl,--gc-sections,--build-id=none,--relax,--sort-common
+ifneq ($(OS),windows)
+  OPTLFLAGS += -Wl,--hash-style=gnu
+endif
+#OPTLFLAGS += -Wl,--print-map
+ifneq ($(DEBUG),1)
+  #DEBUG means still working on it, so -Werror isn't appropriate yet
+  #unused variables, bad indent, etc is super common in WIP code
+  #it'd be better if I could disable Werror for anyone who has a newer gcc than me and just wants to get it working,
+  # but I can't think of a good way to detect who's me and who's not
+  OPTFLAGS += -Werror
+  ifneq ($(STRIP),0)
+    ifeq ($(SELFTEST),)
+      OPTLFLAGS += -s
+    endif
+  endif
+endif
+ifeq ($(STRIP),1)
+  CONF_LFLAGS += -s
+endif
+
+#OBJMANGLE(rule,sources) - takes C/C++ source files and returns the mangled name under the specified rule
+OBJMANGLE = $(patsubst %,obj/$1___$(OBJNAME)___%.o,$(subst /,__,$2))
+#SOURCENAME(obj) - takes a .o file, returned from OBJMANGLE, and returns the corresponding source file
+#does not handle multi-file inputs, use $(foreach)
+SOURCENAME = $(strip $(subst __,/,$(lastword $(subst ___,$(SPACE),$(patsubst obj/%.o,%,$1)))))
+#DOMAINNAME(obj) - takes a .o file, returned from OBJMANGLE, and returns the corresponding domain
+DOMAINNAME = $(firstword $(subst ___,$(SPACE),$(patsubst obj/%.o,%,$1)))

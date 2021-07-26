@@ -11,7 +11,8 @@ class zip : nocopy {
 	centdirrec* getcdr(arrayview<uint8_t> data, endofcdr* end);
 	centdirrec* nextcdr(arrayview<uint8_t> data, centdirrec* cdr);
 	locfhead* geth(arrayview<uint8_t> data, centdirrec* cdr);
-	arrayview<uint8_t> fh_fname(arrayview<uint8_t> data, locfhead* fh);
+	string fh_fname(arrayview<uint8_t> data, locfhead* fh, centdirrec* cdr);
+	arrayview<uint8_t> fh_extra(arrayview<uint8_t> data, locfhead* fh, centdirrec* cdr);
 	arrayview<uint8_t> fh_data(arrayview<uint8_t> data, locfhead* fh, centdirrec* cdr);
 	
 	array<string> filenames;

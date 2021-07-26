@@ -670,7 +670,7 @@ test("png", "array,imagebase,file", "png")
 {
 	test_skip("kinda slow");
 	
-	array<string> tests = file::listdir("arlib/test/png/");
+	array<string> tests = file::listdir("test/png/");
 	assert_gt(tests.size(), 100); // make sure the tests exist, no vacuous truths allowed
 	
 	//TODO: check https://code.google.com/p/imagetestsuite/ and figure out why it disagrees with pngout on whether they're valid
@@ -678,7 +678,7 @@ test("png", "array,imagebase,file", "png")
 	
 	{
 		oimage img;
-		assert(img.init_decode_png(file::readall("arlib/test/png/ps-s05n3p02.png")));
+		assert(img.init_decode_png(file::readall("test/png/ps-s05n3p02.png")));
 		assert_eq(img.width, 5);
 		assert_eq(img.height, 5);
 		assert_eq(img.fmt, ifmt_xrgb8888);

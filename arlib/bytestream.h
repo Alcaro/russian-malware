@@ -91,38 +91,10 @@ public:
 	forceinline uint32_t u64l() { return readu_le64(bytes(8).ptr()); }
 	forceinline uint32_t u64b() { return readu_be64(bytes(8).ptr()); }
 	
-	forceinline float f32l()
-	{
-		static_assert(sizeof(float) == 4);
-		uint32_t a = u32l();
-		float b;
-		memcpy(&b, &a, sizeof(float));
-		return b;
-	}
-	forceinline float f32b()
-	{
-		static_assert(sizeof(float) == 4);
-		uint32_t a = u32b();
-		float b;
-		memcpy(&b, &a, sizeof(float));
-		return b;
-	}
-	forceinline double f64l()
-	{
-		static_assert(sizeof(double) == 8);
-		uint64_t a = u64l();
-		double b;
-		memcpy(&b, &a, sizeof(double));
-		return b;
-	}
-	forceinline double f64b()
-	{
-		static_assert(sizeof(double) == 8);
-		uint64_t a = u64b();
-		double b;
-		memcpy(&b, &a, sizeof(double));
-		return b;
-	}
+	forceinline float f32l() { return readu_lef32(bytes(4).ptr()); }
+	forceinline float f32b() { return readu_bef32(bytes(4).ptr()); }
+	forceinline float f64l() { return readu_lef64(bytes(8).ptr()); }
+	forceinline float f64b() { return readu_bef64(bytes(8).ptr()); }
 	
 	forceinline cstring strnul()
 	{
@@ -316,6 +288,7 @@ public:
 		uint8_t raw[] = { (uint8_t)bs... };
 		bytes(raw);
 	}
+	
 	void u8(uint8_t val) { buf += arrayview<uint8_t>(&val, 1); }
 	void u16l(uint16_t val) { buf += pack_le16(val); }
 	void u16b(uint16_t val) { buf += pack_be16(val); }
@@ -324,39 +297,15 @@ public:
 	void u64l(uint64_t val) { buf += pack_le64(val); }
 	void u64b(uint64_t val) { buf += pack_be64(val); }
 	
+	void f32l(float  val) { buf += pack_lef32(val); }
+	void f32b(float  val) { buf += pack_bef32(val); }
+	void f64l(double val) { buf += pack_lef64(val); }
+	void f64b(double val) { buf += pack_bef64(val); }
+	
 	void align8() {}
 	void align16() { buf.resize((buf.size()+1)&~1); }
 	void align32() { buf.resize((buf.size()+3)&~3); }
 	void align64() { buf.resize((buf.size()+7)&~7); }
-	
-	void f32l(float val)
-	{
-		static_assert(sizeof(float) == 4);
-		uint32_t ival;
-		memcpy(&ival, &val, sizeof(float));
-		u32l(ival);
-	}
-	void f32b(float val)
-	{
-		static_assert(sizeof(float) == 4);
-		uint32_t ival;
-		memcpy(&ival, &val, sizeof(float));
-		u32b(ival);
-	}
-	void f64l(double val)
-	{
-		static_assert(sizeof(double) == 8);
-		uint64_t ival;
-		memcpy(&ival, &val, sizeof(double));
-		u64l(ival);
-	}
-	void f64b(double val)
-	{
-		static_assert(sizeof(double) == 8);
-		uint64_t ival;
-		memcpy(&ival, &val, sizeof(double));
-		u64b(ival);
-	}
 	
 	arrayview<uint8_t> peek()
 	{

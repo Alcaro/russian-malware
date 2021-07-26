@@ -26,11 +26,16 @@
 //    such overlapping writes are unsafe anyways - if two programs simultaneously update a file using unique names,
 //     one will be reverted, after telling program it succeeded
 //   ideally, it'd be open(O_TMPFILE)+linkat(O_REPLACE), but kernel doesn't allow that
-//   alternatively ioctl(FISWAPRANGE) https://lwn.net/Articles/818977/
-//   for Windows, just go for ReplaceFile(), and don't even try to not create temp files (fsync() is FlushFileBuffers())
-// async can be ignored for now; it's rarely useful, async local file needs threads on linux, and async without coroutines is painful
+//   alternatively ioctl(FISWAPRANGE) https://lwn.net/Articles/818977/, except it was never merged
+//   for Windows, just go for ReplaceFile(), don't even try to not create temp files (fsync() is FlushFileBuffers())
+// async can be ignored for now; it's rarely useful, and async without coroutines is painful
 // the other four combinations belong in the file object; replace/append streaming is useful for logs
 //  they should use seek/read/size as primitives, not pread
+//
+// may also want some kind of resilient file object, guaranteeing complete write or rollback
+// unfortunately, guarantees about mmap (or even write) atomicity are rare or nonexistent
+//  other than rename-overwrite, which requires a poorly documented fsync dance before any atomicity guarantees exist,
+//   and does way more than it should
 
 class file2 : nocopy {
 	file2() = delete;

@@ -4,6 +4,7 @@
 #include "endian.h"
 #include "os.h"
 #include "deflate.h"
+#include "bytestream.h"
 #define MINIZ_HEADER_FILE_ONLY
 #include "deps/miniz.c"
 
@@ -13,6 +14,14 @@
 //TODO: reject zips where any byte is part of multiple files (or CDR and a file), no chance it's not malicious
 //TODO: simplify and delete this thing; more bytestream, probably in a binary format
 //TODO: do something better than 'write empty string to delete', makes it hard to create folders and empty files
+
+// Strict ZIP means a couple of legacy extensions and features are ignored.
+// In particular, filename is assumed to always be UTF-8 or ASCII;
+//  there is no conversion from CP437, and the Info-ZIP Unicode Path Extra Field is ignored.
+// Arlib will never create a ZIP using these legacy features, strict or not.
+#ifndef ZIP_STRICT
+#define ZIP_STRICT 0
+#endif
 
 static inline uint16_t end_swap(uint16_t n) { return __builtin_bswap16(n); }
 static inline uint32_t end_swap(uint32_t n) { return __builtin_bswap32(n); }
@@ -149,6 +158,7 @@ static uint32_t todosdate(time_t date)
 	       tp.tm_sec>>1;
 }
 
+#if !ZIP_STRICT
 static const uint16_t cp437[256]={
 	0x0000,0x263A,0x263B,0x2665,0x2666,0x2663,0x2660,0x2022,0x25D8,0x25CB,0x25D9,0x2642,0x2640,0x266A,0x266B,0x263C,
 	0x25BA,0x25C4,0x2195,0x203C,0x00B6,0x00A7,0x25AC,0x21A8,0x2191,0x2193,0x2192,0x2190,0x221F,0x2194,0x25B2,0x25BC,
@@ -183,6 +193,7 @@ slow:
 	}
 	return out;
 }
+#endif
 
 struct zip::locfhead {
 	litend<uint32_t> signature;
@@ -284,12 +295,46 @@ zip::locfhead* zip::geth(arrayview<uint8_t> data, centdirrec* cdr)
 	return ret;
 }
 
-arrayview<uint8_t> zip::fh_fname(arrayview<uint8_t> data, locfhead* fh)
+string zip::fh_fname(arrayview<uint8_t> data, locfhead* fh, centdirrec* cdr)
 {
 	size_t start = (uint8_t*)fh - data.ptr();
 	if (start + sizeof(locfhead) + fh->len_fname > data.size()) return NULL;
 	
-	return data.slice(start+sizeof(locfhead), fh->len_fname);
+	string fname = data.slice(start+sizeof(locfhead), fh->len_fname);
+#if !ZIP_STRICT
+	if (!(cdr->bitflags & (1 << 11)))
+	{
+		bool filename_cp437 = true;
+		bytestream extra = zip::fh_extra(data, fh, cdr);
+		while (extra.remaining() >= 4)
+		{
+			uint16_t signature = extra.u16l();
+			uint16_t size = extra.u16l();
+			
+			if (extra.remaining() < size) break;
+			bytestream chunk = extra.bytes(size);
+			
+			if (signature == 0x7075) // 'up', 4.6.9 -Info-ZIP Unicode Path Extra Field (0x7075)
+			{
+				if (filename_cp437 && chunk.u8() == 1 && chunk.u32l() == crc32(fname.bytes()))
+				{
+					fname = cstring(chunk.bytes(chunk.remaining()));
+					filename_cp437 = false;
+				}
+			}
+		}
+		if (filename_cp437)
+			fname = fromcp437(std::move(fname));
+	}
+#endif
+	return fname;
+}
+
+arrayview<uint8_t> zip::fh_extra(arrayview<uint8_t> data, locfhead* fh, centdirrec* cdr)
+{
+	size_t start = (uint8_t*)fh - data.ptr();
+	if (start + sizeof(locfhead) + fh->len_fname + fh->len_exfield > data.size()) return NULL;
+	return data.slice(start+sizeof(locfhead)+fh->len_fname, fh->len_exfield);
 }
 
 arrayview<uint8_t> zip::fh_data(arrayview<uint8_t> data, locfhead* fh, centdirrec* cdr)
@@ -297,7 +342,6 @@ arrayview<uint8_t> zip::fh_data(arrayview<uint8_t> data, locfhead* fh, centdirre
 	size_t start = (uint8_t*)fh - data.ptr();
 	size_t headlen = sizeof(locfhead) + fh->len_fname + fh->len_exfield;
 	if (start+headlen > data.size()) return NULL;
-	
 	return data.slice(start+headlen, cdr->size_comp);
 }
 
@@ -316,10 +360,22 @@ bool zip::init(arrayview<uint8_t> data)
 	{
 		locfhead* fh = geth(data, cdr);
 		if (!fh) return false;
+//puts(fh_fname(data, fh, cdr));
+//printf("cdr %.8x %.4x %.4x, %.4x %.4x, %.8x %.8x, %.8x %.8x, %.4x %.4x %.4x, %.4x %.4x %.8x %.8x\n",
+	//(uint32_t)cdr->signature, (uint16_t)cdr->verused, (uint16_t)cdr->vermin,
+	//(uint16_t)cdr->bitflags, (uint16_t)cdr->compmethod,
+	//(uint32_t)cdr->moddate, (uint32_t)cdr->crc32,
+	//(uint32_t)cdr->size_comp, (uint32_t)cdr->size_decomp,
+	//(uint16_t)cdr->len_fname, (uint16_t)cdr->len_exfield, (uint16_t)cdr->len_fcomment,
+	//(uint16_t)cdr->disknr, (uint16_t)cdr->attr_int, (uint32_t)cdr->attr_ext, (uint32_t)cdr->header_start);
+//printf("fh  %.8x      %.4x, %.4x %.4x, %.8x %.8x, %.8x %.8x, %.4x %.4x\n",
+	//(uint32_t)fh->signature, (uint16_t)fh->vermin,
+	//(uint16_t)fh->bitflags, (uint16_t)fh->compmethod,
+	//(uint32_t)fh->moddate, (uint32_t)fh->crc32,
+	//(uint32_t)fh->size_comp, (uint32_t)fh->size_decomp,
+	//(uint16_t)fh->len_fname, (uint16_t)fh->len_exfield);
 		
-		string fname = fh_fname(data, fh);
-		if (!(cdr->bitflags & (1 << 11))) fname = fromcp437(std::move(fname));
-		filenames.append(::file::sanitize_rel_path(std::move(fname)));
+		filenames.append(::file::sanitize_rel_path(fh_fname(data, fh, cdr)));
 		// the OSX default zipper keeps zeroing half the fields in fh, have to use cdr instead
 		if (fh->size_decomp != cdr->size_decomp) corrupt = true;
 		file f = { cdr->size_decomp, cdr->compmethod, fh_data(data, fh, cdr), cdr->crc32, cdr->moddate };
@@ -417,7 +473,7 @@ void zip::write(cstring name, arrayview<uint8_t> data, time_t date)
 {
 	size_t id = find_file(name);
 	
-	if (id==(size_t)-1)
+	if (id == (size_t)-1)
 	{
 		if (!data) return;
 		

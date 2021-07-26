@@ -9,7 +9,7 @@
 //  and so I can define weird whitespace (\f \v) to not space (several Arlib modules require that, better centralize it)
 // this means they don't obey locale, but all modern locales use UTF-8, for which isctype() has no useful answer
 // locale shouldn't be in libc anyways; localization is complex enough to belong in a separate library that updates faster than libc,
-//  and its global state based design interacts badly with libraries, logging, threading, text-based formats like JSON, etc
+//  and its global-state-based design interacts badly with libraries, logging, threading, text-based formats like JSON, etc
 
 #ifdef _WIN32
 #include <ctype.h> // include this one before windows.h does, the defines below confuse it
@@ -31,29 +31,29 @@
 
 extern const uint8_t char_props[256];
 // bit meanings:
-// 0x01 - hex digit (0-9A-Fa-f)
-// 0x02 - uppercase (A-Z)
-// 0x04 - lowercase (a-z)
-// 0x08 - underscore (_)
-// 0x10 - unused
-// 0x20 - letter (A-Za-z)
-// 0x40 - digit (0-9)
 // 0x80 - space (\t\n\r ) - contrary to libc isspace, \f\v are not considered space
+// 0x40 - digit (0-9)
+// 0x20 - letter (A-Za-z) - tolower/toupper needs 0x20 to be letter,
+// 0x10 - unused             and 0x80 is cheaper to test on some platforms, so it goes to the most common test (space)
+// 0x08 - underscore (_)    other bit assignments are arbitrary
+// 0x04 - lowercase (a-z)   also contrary to libc, these functions handle byte values only;
+// 0x02 - uppercase (A-Z)    EOF is not a valid input (EOF feels like a poor design)
+// 0x01 - hex digit (0-9A-Fa-f)
 static inline bool isspace(uint8_t c) { return char_props[c] & 0x80; }
 static inline bool isdigit(uint8_t c) { return char_props[c] & 0x40; }
-static inline bool isalpha(uint8_t c) { return char_props[c] & 0x20; } // also contrary to libc, these functions handle byte values only,
-static inline bool islower(uint8_t c) { return char_props[c] & 0x04; } // not EOF
+static inline bool isalpha(uint8_t c) { return char_props[c] & 0x20; }
+static inline bool islower(uint8_t c) { return char_props[c] & 0x04; }
 static inline bool isupper(uint8_t c) { return char_props[c] & 0x02; }
 static inline bool isalnum(uint8_t c) { return char_props[c] & 0x60; }
 static inline bool isxdigit(uint8_t c) { return char_props[c] & 0x01; }
-static inline uint8_t tolower(uint8_t c) { return c|(char_props[c]&0x20); }  // other than 0x20, all bit assignments are arbitrary
-static inline uint8_t toupper(uint8_t c) { return c&~(char_props[c]&0x20); } // some bits are tested differently on some platforms,
-static inline bool isualpha(uint8_t c) { return char_props[c] & 0x28; }      // but I don't think there's a size or perf difference
+static inline uint8_t tolower(uint8_t c) { return c|(char_props[c]&0x20); }
+static inline uint8_t toupper(uint8_t c) { return c&~(char_props[c]&0x20); }
+static inline bool isualpha(uint8_t c) { return char_props[c] & 0x28; }
 static inline bool isualnum(uint8_t c) { return char_props[c] & 0x68; }
 
 
 
-// A string is a mutable byte container. It usually represents UTF-8 text, but can be arbitrary binary data, including NULs.
+// A string is a mutable byte sequence. It usually represents UTF-8 text, but can be arbitrary binary data, including NULs.
 // All string functions taking or returning a char* assume/guarantee NUL termination. Anything using uint8_t* does not.
 
 // cstring is an immutable sequence of bytes that does not own its storage; it usually points to a string constant, or part of a string.

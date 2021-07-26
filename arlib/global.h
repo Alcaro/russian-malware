@@ -247,6 +247,7 @@ template<> struct static_assert_t<false> {};
 class anyptr {
 	void* data;
 public:
+	anyptr(nullptr_t) { data = NULL; }
 	template<typename T> anyptr(T* data_) { data = (void*)data_; }
 	template<typename T> operator T*() { return (T*)data; }
 	template<typename T> operator const T*() const { return (const T*)data; }
@@ -271,7 +272,7 @@ void free_test(void* ptr);
 
 // Arlib recommends using xmalloc. It means a malloc call can terminate the process, but that's already the case - either directly,
 //  via Linux OOM killer, or indirectly, via the machine being bogged down with infinite swap until user reboots it.
-// OOM should be handled by regularly saving all valuable to data to disk. This also protects against program crashes, power outage, etc.
+// OOM should be handled by regularly saving all valuable to data to disk. This also protects against program crashes, power outages, etc.
 
 // On systems without swap or overcommit, malloc return value should of course be checked - but such systems are usually
 //  microcontrollers where malloc isn't allowed anyways, or retrocomputers that Arlib doesn't target.
@@ -291,6 +292,14 @@ void* calloc(size_t,size_t) __attribute__((deprecated("use xcalloc or try_calloc
 
 //cast to void should be enough to shut up warn_unused_result, but...
 template<typename T> static inline void ignore(T t) {}
+
+template<typename T, typename T2> forceinline T reinterpret(T2 in)
+{
+	static_assert(std::is_trivial_v<T> && std::is_trivial_v<T2> && sizeof(T) == sizeof(T2));
+	T ret;
+	memcpy(&ret, &in, sizeof(ret));
+	return ret;
+}
 
 
 template<typename T> static T min(T a) { return a; }
@@ -378,7 +387,7 @@ public:
 template<typename T>
 class refcount {
 	struct inner_t {
-		T item; // item first so operator T* returns 0 and not 4 if null
+		T item; // item first so operator T* returns 0 and not 4 if null, it optimizes better
 		uint32_t count;
 	};
 	inner_t* inner;
@@ -391,12 +400,12 @@ public:
 	refcount<T>& operator=(T* ptr) = delete;
 	refcount<T>& operator=(autofree<T>&& other) = delete;
 	refcount<T>& operator=(refcount<T>&& other) { inner = other.inner; other.inner = NULL; return *this; }
-	T* operator->() { return &inner->item; }
+	T* operator->() { return inner ? &inner->item : NULL; }
 	T& operator*() { return inner->item; }
-	const T* operator->() const { return &inner->item; }
+	const T* operator->() const { return inner ? &inner->item : NULL; }
 	const T& operator*() const { return inner->item; }
-	operator T*() { return &inner->item; }
-	operator const T*() const { return &inner->item; }
+	operator T*() { return inner ? &inner->item : NULL; }
+	operator const T*() const { return inner ? &inner->item : NULL; }
 	bool exists() const { return inner; }
 	bool unique() const { return inner->count == 1; }
 	~refcount() { if (inner && --inner->count == 0) delete inner; }
@@ -792,7 +801,7 @@ using std::signbit;
 //     arlib_hybrid_dll_init() itself uses globals. (Exception: If your API includes a single-thread-only global init function,
 //     you may omit ARLIB_THREAD.)
 // - Global variables won't necessarily have the right value until arlib_hybrid_dll_init() is called.
-//     (dllexported non-functions are rare anyways, so no big deal for most APIs.)
+//     (Exported non-functions are rare anyways, so no big deal for most APIs.)
 // - The EXE/DLL startup code does a lot of stuff I don't understand, or never investigated; I probably forgot something important.
 // - DllMain is completely ignored and never called. It won't even be referenced by anything, it will be garbage colleted.
 // - Global objects' destructors are often implemented via atexit(), which is process-global in EXEs, and in things GCC thinks is an EXE.
@@ -802,8 +811,8 @@ using std::signbit;
 //     - runloop::global()
 //     - socket::create_ssl() SChannel backend (BearSSL is safe; OpenSSL is not supported on Windows)
 //     - window_*
-//     - mutex, if ARXPSUPPORT
-//     - semaphore
+//     - mutex as a global variable, if ARXPSUPPORT (safe if 7+, class member, or both)
+//     - semaphore as a global variable
 //     - WuTF (not supported in DLLs at all)
 // - To avoid crashes if atexit() calls an unloaded DLL, and to allow globals in EXE paths, globals' constructors are not run either.
 //     Constant-initialized variables are safe, or if you need to (e.g.) put your process ID in a global, you can use oninit_static().
@@ -814,7 +823,7 @@ using std::signbit;
 //     something else is probably already using them; if your program ships its own DLLs (for example libstdc++-6.dll),
 //     this is equivalent to a memory leak. (But if you're shipping DLLs, your program is already multiple files, and you
 //     should put all shareable logic in another DLL and use a normal EXE.)
-//     A hybrid DLL calling LoadLibrary and FreeLibrary is safe.
+//     A hybrid DLL calling LoadLibrary is safe, as long as FreeLibrary is called.
 // - If a normal DLL imports a symbol that doesn't exist from another DLL, LoadLibrary's caller gets an error.
 //     If a hybrid DLL imports a symbol that doesn't exist, it will remain as NULL, and will crash if called. You can't even
 //     NULL check them, compiler will optimize it out. If you need that feature, use LoadLibrary.

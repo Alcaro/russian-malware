@@ -303,7 +303,8 @@ void arlib_hybrid_dll_init()
 	pe_process_imports(&ntdll, ntdll.RtlPcToFileHeader((void*)arlib_hybrid_dll_init, &this_mod));
 	pe_do_relocs(&ntdll, this_mod);
 	
-	// the normal EXE and DLL startup code calls _pei386_runtime_relocator(), but pseudo relocs are disabled in Arlib, so no point
+	// the normal EXE and DLL startup code calls _pei386_runtime_relocator(),
+	//  but pseudo relocs are disabled in Arlib (and the entire function is stubbed out in misc.cpp), so no point
 	
 	run_static_ctors();
 }

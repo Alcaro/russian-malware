@@ -17,8 +17,8 @@ exit
  * further reading: http://oroboro.com/dealing-with-network-port-abuse-in-sockets-in-c
  */
 
-/* feel free to replace with port 99 if you want to test in firefox or something */
-/* while 9 is Discard Protocol, it's also Wake-on-LAN, which is generally not a desirable port to let browsers poke */
+/* feel free to replace with port 99 if you want to test in Firefox or something */
+/* while 9 is Discard Protocol, it's also Wake-on-LAN, which Firefox quite rightly blocks */
 #ifndef PORTNR
 #define PORTNR 9
 #endif

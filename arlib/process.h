@@ -12,10 +12,10 @@
 //On Linux, you must be careful about creating child processes through other functions. Make sure
 // they don't fight over any process-global resources.
 //More specifically, all SIGCHLD handlers must chain to the previous one, using the three-argument sigaction function;
-//  they may not attempt concurrent installation with Arlib (sequential is fine); and they may not attempt to uninstall them.
+// they may not attempt concurrent installation with Arlib (sequential is fine); and they may not attempt to uninstall them.
 //Additionally, nothing may use waitpid(-1).
 //From what I can gather, g_spawn_*(), popen() and system() are safe.
-//  However, g_child_watch_*() and GSubprocess are not; they install a SIGCHLD handler and discard the old one.
+// However, g_child_watch_*() and GSubprocess are not; they install a SIGCHLD handler and discard the old one.
 //I have not analyzed Qt.
 class process : public nocopy {
 public:
