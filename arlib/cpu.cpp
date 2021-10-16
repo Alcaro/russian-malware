@@ -160,11 +160,11 @@ oninit_static_early()
 #include "test.h"
 test("cpu support", "", "")
 {
-	uint32_t arlib_cpuid_l1ecx = 0; ignore(arlib_cpuid_l1ecx);
-	uint32_t arlib_cpuid_l1edx = 0; ignore(arlib_cpuid_l1edx);
-	uint32_t arlib_cpuid_l7ebx = 0; ignore(arlib_cpuid_l7ebx);
-	uint32_t arlib_cpuid_l7ecx = 0; ignore(arlib_cpuid_l7ecx);
-	uint32_t arlib_cpuid_l7edx = 0; ignore(arlib_cpuid_l7edx);
+	uint32_t arlib_cpuid_l1ecx = 0; (void)arlib_cpuid_l1ecx;
+	uint32_t arlib_cpuid_l1edx = 0; (void)arlib_cpuid_l1edx;
+	uint32_t arlib_cpuid_l7ebx = 0; (void)arlib_cpuid_l7ebx;
+	uint32_t arlib_cpuid_l7ecx = 0; (void)arlib_cpuid_l7ecx;
+	uint32_t arlib_cpuid_l7edx = 0; (void)arlib_cpuid_l7edx;
 #define test1(reg, name) { arlib_cpuid_##reg = bit_##name; assert(runtime__##name##__); arlib_cpuid_##reg = 0; }
 	// things statically known true, like SSE2 on 64bit, aren't properly tested here
 	test1(l1ecx, AES);

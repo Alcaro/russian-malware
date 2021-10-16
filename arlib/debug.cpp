@@ -11,7 +11,7 @@ static int log_count = 0;
 static void debug_log_raw(const char * text) // log_mut must be locked when calling this
 {
 	fputs(text, stderr);
-	if (!log_file) log_file = fopen(file::exepath()+"/arlib-debug.log", "at");
+	if (!log_file) log_file = fopen("arlib-debug.log", "at"); // probably wrong directory, but calling malloc here can recurse
 	if (log_file) { fputs(text, log_file); fflush(log_file); }
 }
 

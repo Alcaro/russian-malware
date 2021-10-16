@@ -26,7 +26,8 @@ public:
 		array<uint8_t> body;
 		
 		enum {
-			f_no_retry = 0x00000001,
+			f_no_retry = 0x00000001, // default for POST and everything other than GET
+			f_retry    = 0x00000002, // default for GET
 		};
 		uint32_t flags = 0;
 		

@@ -8,7 +8,7 @@ inline size_t base64_dec_len(size_t len) { return (len+3)/4*3; }
 inline size_t base64_enc_len(size_t len) { return (len+2)/3*4; }
 
 //if the entire buffer was successfully processed, returns number of bytes written; if not, returns 0
-//'out' must be at least base64_dec_len(text.length()) bytes; otherwise, undefined behavior
+//will write up to base64_dec_len(text.length()) bytes
 //accepts standard base64, as well as base64url; ignores all \t\n\r and space in input; padding is mandatory
 //may return less than base64_dec_len() bytes, if it contains padding or whitespace
 size_t base64_dec_raw(arrayvieww<uint8_t> out, cstring text);

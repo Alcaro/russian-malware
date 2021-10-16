@@ -2,6 +2,7 @@
 #include "global.h"
 #include "json.h"
 #include "bml.h"
+#include "base64.h"
 
 //Members of the serialize(T& s) argument:
 #if 0
@@ -41,6 +42,10 @@ template<typename T> ser_array_t<const T> ser_array(const T& c) { return ser_arr
 template<typename T> struct ser_hex_t { T& c; ser_hex_t(T& c) : c(c) {} };
 template<typename T> ser_hex_t<T> ser_hex(T& c) { return ser_hex_t(c); }
 template<typename T> ser_hex_t<const T> ser_hex(const T& c) { return ser_hex_t(c); }
+
+template<typename T> struct ser_base64_t { T& c; ser_base64_t(T& c) : c(c) {} };
+template<typename T> ser_base64_t<T> ser_base64(T& c) { return ser_base64_t(c); }
+template<typename T> ser_base64_t<const T> ser_base64(const T& c) { return ser_base64_t(c); }
 
 template<typename T> struct ser_compact_t { T& c; int depth; ser_compact_t(T& c, int depth) : c(c), depth(depth) {} };
 template<typename T> ser_compact_t<T> ser_compact(T& c, int depth = 0) { return ser_compact_t(c, depth); }
@@ -175,6 +180,12 @@ class jsonserializer {
 	}
 	
 	template<typename T>
+	void add_node(ser_base64_t<T> inner)
+	{
+		add_node_base64(inner.c);
+	}
+	
+	template<typename T>
 	void add_node(ser_compact_t<T> inner)
 	{
 		int prev = delay_compact;
@@ -189,6 +200,7 @@ class jsonserializer {
 	add_node_hex(T inner) { w.num(inner); }
 	
 	void add_node_hex(bytesr inner) { w.str(tostringhex(inner)); }
+	void add_node_base64(bytesr inner) { w.str(base64_enc(inner)); }
 	
 	
 	void items_inner() {}
@@ -414,6 +426,12 @@ class jsondeserializer {
 	}
 	
 	template<typename T>
+	void read_item_raw(ser_base64_t<T> inner)
+	{
+		read_item_base64(inner.c);
+	}
+	
+	template<typename T>
 	void read_item_raw(ser_array_t<T> inner)
 	{
 		if (ev.action == jsonparser::enter_list)
@@ -451,6 +469,13 @@ class jsondeserializer {
 	{
 		if (ev.action != jsonparser::str) { valid = false; return; }
 		valid &= fromstringhex(ev.str, inner);
+	}
+	
+	void read_item_base64(bytearray& inner)
+	{
+		if (ev.action != jsonparser::str) { valid = false; return; }
+		inner = base64_dec(ev.str);
+		valid &= (inner || !ev.str);
 	}
 	
 	

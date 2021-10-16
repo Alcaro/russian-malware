@@ -377,6 +377,14 @@ test("file::change_ext", "array,string", "")
 	assert_eq(file::change_ext("baz.bin", ""), "baz");
 }
 
+test("file::basename", "array,string", "")
+{
+	assert_eq(file::basename("/foo.bar/bar/baz.bin"), "baz.bin");
+	assert_eq(file::basename("bar/baz.bin"), "baz.bin");
+	assert_eq(file::basename("baz.bin"), "baz.bin");
+	assert_eq(file::basename("/foo.bar/bar/"), ""); // TODO: or should this return bar/?
+}
+
 test("file::listdir", "array,string", "")
 {
 	array<string> files = file::listdir("arlib/");

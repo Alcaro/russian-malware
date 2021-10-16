@@ -4,16 +4,21 @@
 
 //list of synchronization points: http://msdn.microsoft.com/en-us/library/windows/desktop/ms686355%28v=vs.85%29.aspx
 
+// don't dllimport, mingw and msvcrt have different fpreset
+// mingw sets fpcw to 0x037f (do all calculations in float80), msvcrt 0x027f (all in float64)
+extern "C" void _fpreset();
+
 struct threaddata_win32 {
 	function<void()> func;
 };
 static unsigned __stdcall threadproc(void* userdata)
 {
 	threaddata_win32* thdat = (threaddata_win32*)userdata;
-#ifdef __i386__
-#error investigate whether floating point accuracy differs in threads, https://blog.zaita.com/mingw64-compiler-bug/
-#error I create threads differently, so I may get different results from zaita
-#error must check on real Windows; from what I can see, Wine never implemented that part
+	// otherwise 1.0 + 1.1102230246251568e-16 gets the wrong answer
+	// https://blog.zaita.com/mingw64-compiler-bug/
+	// (arguably, the real bug is that msvc and mingw prefer different fpcw... sucks if both exe and a dll expect different float behavior)
+#ifdef __i386__ // on x86_64, everything runs in float80, and _fpreset does nothing
+	_fpreset();
 #endif
 	thdat->func();
 	delete thdat;

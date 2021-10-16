@@ -94,7 +94,7 @@ static void init_gui_shared_early()
 	XInitThreads();
 #endif
 	gtk_disable_setlocale(); // go away, you're a library like any other and have no right to mess with libc config
-	// locale plus libraries is a terrible combination, it breaks my json parser and probably 999 other things
+	// locale plus libraries is a terrible combination, it uglifies debug printfs and breaks everything that didn't reinvent strtod/sprintf
 	// for more details, see https://github.com/mpv-player/mpv/commit/1e70e82baa9193f6f027338b0fab0f5078971fbe
 }
 

@@ -31,15 +31,15 @@ static gameview* create(Taropengl& gl, uint32_t width, uint32_t height, uint32_t
 }
 
 virtual void exit_cb(function<void()> cb) = 0; // Called when the window is closed. Defaults to stop().
-virtual bool running() = 0; // Returns false if the window was closed.
+virtual bool running() = 0; // Returns false if the user asked to close the window.
 virtual void stop() = 0; // Makes running() return false.
 
-virtual bool focused() = 0; // Returns false if something else is focused.
+virtual bool focused() = 0;
 
 virtual ~gameview() {}
 
 
-virtual void tmp_step(bool wait) = 0;
+virtual void tmp_step(bool wait) = 0; // TODO: delet this once runloop stuff is rewritten
 
 
 // same as libretro.h retro_key, except values 256-383 are shifted down to 128-255 (libretro defines nothing in 128-255)
@@ -89,6 +89,10 @@ enum key_t : uint8_t {
 // Scancodes must be treated as opaque integers; do not assume anything about the user's keyboard layout.
 // Key repeat events will not show up here.
 virtual void keys_cb(function<void(int scancode, key_t key, bool down)> cb) = 0;
+
+// TODO:
+// - Map key_t to scancode (I should probably remove key_t from keys_cb)
+// - Map scancode to ASCII name (GetKeyNameTextA on Windows, XKeysymToString on X11, grep -r _GetKeyNameText in Wine to find others)
 
 
 // If the user started a drag inside the window, but mouse is currently outside, the arguments may be outside the window.

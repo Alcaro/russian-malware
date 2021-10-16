@@ -285,7 +285,7 @@ private:
 			return true;
 		}
 		
-		arrayview<uint8_t>   mmap(size_t start, size_t len) { return datard.slice(start, len); }
+		arrayview<uint8_t>  mmap (size_t start, size_t len) { return datard.slice(start, len); }
 		arrayvieww<uint8_t> mmapw(size_t start, size_t len) { if (!datawr) return NULL; return datawr->slice(start, len); }
 		void  unmap(arrayview<uint8_t>  data) {}
 		bool unmapw(arrayvieww<uint8_t> data) { return true; }

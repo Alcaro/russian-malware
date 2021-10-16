@@ -269,7 +269,7 @@ static void test1(const char * haystack, const char * needle)
 	if (do_bench)
 	{
 		// Arlib and glibc are roughly tied on needle length 1 (we both just jump to memchr, the difference seems to just be noise),
-		// but glibc doesn't use SSE4.2, so Arlib easily wins on most every length 2 test (unless memchr takes most of the time for both)
+		// but glibc doesn't use SSE4.2, so Arlib easily wins on most length tests (unless memchr takes most of the time for both)
 		// for longer needles, whether Arlib's rolling hash or glibc's twoway wins seems mostly random;
 		// glibc wins with large margin for (ab)100000 / ba(ab)32, but Arlib wins on
 		// (ab)100000 / (ab)16ba(ab)16 and (ab)100000 / (ab)32ba

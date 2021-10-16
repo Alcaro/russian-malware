@@ -13,7 +13,7 @@
 //TODO: fiddle with https://github.com/ckennelly/hole-punch
 //TODO: implement backpressure; writing too much to a socket should block, or kick back to runloop
 //TODO: this architecture is fairly silly - create_ssl on domain name creates four sockets (DNS, buffer, SSL, TCP), should be reduced
-//  probably not possible without c++2a coroutines - keep it until then
+//  probably not possible without c++20 coroutines - keep it until then
 
 #define socket socket_t
 class socket : nomove {

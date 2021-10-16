@@ -2,6 +2,7 @@
 #include "string.h"
 #include "stringconv.h"
 #include "file.h"
+#include <type_traits>
 
 class argparse {
 	class arg_base {
@@ -139,28 +140,37 @@ public:
 	arg_strmany& add_early_stop(array<string>* target) { m_early_stop = true; return add('\0', "", target); }
 	
 private:
-	class arg_int : public arg_t<arg_int> {
+	template<typename T>
+	class arg_int : public arg_t<arg_int<T>> {
 		friend class argparse;
 		
-		arg_int(bool* has_target, int* target) : arg_t(false, true), has_target(has_target), target(target) {}
-		bool* has_target;
-		int* target;
-		bool parse(bool has_value, cstring arg) { if (has_target) *has_target = true; return fromstring(arg, *target); }
+		arg_int(bool* has_value, T* target) : arg_t<arg_int<T>>(false, true), has_value(has_value), target(target) {}
+		bool* has_value;
+		T* target;
+		bool parse(bool has_value, cstring arg) { if (has_value) *has_value = true; return fromstring(arg, *target); }
 	public:
 		//none
 	};
 public:
-	arg_int& add(char sname, cstring name, bool* has_target, int* target)
+	template<typename T>
+	std::enable_if_t<std::is_arithmetic_v<T> && !std::is_same_v<T, bool>, arg_int<T>&>
+	add(char sname, cstring name, bool* has_value, T* target)
 	{
-		arg_int* arg = new arg_int(has_target, target);
+		arg_int<T>* arg = new arg_int<T>(has_value, target);
 		arg->name = name;
 		arg->sname = sname;
 		m_args.append_take(*arg);
 		return *arg;
 	}
-	arg_int& add(            cstring name, bool* has_target, int* target) { return add('\0',  name, has_target, target); }
-	arg_int& add(char sname, cstring name,                   int* target) { return add(sname, name, NULL,       target); }
-	arg_int& add(            cstring name,                   int* target) { return add('\0',  name, NULL,       target); }
+	template<typename T>
+	std::enable_if_t<std::is_arithmetic_v<T> && !std::is_same_v<T, bool>, arg_int<T>&>
+	add(            cstring name, bool* has_value, T* target) { return add('\0',  name, has_value, target); }
+	template<typename T>
+	std::enable_if_t<std::is_arithmetic_v<T> && !std::is_same_v<T, bool>, arg_int<T>&>
+	add(char sname, cstring name,                   T* target) { return add(sname, name, NULL,       target); }
+	template<typename T>
+	std::enable_if_t<std::is_arithmetic_v<T> && !std::is_same_v<T, bool>, arg_int<T>&>
+	add(            cstring name,                   T* target) { return add('\0',  name, NULL,       target); }
 	
 private:
 	class arg_bool : public arg_t<arg_bool> {

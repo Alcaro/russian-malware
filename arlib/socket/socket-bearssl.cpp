@@ -423,10 +423,12 @@ test("BearSSL init", "array,base64,file", "tcp")
 	uint64_t begin_us = time_us_ne();
 	initialize();
 	uint64_t end_us = time_us_ne();
+#ifdef ARLIB_OPT
 	if (!RUNNING_ON_VALGRIND)
 	{
 		assert_lt(end_us-begin_us, 50000); // randomly takes either 10ms or 32ms, probably depending on cpu power saving policy
 	}
+#endif
 }
 #endif
 #endif

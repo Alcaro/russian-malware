@@ -8,7 +8,7 @@ inline uint64_t muldiv64(uint64_t a, uint64_t b, uint64_t c)
 #ifdef __x86_64__
 	uint64_t out;
 	uint64_t clobber;
-	asm("imul %2\nidiv %3" : "=a"(out), "=d"(clobber) : "r"(b), "r"(c), "a"(a), "d"(0));
+	__asm__("imul %2\nidiv %3" : "=a"(out), "=d"(clobber) : "r"(b), "r"(c), "a"(a), "d"(0));
 	return out;
 #else
 	// doing it in __int128 would be easier, but that ends up calling __udivti3 which is a waste of time.
@@ -136,7 +136,7 @@ test("time", "", "time")
 	
 	uint64_t time_une_fm = time_ms_ne()*1000;
 	uint64_t time_une_fu = time_us_ne();
-	assert_range(time_une_fu, time_une_fm-1100,    time_une_fm+1500);
+	assert_range(time_une_fu, time_une_fm-1100, time_une_fm+1500);
 	
 #ifdef _WIN32
 	Sleep(50);
@@ -152,7 +152,7 @@ test("time", "", "time")
 	
 	uint64_t time2_une_fm = time_ms_ne()*1000;
 	uint64_t time2_une_fu = time_us_ne();
-	assert_range(time2_une_fu, time2_une_fm-1100,    time2_une_fm+1500);
+	assert_range(time2_une_fu, time2_une_fm-1100, time2_une_fm+1500);
 	
 #ifndef _WIN32
 	assert_range(time2_u_fm-time_u_fm, 40000, 60000);

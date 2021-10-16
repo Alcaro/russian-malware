@@ -76,19 +76,13 @@ cstring file::exepath() { return g_path.path; }
 #ifdef _WIN32
 #include <windows.h>
 
+extern const IMAGE_DOS_HEADER __ImageBase;
+
 static char g_exepath[MAX_PATH];
 
 oninit_static()
 {
-	HMODULE hmod;
-#ifdef ARTYPE_DLL
-	// TODO: check if I can use __ImageBase instead
-	GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-	                   (LPCSTR)(void*)&file::exepath, &hmod);
-#else
-	hmod = NULL;
-#endif
-	GetModuleFileName(hmod, g_exepath, MAX_PATH);
+	GetModuleFileNameA((HMODULE)&__ImageBase, g_exepath, MAX_PATH);
 	for (int i=0;g_exepath[i];i++)
 	{
 		if (g_exepath[i]=='\\') g_exepath[i]='/';

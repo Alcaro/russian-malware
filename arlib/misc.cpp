@@ -241,27 +241,27 @@ test("test_nomalloc", "", "")
 	if (RUNNING_ON_VALGRIND) test_expfail("Valgrind doesn't catch new within test_nomalloc, rerun with gdb or standalone");
 }
 
-static int x;
+static int g_x;
 static int y()
 {
-	x = 0;
-	contextmanager(x=1, x=2)
+	g_x = 0;
+	contextmanager(g_x=1, g_x=2)
 	{
-		assert_eq(x, 1);
+		assert_eq(g_x, 1);
 		return 42;
 	}
 }
 test("contextmanager", "", "")
 {
-	x = 0;
-	contextmanager(x=1, x=2)
+	g_x = 0;
+	contextmanager(g_x=1, g_x=2)
 	{
-		assert_eq(x, 1);
+		assert_eq(g_x, 1);
 	}
-	assert_eq(x, 2);
-	x = 0;
+	assert_eq(g_x, 2);
+	g_x = 0;
 	assert_eq(y(), 42);
-	assert_eq(x, 2);
+	assert_eq(g_x, 2);
 }
 test("endian", "", "")
 {

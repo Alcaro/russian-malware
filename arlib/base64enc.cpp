@@ -1,4 +1,5 @@
 #include "base64.h"
+#include "endian.h"
 
 static const char encode[64] = {
 	'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z',
@@ -7,40 +8,34 @@ static const char encode[64] = {
 
 void base64_enc_raw(arrayvieww<uint8_t> out, arrayview<uint8_t> bytes)
 {
+	if (!bytes.size()) return;
+	
 	uint8_t* outp = out.ptr();
 	const uint8_t* inp = bytes.ptr();
 	const uint8_t* inpe = inp + bytes.size();
 	
-	while (inp+3 <= inpe)
+	while (inp+4 <= inpe)
 	{
-		uint32_t three = inp[0]<<16 | inp[1]<<8 | inp[2];
-		
-		*(outp++) = encode[(three>>18)&63];
-		*(outp++) = encode[(three>>12)&63];
-		*(outp++) = encode[(three>>6 )&63];
-		*(outp++) = encode[(three>>0 )&63];
+		uint32_t three = readu_be32(inp) >> 8;
+		outp[0] = encode[(three>>18)   ];
+		outp[1] = encode[(three>>12)&63];
+		outp[2] = encode[(three>>6 )&63];
+		outp[3] = encode[(three>>0 )&63];
 		inp += 3;
+		outp += 4;
 	}
 	
-	if (inp+0 == inpe) {}
-	if (inp+1 == inpe)
-	{
-		uint32_t three = inp[0]<<16;
-		
-		*(outp++) = encode[(three>>18)&63];
-		*(outp++) = encode[(three>>12)&63];
-		*(outp++) = '=';
-		*(outp++) = '=';
-	}
-	if (inp+2 == inpe)
-	{
-		uint32_t three = inp[0]<<16 | inp[1]<<8;
-		
-		*(outp++) = encode[(three>>18)&63];
-		*(outp++) = encode[(three>>12)&63];
-		*(outp++) = encode[(three>>6 )&63];
-		*(outp++) = '=';
-	}
+	uint32_t three = inp[0]<<16;
+	if (inp+1 < inpe) three |= inp[1]<<8;
+	if (inp+2 < inpe) three |= inp[2]<<0;
+	
+	outp[0] = encode[(three>>18)   ];
+	outp[1] = encode[(three>>12)&63];
+	outp[2] = encode[(three>>6 )&63];
+	outp[3] = encode[(three>>0 )&63];
+	
+	if (inp+1 >= inpe) outp[2] = '='; // don't move the outp[2,3] above into elses, it optimizes better this way
+	if (inp+2 >= inpe) outp[3] = '=';
 }
 
 string base64_enc(arrayview<uint8_t> bytes)

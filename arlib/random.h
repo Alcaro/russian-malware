@@ -5,7 +5,7 @@
 #endif
 
 #if defined(_WIN32)
-#include <windows.h>
+#include <windows.h> // ntsecapi.h doesn't include its dependencies properly
 #define SystemFunction036 Not_SystemFunction036 // my mingw headers think this one isn't WINAPI, convince it otherwise
 #include <ntsecapi.h>
 #undef SystemFunction036
