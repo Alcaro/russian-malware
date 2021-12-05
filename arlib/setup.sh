@@ -1,7 +1,7 @@
 #!/bin/bash
 [ -e Makefile ] && echo 'Already configured' && exit
 
-[ -e arlib ] || ln -s $(dirname $0) .
+[ -e arlib ] || ln -s $(realname $(dirname $0)) .
 
 program=$1
 [[ -z $program ]] && program=$(basename $(pwd))

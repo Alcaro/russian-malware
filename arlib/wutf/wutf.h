@@ -110,13 +110,6 @@ void WuTF_enable();
 //However, it does leak memory, so don't call it more than once. (The leaks are cleaned up on process exit anyways.)
 void WuTF_args(int* argc, char** * argv);
 
-//Used internally in WuTF. DO NOT USE DIRECTLY UNLESS YOU'RE INSANE.
-//This replaces the 'victim' function such that all calls instead go to 'replacement'.
-//Make sure their signatures, including calling convention, are identical.
-//Also make sure the victim function is currently not executing in another thread.
-typedef void(*WuTF_funcptr)();
-void WuTF_redirect_function(WuTF_funcptr victim, WuTF_funcptr replacement);
-
 #else
 //Other OSes already use UTF-8.
 static inline void WuTF_enable() {}
@@ -124,7 +117,7 @@ static inline void WuTF_args(int* argc, char** * argv) {}
 #endif
 
 //This one just combines the above.
-static inline void WuTF_enable_args(int* argc, char** * argv) { WuTF_enable(); WuTF_args(argc, argv); }
+static inline void WuTF_enable_args(int * argc, char** * argv) { WuTF_enable(); WuTF_args(argc, argv); }
 
 
 //Lengths are in code units, and include the NUL terminator.
@@ -147,7 +140,7 @@ static inline void WuTF_enable_args(int* argc, char** * argv) { WuTF_enable(); W
 #define WUTF_E_TRUNCATE -2
 #define WUTF_E_INVALID -1
 
-// Used internally in WuTF. Don't use them directly.
+// Used internally in WuTF. Probably shouldn't use them directly.
 int WuTF_utf8_to_utf16(int flags, const char* utf8, int utf8_len, uint16_t* utf16, int utf16_len);
 int WuTF_utf16_to_utf8(int flags, const uint16_t* utf16, int utf16_len, char* utf8, int utf8_len);
 

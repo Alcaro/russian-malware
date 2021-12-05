@@ -424,12 +424,12 @@ class string : public cstring {
 	}
 	void reinit_from(string&& other)
 	{
-		release();
+		deinit();
 		memcpy((void*)this, (void*)&other, sizeof(*this));
 		other.init_empty();
 	}
 	
-	void release()
+	void deinit()
 	{
 		if (!inlined()) free(m_data);
 	}
@@ -513,8 +513,8 @@ public:
 	forceinline string& operator=(const cstring& other) { reinit_from(other); return *this; }
 	forceinline string& operator=(string&& other) { reinit_from(std::move(other)); return *this; }
 	forceinline string& operator=(const char * str) { reinit_from(str); return *this; }
-	forceinline string& operator=(nullptr_t) { release(); init_empty(); return *this; }
-	~string() { release(); }
+	forceinline string& operator=(nullptr_t) { deinit(); init_empty(); return *this; }
+	~string() { deinit(); }
 	
 	explicit operator bool() const { return length() != 0; }
 	operator const char * () const { return ptr_withnul(); }

@@ -32,6 +32,7 @@
 #include "regex.h"
 #include "runloop.h"
 #include "serialize.h"
+#include "terminal.h"
 #include "test.h"
 #include "zip.h"
 

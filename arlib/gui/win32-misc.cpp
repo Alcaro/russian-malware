@@ -49,39 +49,6 @@ bool window_try_init(int * argc, char * * argv[])
 	return true;
 }
 
-static bool window_console(bool claim)
-{
-	//doesn't create a new console if not launched from one, it'd go away on app exit anyways
-	//doesn't like being launched from cmd; cmd wants to run a new command if spawning a gui app
-	//  I can't make it not be a gui app, that flashes a console; it acts sanely from batch files
-	//windows consoles are, like so much else, a massive mess
-	
-	static bool claimstdin;
-	static bool claimstdout;
-	static bool claimstderr;
-	
-	claimstdin  |= (GetFileType(GetStdHandle(STD_INPUT_HANDLE))==FILE_TYPE_UNKNOWN);
-	claimstdout |= (GetFileType(GetStdHandle(STD_OUTPUT_HANDLE))==FILE_TYPE_UNKNOWN);
-	claimstderr |= (GetFileType(GetStdHandle(STD_ERROR_HANDLE))==FILE_TYPE_UNKNOWN);
-	
-	AttachConsole(ATTACH_PARENT_PROCESS);
-	
-	if (claim)
-	{
-		if (claimstdin) freopen("CONIN$", "rt", stdin);
-		if (claimstdout) freopen("CONOUT$", "wt", stdout);
-		if (claimstderr) freopen("CONOUT$", "wt", stderr);
-		
-		if (claimstdout) fputc('\r', stdout);
-		if (claimstderr) fputc('\r', stderr);
-	}
-	
-	return GetConsoleWindow();
-}
-
-bool window_console_avail() { return window_console(false); }
-bool window_console_attach() { return window_console(true); }
-
 #if 0
 file* file::create(const char * filename)
 {

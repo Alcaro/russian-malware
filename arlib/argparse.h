@@ -144,10 +144,10 @@ private:
 	class arg_int : public arg_t<arg_int<T>> {
 		friend class argparse;
 		
-		arg_int(bool* has_value, T* target) : arg_t<arg_int<T>>(false, true), has_value(has_value), target(target) {}
-		bool* has_value;
-		T* target;
-		bool parse(bool has_value, cstring arg) { if (has_value) *has_value = true; return fromstring(arg, *target); }
+		arg_int(bool* has_value, T* target) : arg_t<arg_int<T>>(false, true), m_has_value(has_value), m_target(target) {}
+		bool* m_has_value;
+		T* m_target;
+		bool parse(bool has_value, cstring arg) { if (m_has_value) *m_has_value = true; return fromstring(arg, *m_target); }
 	public:
 		//none
 	};

@@ -28,7 +28,7 @@ extern const IMAGE_DOS_HEADER __ImageBase;
 
 // Global variables can be accessed before relocations are processed, by using RELOCATE(&g_integer).
 // Requires a local variable HMODULE this_mod, which can be calculated using get_this_hmodule().
-// Call it once per global and reuse the result, it optimizes poorly.
+// Call this macro once per global and reuse the result, it optimizes poorly.
 #ifdef __i386__
 #define RELOCATE(x) launder((decltype(x+0))((uint8_t*)x - (uint8_t*)&__ImageBase + (uint8_t*)this_mod))
 #else

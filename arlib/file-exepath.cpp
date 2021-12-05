@@ -7,7 +7,8 @@
 
 namespace {
 struct exepath_finder {
-	string path;
+	string fullname;
+	cstring path;
 	
 	// can't oninit() to initialize a string, must use a ctor; it blows up if oninit runs before string's own ctor
 	// (no, I don't know why string ctor isn't optimized into the data section; it is if constexpr)
@@ -48,29 +49,41 @@ struct exepath_finder {
 		const char * linkpath = "/proc/self/exe";
 #endif
 		
-		path.construct(64);
+		char buf[256];
 		
-	again: ;
-		char * ptr = (char*)path.bytes().ptr();
-		size_t buflen = path.length();
-		ssize_t r = readlink(linkpath, ptr, buflen);
-		if (r <= 0) { path = ""; return; }
-		if ((size_t)r >= buflen-1)
+		ssize_t r = readlink(linkpath, buf, sizeof(buf));
+		if (r <= 0) return;
+		
+		if ((size_t)r < sizeof(buf)-1)
 		{
-			path.construct(buflen * 2);
-			goto again;
+			buf[r] = '\0'; // readlink doesn't nul terminate
+			fullname = buf;
+		}
+		else
+		{
+			size_t buflen = sizeof(buf);
+			char* ptr = NULL;
+		again:
+			buflen *= 2;
+			ptr = xrealloc(ptr, buflen);
+			
+			ssize_t r = readlink(linkpath, ptr, buflen);
+			if (r <= 0) return;
+			if ((size_t)r >= buflen-1) goto again;
+			
+			ptr[r] = '\0';
+			fullname = string::create_usurp(ptr);
 		}
 		
-		ptr[r] = '\0';
-		char * end = strrchr(ptr, '/')+1; // at least one / is known to exist
-		path = path.substr(0, end-ptr);
+		path = file::dirname(fullname);
 	}
 };
 
 static exepath_finder g_path;
 }
 
-cstring file::exepath() { return g_path.path; }
+cstring file::exedir() { return g_path.path; }
+cstring file::exepath() { return g_path.fullname; }
 #endif
 
 #ifdef _WIN32
@@ -79,6 +92,7 @@ cstring file::exepath() { return g_path.path; }
 extern const IMAGE_DOS_HEADER __ImageBase;
 
 static char g_exepath[MAX_PATH];
+static int g_exepath_dirlen;
 
 oninit_static()
 {
@@ -87,8 +101,20 @@ oninit_static()
 	{
 		if (g_exepath[i]=='\\') g_exepath[i]='/';
 	}
-	strrchr(g_exepath, '/')[1] = '\0';
+	g_exepath_dirlen = strrchr(g_exepath, '/')+1 - g_exepath;
 }
 
+cstring file::exedir() { return cstring(bytesr((uint8_t*)g_exepath, g_exepath_dirlen)); }
 cstring file::exepath() { return g_exepath; }
 #endif
+
+#include "test.h"
+test("file::exepath", "string", "file")
+{
+#ifdef _WIN32
+	static const uint8_t magic[] = { 'M', 'Z' };
+#else
+	static const uint8_t magic[] = { 0x7F, 'E', 'L', 'F' };
+#endif
+	assert_eq((bytesr)file::readall(file::exepath()).slice(0,sizeof(magic)), (bytesr)magic);
+}

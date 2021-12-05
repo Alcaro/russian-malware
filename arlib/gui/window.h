@@ -20,13 +20,6 @@ void arlib_init(nullptr_t, char** argv); // Shorthand if your program takes no a
 // In case you want to handle arguments yourself. Arlib will still handle --display if argc/argv are given, but it's safe to pass NULLs.
 void arlib_init_manual_args(int* argc, char*** argv);
 
-//On Windows, attaches stdout/stderr to the console of the launching process. On Linux, does nothing.
-//On both, returns whether the process is currently in a terminal. Returns true if I/O is redirected.
-bool window_console_attach(); // Returns whether it worked.
-//Returns whether the process was launched from a console, without actually connecting it.
-//If yes, calling window_console_attach will connect stdout/stderr to something (stdin not guaranteed to work).
-bool window_console_avail();
-
 //On Windows, the program is assumed portable, so it returns the program directory.
 //On Linux, the program is assumed installed, so it returns ~/.config.
 string window_config_path();

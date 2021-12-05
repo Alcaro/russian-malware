@@ -347,9 +347,11 @@ public:
 		else return resolve(parent+sub);
 	}
 	
-	//Returns the path of the currently executing code, with a trailing slash. If compiled as a DLL, returns the DLL path.
+	//Returns the location of the currently executing code, whether that's EXE or DLL.
 	//May be blank if the path can't be determined. The cstring is owned by Arlib and lives forever.
 	static cstring exepath();
+	//Returns the directory of the above.
+	static cstring exedir();
 	//Returns the current working directory.
 	static const string& cwd();
 	

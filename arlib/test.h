@@ -33,6 +33,7 @@ void _test_runloop_latency(uint64_t us);
 
 
 template<typename T> string tostring_dbg(const T& item) { return tostring(item); }
+static inline string tostring_dbg(nullptr_t) { return "(null)"; }
 
 template<typename T>
 string tostring_dbg(const arrayview<T>& item)

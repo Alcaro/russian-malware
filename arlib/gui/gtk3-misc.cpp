@@ -211,17 +211,6 @@ void arlib_init(argparse& args, char** argv)
 	init_gui_shared_late();
 }
 
-bool window_console_avail()
-{
-	return getenv("TERM");
-}
-
-bool window_console_attach()
-{
-	//nothing to do
-	return window_console_avail();
-}
-
 string window_config_path()
 {
 	return g_get_user_config_dir();

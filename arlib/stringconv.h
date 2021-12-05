@@ -11,7 +11,7 @@ inline string tostring(cstring s) { return s; }
 // if any typedef of the missing one shows up (for example time_t = long on Windows), ambiguity errors
 string tostring(  signed long long val);
 string tostring(unsigned long long val);
-string tostringhex(unsigned long long val, size_t mindigits = 0);
+string tostringhex(unsigned long long val, size_t mindigits = 0); // mindigits must be <= 2*sizeof; tostringhex(uint8, 3) is illegal
 #if SIZE_MAX < ULLONG_MAX
 string tostring(  signed long val); // long is 32 bits on every OS where size_t < long long,
 string tostring(unsigned long val); // so long's absurd definition of 'uhhh pointer size except on windows' won't cause trouble here

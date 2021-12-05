@@ -809,7 +809,7 @@ static inline range_t range(size_t start, size_t stop, size_t step = 1) { return
 	extern "C" __attribute__((dllimport)) double name(double,double); \
 	static inline float name##f(float a, float b) { return name((double)a, (double)b); } \
 	static inline float name(float a, float b) { return name##f(a, b); }
-// only way to get rid of the extern float __cdecl sinf(float) from the headers
+// only way to get rid of the extern float __cdecl sinf(float) from the headers - they don't exist in msvcrt
 #define sinf   dummy_sinf
 #define cosf   dummy_cosf
 #define expf   dummy_expf
@@ -864,14 +864,14 @@ using std::signbit;
 //     - runloop::global()
 //     - socket::create_ssl() SChannel backend (BearSSL is safe; OpenSSL is not supported on Windows)
 //     - window_*
-//     - mutex as a global variable, if ARXPSUPPORT (safe if 7+, class member, or both)
+//     - mutex as a global variable, if ARXPSUPPORT (safe if XP support is disabled, class member, or both)
 //     - semaphore as a global variable
 //     - WuTF (not supported in DLLs at all)
 // - To avoid crashes if atexit() calls an unloaded DLL, and to allow globals in EXE paths, globals' constructors are not run either.
 //     Constant-initialized variables are safe, or if you need to (e.g.) put your process ID in a global, you can use oninit_static().
 // - Some libc functions and compiler intrinsics that are implemented via global variables.
 //     Most of them are safe; msvcrt is a normal DLL, and most things MinGW statically links are stateless.
-//     The only useful exception I'm aware of, __builtin_cpu_supports, should be avoided anyways.
+//     The only useful exception I'm aware of, __builtin_cpu_supports, is deprecated in Arlib anyways, for unrelated reasons.
 // - DLLs used by this program will never be unloaded. If your program only links against system libraries, this is fine,
 //     something else is probably already using them; if your program ships its own DLLs (for example libstdc++-6.dll),
 //     this is equivalent to a memory leak. (But if you're shipping DLLs, your program is already multiple files, and you
@@ -879,15 +879,14 @@ using std::signbit;
 //     A hybrid DLL calling LoadLibrary is safe, as long as it also calls FreeLibrary.
 // - If a normal DLL imports a symbol that doesn't exist from another DLL, LoadLibrary's caller gets an error.
 //     If a hybrid DLL imports a symbol that doesn't exist, it will remain as NULL, and will crash if called. You can't even
-//     NULL check them, compiler will optimize it out. If you need that feature, use LoadLibrary.
-// - Compiler-supported thread local storage in DLLs is unlikely to work. (TlsAlloc is fine.)
+//     NULL check them, compiler will optimize it out. If you need that feature, use LoadLibrary or an applicable Arlib wrapper.
+// - Compiler-supported thread local storage in DLLs paths is unlikely to work. (TlsAlloc is fine.)
 // - It uses a couple of GCC extensions, with no MSVC equivalent. (Though the rest of Arlib isn't tested under MSVC either.)
-// - Not tested on anything except x86_64, and likely to crash. It has to relocate itself, and the relocator must be position
-//     independent; PIC on i386 is hard.
+// - Not tested outside i386 and x86_64, and likely to misbehave arbitrarily.
 // - It does various weird things; antivirus programs may react.
 // On Linux, none of the above applies; it's a perfectly normal program in both respects.
 // Depending on what the EXE path does, it may end up loading itself as a DLL.
-//    This is safe, unless both EXE and DLL paths use globals in a dubious way.
+//  This is safe, on both Linux and Windows, unless both EXE and DLL paths use global variables in a dubious way.
 #ifdef ARLIB_HYBRID_DLL
 void arlib_hybrid_dll_init();
 #else
