@@ -337,7 +337,9 @@ template<bool found, typename Tl1> void* decompose_get_userdata()
 template<bool found, typename Tl1, typename Tn, typename... Ta>
 void* decompose_get_userdata(Tn&& arg, Ta&&... args)
 {
-	if constexpr (std::is_invocable_v<Tl1, Tn>)
+	// if Tl1 takes a void*, we only want to give it a void*, not any random pointer
+	if constexpr (std::is_invocable_v<Tl1, Tn> &&
+		(std::is_same_v<std::remove_reference_t<Tn>, void*> || !std::is_invocable_v<Tl1, void*>))
 	{
 		static_assert(!found);
 		alignas(Tl1) char l1[sizeof(void*)] = {};

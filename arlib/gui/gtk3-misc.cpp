@@ -1,5 +1,5 @@
 #include "window.h"
-#ifdef ARGUI_GTK3
+#if defined(ARGUI_GTK3) || defined(ARGUI_GTK4)
 #include "../file.h"
 #include "../os.h"
 #include "../set.h"
@@ -16,7 +16,7 @@
 #include <gdk/gdkx.h>
 #else
 //TODO: if not X11, disable Viewport but keep other widgets
-#error Only X11 supported.
+//#error Only X11 supported.
 #endif
 
 //TODO: check if libinput provides all information I can get from the raw kernel interface, and if it needs root
@@ -85,9 +85,9 @@ struct window_x11_info window_x11;
 
 static void init_gui_shared_early()
 {
-	setenv("NO_AT_BRIDGE", "1", true); // https://askubuntu.com/questions/1086294/terminal-and-nautilus-stopped-working-after-a-crash
+	//setenv("NO_AT_BRIDGE", "1", true); // https://askubuntu.com/questions/1086294/terminal-and-nautilus-stopped-working-after-a-crash
 #ifdef DEBUG
-	g_log_set_always_fatal((GLogLevelFlags)(G_LOG_LEVEL_CRITICAL|G_LOG_LEVEL_WARNING));
+	//g_log_set_always_fatal((GLogLevelFlags)(G_LOG_LEVEL_CRITICAL|G_LOG_LEVEL_WARNING));
 #endif
 #if defined(ARGUIPROT_X11) && defined(ARLIB_OPENGL)
 	gdk_set_allowed_backends("x11");
@@ -107,6 +107,17 @@ static void init_gui_shared_late()
 		window_x11.screen = gdk_x11_get_default_screen();
 	}
 #endif
+}
+
+#ifdef ARGUI_GTK3
+void arlib_init()
+{
+	int argc = 1;
+	char * argv[] = { (char*)"arlib", nullptr };
+	char** argv_p = argv;
+	init_gui_shared_early();
+	gtk_init(&argc, &argv_p);
+	init_gui_shared_late();
 }
 
 void arlib_init(nullptr_t, char** argv)
@@ -215,6 +226,24 @@ string window_config_path()
 {
 	return g_get_user_config_dir();
 }
+#endif
+
+#ifdef ARGUI_GTK4
+void arlib_init()
+{
+	init_gui_shared_early();
+	gtk_init();
+	init_gui_shared_late();
+}
+
+bool arlib_try_init()
+{
+	init_gui_shared_early();
+	bool ret = gtk_init_check();
+	init_gui_shared_late();
+	return ret;
+}
+#endif
 
 //file* file::create(const char * filename)
 //{
@@ -537,9 +566,7 @@ public:
 		function<void()> callback;
 	};
 	refarray<timer_cb> timerinfo;
-	
-	// if runloop is never entered (someone trying to measure startup performance by calling exit() before entering loop), don't sync
-	bool need_exit_sync = false;
+	bool do_exit = false;
 	
 	static const GIOCondition cond_rd = (GIOCondition)(G_IO_IN |G_IO_HUP|G_IO_ERR);
 	static const GIOCondition cond_wr = (GIOCondition)(G_IO_OUT|G_IO_HUP|G_IO_ERR);
@@ -699,37 +726,15 @@ public:
 #endif
 	
 	
-	void enter() override { gtk_main(); need_exit_sync = false; }
-	void exit() override { gtk_main_quit(); }
+	void enter() override { while (!do_exit) g_main_context_iteration(NULL, true); }
+	void exit() override { do_exit = true; }
 	void step(bool wait) override
 	{
-		// TODO: investigate which of these comments are still accurate
-		// especially if both trues need to be true in that branch, and if it's possible to get stuck between them
-		
-		if (wait && !gtk_events_pending())
-		{
-			//workaround for Gtk thinking the program is lagging if we only call this every 16ms
-			//we're busy waiting in non-Gtk syscalls, waiting less costs us nothing
-			
-			//yes, I need to call this twice if there are no events; first one is nonblocking for some reason,
-			// even though I ask for blocking, and if I only call this once, the 'first one?' flag is reset by
-			// something in gl.swapBuffers
-			//I suspect Gtk is trying to be "smart" about something, but it just ends up being counterproductive
-			//and I can't find which part of the source code describes such absurd behavior,
-			// nor any sensible way to debug it, track it down, and find a less absurd workaround
-			
-			gtk_main_iteration_do(true); // TODO: investigate whether it's possible to get stuck between those,
-			gtk_main_iteration_do(true); // and which need to be blocking
-		}
-		else
-		{
-			//if there are events, we have everything we're suppose to wait for; dispatch them and report we're done
-			//however, we must (again) call this twice, to disable mouse motion compression
-			gtk_main_iteration_do(false);
-			gtk_main_iteration_do(false);
-		}
-		
-		need_exit_sync = true;
+		// TODO: in gtk 3, there were a bunch of bugs; check which still exist
+		// - in blocking mode, first call is nonblocking; need to call it twice
+		// - in nonblocking mode, Gtk still gets confused by something and compresses mouse events
+		// - some other confusing issue in blocking mode
+		g_main_context_iteration(NULL, wait); // TODO: investigate whether it's possible to get stuck between those,
 	}
 	
 	~runloop_gtk()
@@ -739,31 +744,20 @@ public:
 	
 	void finalize()
 	{
-		if (need_exit_sync)
-		{
-			//GTK BUG WORKAROUND:
-			
-			//Gtk docs say "It's OK to use the GLib main loop directly instead of gtk_main(), though it involves slightly more typing"
-			//but that is a lie. gtk_main() does a few deinitialization tasks when it leaves
-			//for example, it saves the clipboard to X11-server-side storage; without that, the clipboard is wiped on app exit
-			//this is also done in GtkApplication::shutdown, so it's my choice which of those to call
-			//gtk_main is easier, but it potentially dispatches events to objects that don't exist anymore,
-			// and doesn't save clipboard if gtk_main is already running (i.e. someone called exit() in an event handler),
-			// so GtkApplication it is - I'll have to create one just so it can be shut down
-			
-			//but this is still a terrible hack. a much better solution would be creating gtk_deinit()
-			// and moving these shutdown actions there, or having Gtk put this in its own atexit handler
-			
+		//need to call gtk_main_sync(), so it saves the clipboard to X11-server-side storage
+		//this is only called by gtk_application_shutdown() (and exit from gtk_main() in GTK 3)
+		//creating an application just to shut it down is silly, but it's the least ugly solution I can find
+		//Gtk recommends using GtkApplication the entire way, but I don't want such deep Gtk dependencies
+		
 #ifndef ARLIB_OPT // keep a pointer in debug mode, so Valgrind doesn't flag it as a leak
-			static
+		static
 #endif
-			GApplication* app;
-			app = (GApplication*)gtk_application_new(NULL, G_APPLICATION_FLAGS_NONE);
-			g_application_register(app, NULL, NULL);
-			G_APPLICATION_GET_CLASS(app)->shutdown(app);
-			// then leak the object. program's exiting, let kernel deal with cleanup
-			// fair chance the object's halfway deinitialized and doesn't know how to finish destruction, anyways
-		}
+		GApplication* app;
+		app = (GApplication*)gtk_application_new(NULL, G_APPLICATION_FLAGS_NONE);
+		g_application_register(app, NULL, NULL);
+		G_APPLICATION_GET_CLASS(app)->shutdown(app);
+		// then leak the object. program's exiting, let kernel deal with cleanup
+		// fair chance the object's halfway deinitialized and doesn't know how to finish destruction, anyways
 	}
 	
 #ifdef ARLIB_TESTRUNNER

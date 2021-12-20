@@ -1,8 +1,37 @@
+#include "test.h"
+
+string tostringhex_dbg(const arrayview<uint8_t>& item)
+{
+	string ret;
+	for (size_t outer=0;outer<item.size();outer+=16)
+	{
+		ret += tostringhex<8>(outer)+"  ";
+		for (size_t inner=0;inner<16;inner++)
+		{
+			if (inner == 8) ret += " ";
+			if (outer+inner >= item.size()) ret += "   ";
+			else ret += tostringhex<2>(item[outer+inner])+" ";
+		}
+		ret += " ";
+		for (size_t inner=0;inner<16;inner++)
+		{
+			if (outer+inner >= item.size()) ret += " ";
+			else
+			{
+				char c = item[outer+inner];
+				if (c >= 0x20 && c <= 0x7e) ret += c;
+				else ret += '.';
+			}
+		}
+		ret += "\n";
+	}
+	return ret;
+}
+
 #ifdef ARLIB_TESTRUNNER
 #ifndef ARLIB_TEST
 #define ARLIB_TEST
 #endif
-#include "test.h"
 #include "array.h"
 #include "os.h"
 #include "argparse.h"

@@ -15,6 +15,9 @@ class widget_base;
 #endif
 
 // Arlib may automatically parse a few arguments, like --display on Linux.
+void arlib_init();
+bool arlib_try_init();
+
 void arlib_init(argparse& args, char** argv);
 void arlib_init(nullptr_t, char** argv); // Shorthand if your program takes no arguments. Will complain if any are given.
 // In case you want to handle arguments yourself. Arlib will still handle --display if argc/argv are given, but it's safe to pass NULLs.

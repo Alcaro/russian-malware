@@ -995,8 +995,9 @@ public:
 	template<size_t Ni> match_t(const match_t<Ni>& inner)
 	{
 		static_assert(Ni < N);
-		memset(group, 0, sizeof(group));
 		memcpy(group, inner.group, sizeof(inner.group));
+		if (N != Ni)
+			memset(group+Ni, 0, sizeof(pair)*(N-Ni));
 	}
 	
 	static const size_t size = N;

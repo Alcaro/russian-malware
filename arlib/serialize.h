@@ -934,6 +934,11 @@ public:
 	{
 		read_item(out);
 	}
+	template<typename T>
+	void item(const T& out)
+	{
+		read_item(out);
+	}
 };
 
 template<typename T> T bmldeserialize(cstring bml)

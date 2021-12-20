@@ -8,9 +8,11 @@
 //these shouldn't be needed with modern compilers, according to
 //https://stackoverflow.com/questions/8132399/how-to-printf-uint64-t-fails-with-spurious-trailing-in-format
 //but mingw 8.1.0 needs it anyways for whatever reason
+#ifndef __STDC_LIMIT_MACROS
 #define __STDC_LIMIT_MACROS 1
 #define __STDC_FORMAT_MACROS 1
 #define __STDC_CONSTANT_MACROS 1 // why are they so many?
+#endif
 #define _USE_MATH_DEFINES // needed for M_PI on windows
 
 #ifdef _WIN32

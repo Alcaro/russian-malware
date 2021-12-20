@@ -220,6 +220,15 @@ ifeq ($(ARGUI),1)
       DEFINES += G_DISABLE_CAST_CHECKS
     endif
   endif
+else ifeq ($(ARGUI),gtk4)
+  SOURCES_ARLIB += arlib/gui/*.cpp
+  DEFINES += ARGUI_GTK4
+  CONF_CFLAGS += $(shell pkg-config --cflags gtk4)
+  CONF_LFLAGS += -lX11 $(shell pkg-config --libs gtk4)
+  ifneq ($(OPT),0)
+    # these are useful on debug builds, but on release builds, they just waste space
+    DEFINES += G_DISABLE_CAST_CHECKS
+  endif
 else
   DEFINES += ARGUI_NONE
 endif

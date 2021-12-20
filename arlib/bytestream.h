@@ -3,8 +3,8 @@
 #include "endian.h"
 #include "string.h"
 
-//you're welcome to extend this object if you need a more rare operation, like leb128
 //signature and u8_or check for overflow; for anything else, use remaining()
+//you're welcome to extend this object if you need a more rare operation, like leb128
 class bytestream {
 protected:
 	const uint8_t* start;
@@ -255,13 +255,13 @@ public:
 #endif
 
 
-// TODO: create a bytestream whose output size is known beforehand, so it doesn't malloc
+// TODO: create a bytestreamw whose output size is known beforehand, so it doesn't malloc
 class bytestreamw {
 protected:
-	array<uint8_t> buf;
+	bytearray buf;
 	
 public:
-	void bytes(arrayview<uint8_t> data)
+	void bytes(bytesr data)
 	{
 		buf += data;
 	}
@@ -296,6 +296,20 @@ public:
 	void u32b(uint32_t val) { buf += pack_be32(val); }
 	void u64l(uint64_t val) { buf += pack_le64(val); }
 	void u64b(uint64_t val) { buf += pack_be64(val); }
+	
+	class pointer {
+		bytearray* buf;
+		size_t pos;
+		friend class bytestreamw;
+		pointer(bytearray* buf, size_t pos) : buf(buf), pos(pos) {}
+	public:
+		void fill32l() { writeu_le32(buf->ptr()+pos, buf->size()); }
+		void fill32b() { writeu_be32(buf->ptr()+pos, buf->size()); }
+		void fill64l() { writeu_le64(buf->ptr()+pos, buf->size()); }
+		void fill64b() { writeu_be64(buf->ptr()+pos, buf->size()); }
+	};
+	pointer ptr32() { buf.resize(buf.size()+4); return pointer { &buf, buf.size()-4 }; }
+	pointer ptr64() { buf.resize(buf.size()+8); return pointer { &buf, buf.size()-8 }; }
 	
 	void f32l(float  val) { buf += pack_lef32(val); }
 	void f32b(float  val) { buf += pack_bef32(val); }

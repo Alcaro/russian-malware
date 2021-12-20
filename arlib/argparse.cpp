@@ -86,7 +86,7 @@ void argparse::parse_pre(const char * const * argv)
 }
 void argparse::parse(const char * const * argv)
 {
-#if !defined(ARGUI_NONE) && !defined(ARLIB_TEST)
+#if !defined(ARGUI_NONE) && !defined(ARGUI_GTK4) && !defined(ARLIB_TEST)
 	abort(); // should be unreachable
 #endif
 	parse_pre(argv);
@@ -113,7 +113,7 @@ void argparse::parse(const char * const * argv)
 				{
 					// -- followed by something
 					
-					// +3 to skip the --, and the first actual character - otherwise '--=derp' would act like 'derp'
+					// +3 to skip the --, and the first actual character, otherwise '--=derp' would derp out
 					const char * eq = strchr(arg+3, '=');
 					if (eq)
 					{

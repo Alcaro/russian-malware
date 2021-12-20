@@ -58,16 +58,7 @@ string tostring_dbg(const map<Tkey,Tvalue>& item)
 
 template<typename T>
 string tostringhex_dbg(const T& item) { return tostringhex(item); }
-static inline string tostringhex_dbg(const arrayview<uint8_t>& item)
-{
-	string ret = tostringhex(item)+" ";
-	for (char c : item)
-	{
-		if (c >= 0x20 && c <= 0x7e) ret += c;
-		else ret += '.';
-	}
-	return ret;
-}
+string tostringhex_dbg(const arrayview<uint8_t>& item);
 static inline string tostringhex_dbg(const arrayvieww<uint8_t>& item) { return tostringhex_dbg((arrayview<uint8_t>)item); }
 static inline string tostringhex_dbg(const array<uint8_t>& item) { return tostringhex_dbg((arrayview<uint8_t>)item); }
 

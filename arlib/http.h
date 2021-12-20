@@ -139,7 +139,7 @@ public:
 	
 	// Matches the application/x-www-form-urlencoded POST rules (or at least Firefox's interpretation thereof).
 	// Space becomes plus, *-._ and alphanumerics are left as is, everything else (including UTF-8) is percent escaped.
-	// I don't know which RFCs it matches - they're hard to read, they don't define whether % should be escaped.
+	// I don't know which RFCs it matches - they're hard to read, and they don't define whether % should be escaped.
 	static string urlencode(cstring in);
 	
 private:
