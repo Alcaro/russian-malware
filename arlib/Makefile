@@ -181,6 +181,10 @@ ifneq ($(ASAN),)
   #ASan must be first
   CONF_LFLAGS := -lasan $(CONF_LFLAGS)
 endif
+ifneq ($(TSAN),)
+  CONF_CFLAGS += -fsanitize=thread
+  CONF_LFLAGS += -ltsan
+endif
 
 OUTNAME = $(PROGRAM)$(EXESUFFIX)
 
@@ -195,8 +199,8 @@ endif
 SOURCES_ARLIB := arlib/*.cpp
 
 ifneq ($(SELFTEST),)
-  CONF_CFLAGS += -DARLIB_TEST
-  CFLAGS_ARLIB += -UARLIB_TEST -DARLIB_TESTRUNNER
+  CONF_CFLAGS += -DARLIB_TEST -DARLIB_TESTRUNNER
+  CFLAGS_ARLIB += -UARLIB_TEST
   ifneq ($(ARLIB_MAIN),)
     CFLAGS_ARLIB += -DARLIB_TEST -DARLIB_TEST_ARLIB
   endif
@@ -396,7 +400,7 @@ TRUE_CFLAGS := -std=c99 $(CCXXFLAGS) $(CONF_CFLAGS) $(CFLAGS)
 # - Compile-time reflection (that SERIALIZE macro is a little too limited, and the error messages are worse than from the regexes)
 # - Single-implementation interfaces (public functions and nothing else in header, member variables hidden)
 #     useful for anything with multiple implementations, but where the active one is a #ifdef, for example gameview and the gui widgets
-#     the $class proposal P0707 would most likely permit this, as well as most or all of the reflection I want
+#     the $class proposal https://wg21.link/P0707 would most likely permit this, as well as most or all of the reflection I want
 # - Demote or, and, bitand, etc from keyword to predefined macro (or even better, banish them to <ciso646>)
 # - std::embed http://open-std.org/JTC1/SC22/WG21/docs/papers/2018/p1040r0.html
 # - Allow int x(int y=0); int x(int y=0) { return y*2; } (only if default value is identical on both ends, of course)

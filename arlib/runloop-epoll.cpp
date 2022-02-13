@@ -2,7 +2,6 @@
 #include "runloop.h"
 #include "set.h"
 #include "test.h"
-#include "process.h"
 #include <time.h>
 #include <sys/epoll.h>
 #include <unistd.h>
@@ -298,17 +297,14 @@ public:
 #ifdef ARLIB_THREAD
 			if (fd == submit_fds[0]) continue;
 #endif
-			if (fd != process::_sigchld_fd_runloop_only())
-			{
-				test_nothrow {
-					if (RUNNING_ON_VALGRIND)
-					{
-						test_fail("fd left in runloop, check whoever allocated the following");
-						free(pair.value.valgrind_dummy); // intentional double free, to make valgrind print a stack trace of the malloc
-					}
-					else
-						printf("ERROR: fd %d left in runloop\n", pair.key);
+			test_nothrow {
+				if (RUNNING_ON_VALGRIND)
+				{
+					test_fail("fd left in runloop, check whoever allocated the following");
+					free(pair.value.valgrind_dummy); // intentional double free, to make valgrind print a stack trace of the malloc
 				}
+				else
+					printf("ERROR: fd %d left in runloop\n", pair.key);
 			}
 			
 			set_fd(fd, nullptr, nullptr);

@@ -6,13 +6,7 @@
 
 #if defined(_WIN32)
 #include <windows.h> // ntsecapi.h doesn't include its dependencies properly
-#define SystemFunction036 Not_SystemFunction036 // my mingw headers think this one isn't WINAPI, convince it otherwise
 #include <ntsecapi.h>
-#undef SystemFunction036
-#if __GNUC__ > 8
-#warning the WINAPI lamehack can probably be removed by now
-#endif
-extern "C" BOOLEAN WINAPI RtlGenRandom(PVOID RandomBuffer, ULONG RandomBufferLength);
 #endif
 
 // Yields cryptographically secure random numbers. Max size is 256. Despite the return value, it always succeeds.

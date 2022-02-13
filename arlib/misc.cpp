@@ -45,6 +45,8 @@ anyptr xcalloc(size_t size, size_t count)
 
 size_t hash(const uint8_t * val, size_t n)
 {
+	// update staticmap.cpp if changing this
+	
 	size_t hash = 5381;
 	while (n >= sizeof(size_t))
 	{

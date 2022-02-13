@@ -1,0 +1,96 @@
+#pragma once
+#include "file.h"
+#include "endian.h"
+
+// Like map<bytesr,bytesw> (modulo memory management and some minor details), but persistent on disk.
+class staticmap : nocopy {
+	file2 f;
+	file2::mmapw_t mmap;
+	bool map_writable;
+	uint8_t synced[1] = { 0 };
+	uint32_t sector_size;
+	
+	uint64_t rd64(uint64_t pos) { return readu_le64(mmap.skip(pos).ptr()); }
+	
+	template<typename... Ts>
+	bool wr64(uint64_t pos, Ts... vals)
+	{
+		uint8_t buf[sizeof...(vals) * 8];
+		size_t n = 0;
+		((writeu_le64(buf+(n++)*8, vals)), ...);
+		return (f.pwrite(pos, buf) == sizeof(buf));
+	}
+	
+	template<typename... Ts>
+	void wr64(uint8_t* target, Ts... vals)
+	{
+		size_t n = 0;
+		((writeu_le64(target+(n++)*8, vals)), ...);
+	}
+	
+	void create();
+	// Returns an object of the exact given size; must be a power of two, and at least 32.
+	// Caller is responsible for writing the object header.
+	uint64_t alloc(size_t bytes);
+	void free(uint64_t addr); // Address must be the object header.
+	
+	// Returns an offset into the hashmap. If rd64(ret+8) is 0 or 1, object not found; can be inserted there.
+	uint64_t hashmap_locate(uint64_t hash, bytesr key);
+	
+	void rehash_if_needed();
+	void recover();
+	
+public:
+	// If the map isn't writable, the returned bytesw objects will actually be bytesr, and must be immediately be casted as such.
+	// If writable, memory corruption (for example buffer overflow or UAF on returned bytesw) can end up destroying data.
+	// Performance: Under normal operation, this is O(1), other than an O(n) mmap of the entire file.
+	// If the object was not correctly destructed, including by power failure, will take O(n) to repair the file.
+	// The object makes no attempt to guard against concurrent or malicious writers to the file.
+	// The object does not guarantee data resilience on non-journaling filesystems.
+	staticmap() {}
+	staticmap(cstring fn, bool map_writable = false) { open(fn, map_writable); }
+	// If not open, any operation except open() and dtor are undefined behavior. If it is open, opening again is also UB.
+	bool open(cstring fn, bool map_writable = false);
+	
+	// These operations are mostly same as for the normal hashmap, including performance characteristics.
+	size_t size() { return rd64(32); } // rd64(off_r_entries)
+	bytesw get_or_empty(bytesr key, bool* found = nullptr); // Can be modified, but for atomic operation, call insert() again.
+	bytesw insert(bytesr key, bytesr val); // If key already exists, it will be replaced.
+	void remove(bytesr key); // If key doesn't exist, it's a noop.
+	void reset(); // The point of a staticmap is to be persistent, so you probably shouldn't call this.
+	
+	// Flushes all data to disk.
+	// Also ensures that if the process terminates before the next write operation, recreating the object after reboot will be quick.
+	void sync();
+	~staticmap() { sync(); }
+	
+private:
+	void desync();
+	
+	struct node {
+		bytesr key;
+		bytesw value;
+	};
+	class iterator {
+		uint8_t* it;
+		friend class staticmap;
+		static uint8_t* next(uint8_t* it, uint8_t* end);
+		iterator(uint8_t* it) : it(it) {}
+	public:
+		node operator*();
+		iterator& operator++();
+		bool operator!=(const iterator& other);
+	};
+	
+public:
+	// Like the normal hashset, iteration order is unspecified.
+	// Unlike the normal hashset, iterators are fully invalidated if you modify the set.
+	// Also unlike the normal hashset, you can't for (auto& pair : smap), you need auto or const auto&.
+	iterator begin() { return mmap.ptr(); }
+	iterator end() { return mmap.ptr()+mmap.size(); }
+	
+	// Verifies that the backing store is correctly formed.
+	// If yes, returns and does nothing; if no, crashes, enters an infinite loop, abort()s, or otherwise misbehaves.
+	// Useful for debugging, less useful for anything else.
+	void fsck();
+};

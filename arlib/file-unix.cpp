@@ -11,73 +11,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-//static void window_cwd_enter(const char * dir);
-//static void window_cwd_leave();
-//
-//char * _window_native_get_absolute_path(const char * basepath, const char * path, bool allow_up)
-//{
-//	if (!basepath || !path) return NULL;
-//	const char * filepart=strrchr(basepath, '/');
-//	if (!filepart) return NULL;
-//	char * basedir=strndup(basepath, filepart+1-basepath);
-//	
-//	window_cwd_enter(basedir);
-//	char * ret=realpath(path, NULL);
-//	window_cwd_leave();
-//	
-//	if (!allow_up && ret && strncasecmp(basedir, ret, filepart+1-basepath)!=0)
-//	{
-//		free(ret);
-//		ret=NULL;
-//	}
-//	free(basedir);
-//	
-//	return ret;
-//}
-//
-//static const char * cwd_init;
-//static const char * cwd_bogus;
-//static mutex cwd_mutex;
-//
-//static void window_cwd_enter(const char * dir)
-//{
-//	cwd_mutex.lock();
-//	char * cwd_bogus_check=getcwd(NULL, 0);
-//	if (strcmp(cwd_bogus, cwd_bogus_check)!=0) abort();//if this fires, someone changed the directory without us knowing - not allowed. cwd belongs to the frontend.
-//	free(cwd_bogus_check);
-//	ignore(chdir(dir));
-//}
-//
-//static void window_cwd_leave()
-//{
-//	ignore(chdir(cwd_bogus));
-//	cwd_mutex.unlock();
-//}
-//
-//const char * window_get_cwd()
-//{
-//	return cwd_init;
-//}
-//
-//void _window_init_file()
-//{
-//	char * cwd_init_tmp=getcwd(NULL, 0);
-//	char * cwdend=strrchr(cwd_init_tmp, '/');
-//	if (!cwdend) cwd_init="/";
-//	else if (cwdend[1]=='/') cwd_init=cwd_init_tmp;
-//	else
-//	{
-//		size_t cwdlen=strlen(cwd_init_tmp);
-//		char * cwd_init_fixed=malloc(cwdlen+1+1);
-//		memcpy(cwd_init_fixed, cwd_init_tmp, cwdlen);
-//		cwd_init_fixed[cwdlen+0]='/';
-//		cwd_init_fixed[cwdlen+1]='\0';
-//		cwd_init=cwd_init_fixed;
-//		free(cwd_init_tmp);
-//	}
-//}
-
-
 #if defined(__x86_64__) || defined(__i386__)
 static const long pagesize = 4096;
 #else
@@ -255,36 +188,54 @@ void arlib_init_file()
 
 
 
-#define MMAP_THRESHOLD 1024*1024
-file2::mmap_t file2::mmap(cstring filename)
+bool file2::open(cstring filename, mode m)
 {
-	int fd = open(filename.c_str(), O_RDONLY|O_CLOEXEC);
-	if (fd < 0) return NULL;
-	off_t size = lseek(fd, 0, SEEK_END);
-	if (size < 0) return NULL;
-	uint8_t * data;
-	if (size <= MMAP_THRESHOLD)
-	{
-		data = xmalloc(size);
-		if (pread(fd, data, size, 0) != size)
-		{
-			free(data);
-			close(fd);
-			return NULL;
-		}
-	}
-	else
-	{
-		data = (uint8_t*)::mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
-		if (data == MAP_FAILED) return NULL;
-	}
-	close(fd);
-	return { data, (size_t)size };
+	reset();
+	static const int flags[] = {
+		O_RDONLY              |O_CLOEXEC, // m_read
+		O_RDWR|O_CREAT        |O_CLOEXEC, // m_write
+		O_RDWR                |O_CLOEXEC, // m_wr_existing
+		O_RDWR|O_CREAT|O_TRUNC|O_CLOEXEC, // m_replace
+		O_RDWR|O_CREAT|O_EXCL |O_CLOEXEC  // m_create_excl
+	};
+	fd = ::open(filename.c_str(), flags[m], 0644);
+	return (fd >= 0);
 }
-file2::mmap_t::~mmap_t()
+
+file2::mmapw_t file2::mmapw(bool writable)
 {
-	if (count > MMAP_THRESHOLD) munmap(items, count);
-	else free(items);
+	size_t size = this->size();
+	if (!size) return {};
+	uint8_t * data = (uint8_t*)::mmap(NULL, size, PROT_READ | (writable * PROT_WRITE), MAP_SHARED, fd, 0);
+	if (data == MAP_FAILED) return {};
+	return { data, size };
 }
-//writable mmap may not use malloc optimization
+void file2::mmap_t::unmap()
+{
+	if (count)
+		munmap((uint8_t*)items, count);
+	items = nullptr;
+	count = 0;
+}
+void file2::mmapw_t::unmap()
+{
+	if (count)
+		munmap(items, count);
+	items = nullptr;
+	count = 0;
+}
+
+bool file2::resize(off_t newsize, mmap_t& map)
+{
+	if (!resize(newsize)) return false;
+	map = mmap();
+	return (map.size() != 0);
+}
+bool file2::resize(off_t newsize, mmapw_t& map, bool resizable)
+{
+	if (!resize(newsize)) return false;
+	map = mmapw(resizable);
+	return (map.size() != 0);
+}
+
 #endif

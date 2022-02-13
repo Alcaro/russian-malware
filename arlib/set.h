@@ -20,11 +20,35 @@ class set : public linqbase<set<T>> {
 	
 	T* m_data; // length is always same as m_valid, no need to duplicate its length
 	bitarray m_valid;
-	size_t m_count;
+	size_t m_used_slots; // number of nodes in m_data that are not i_empty
+	size_t m_count; // number of nodes in m_data currently containing valid data
+	
+	// will spuriously fail during rehash
+	//void validate() const
+	//{
+	//	if (!m_data) return;
+	//	
+	//	size_t a = 0;
+	//	size_t b = 0;
+	//	size_t c = 0;
+	//	for (size_t n=0;n<m_valid.size();n++)
+	//	{
+	//		if (m_valid[n]) a++;
+	//		else if (tag(n) == i_empty) b++;
+	//		else c++;
+	//	}
+	//	size_t a2 = m_count;
+	//	size_t b2 = m_valid.size()-m_used_slots;
+	//	size_t c2 = m_used_slots-m_count;
+	//	if (a != a2 || b != b2 || c != c2)
+	//	{
+	//		printf("%lu,%lu %lu,%lu %lu,%lu\n", a,a2, b,b2, c,c2);
+	//		*(char*)1 = 1;
+	//	}
+	//}
 	
 	void rehash(size_t newsize)
 	{
-//debug("rehash pre");
 		T* prev_data = m_data;
 		bitarray prev_valid = std::move(m_valid);
 		
@@ -43,13 +67,16 @@ class set : public linqbase<set<T>> {
 			m_valid[pos] = true;
 		}
 		free(prev_data);
-//debug("rehash post");
+		m_used_slots = m_count;
 	}
 	
 	void grow()
 	{
 		// half full -> rehash
-		if (m_count >= m_valid.size()/2) rehash(m_valid.size()*2);
+		if (m_count >= m_valid.size()/2)
+			rehash(m_valid.size()*2);
+		else if (m_used_slots >= m_valid.size()/4*3)
+			rehash(m_valid.size());
 	}
 	
 	bool slot_empty(size_t pos) const
@@ -75,7 +102,8 @@ class set : public linqbase<set<T>> {
 			//I could use hashv + i+(i+1)/2 <http://stackoverflow.com/a/15770445>
 			//but due to hash_shuffle, it hurts as much as it helps.
 			size_t pos = (hashv + i) & (m_valid.size()-1);
-			if (want_used && m_valid[pos] && m_data[pos] == item) return pos;
+			if (want_used && m_valid[pos] && m_data[pos] == item)
+				return pos;
 			if (!m_valid[pos])
 			{
 				if (emptyslot == (size_t)-1) emptyslot = pos;
@@ -86,11 +114,7 @@ class set : public linqbase<set<T>> {
 				}
 			}
 			i++;
-			if (i == m_valid.size())
-			{
-				//happens if all empty slots are i_deleted, no i_empty
-				return -1;
-			}
+//if(i > m_valid.size()) *(char*)1=1;
 		}
 	}
 	
@@ -103,14 +127,7 @@ class set : public linqbase<set<T>> {
 	template<typename T2>
 	size_t find_pos_insert(const T2& item)
 	{
-		size_t pos = find_pos_full<true>(item);
-		if (pos == (size_t)-1)
-		{
-			rehash(m_valid.size());
-			//after rehashing, there is always a suitable empty slot
-			return find_pos_full<true, false>(item);
-		}
-		return pos;
+		return find_pos_full<true>(item);
 	}
 	
 	//used by map
@@ -126,6 +143,9 @@ class set : public linqbase<set<T>> {
 	template<typename T2>
 	T& get_create(const T2& item, bool known_new = false)
 	{
+		if (!m_data)
+			rehash(m_valid.size());
+		
 		size_t pos = known_new ? -1 : find_pos_insert(item);
 		
 		if (pos == (size_t)-1 || !m_valid[pos])
@@ -134,6 +154,7 @@ class set : public linqbase<set<T>> {
 			pos = find_pos_insert(item); // recalculate this, grow() may have moved it
 			//do not move grow() earlier; it invalidates references, get_create(item_that_exists) is not allowed to do that
 			
+			if (tag(pos) == i_empty) m_used_slots++;
 			new(&m_data[pos]) T(item);
 			m_valid[pos] = true;
 			m_count++;
@@ -147,12 +168,14 @@ class set : public linqbase<set<T>> {
 		m_data = NULL;
 		m_valid.resize(8);
 		m_count = 0;
+		m_used_slots = 0;
 	}
 	void construct(const set& other)
 	{
 		m_data = xcalloc(other.m_valid.size(), sizeof(T));
 		m_valid = other.m_valid;
 		m_count = other.m_count;
+		m_used_slots = other.m_count;
 		
 		for (size_t i=0;i<m_valid.size();i++)
 		{
@@ -167,6 +190,7 @@ class set : public linqbase<set<T>> {
 		m_data = std::move(other.m_data);
 		m_valid = std::move(other.m_valid);
 		m_count = std::move(other.m_count);
+		m_used_slots = std::move(other.m_used_slots);
 		
 		other.construct();
 	}
@@ -181,6 +205,7 @@ class set : public linqbase<set<T>> {
 			}
 		}
 		m_count = 0;
+		m_used_slots = 0;
 		free(m_data);
 		m_valid.reset();
 	}
@@ -447,50 +472,60 @@ public:
 	
 private:
 	class iterator {
+		friend class map;
+		friend class iterwrap<iterator>;
 		typename set<node>::iterator it;
-	public:
 		iterator(typename set<node>::iterator it) : it(it) {}
 		
+	public:
 		node& operator*() { return const_cast<node&>(*it); }
 		iterator& operator++() { ++it; return *this; }
 		bool operator!=(const iterator& other) { return it != other.it; }
 	};
 	
 	class c_iterator {
+		friend class map;
+		friend class iterwrap<c_iterator>;
 		typename set<node>::iterator it;
-	public:
 		c_iterator(typename set<node>::iterator it) : it(it) {}
 		
+	public:
 		const node& operator*() { return *it; }
 		c_iterator& operator++() { ++it; return *this; }
 		bool operator!=(const c_iterator& other) { return it != other.it; }
 	};
 	
 	class k_iterator {
+		friend class map;
+		friend class iterwrap<k_iterator>;
 		typename set<node>::iterator it;
-	public:
 		k_iterator(typename set<node>::iterator it) : it(it) {}
 		
+	public:
 		const Tkey& operator*() { return (*it).key; }
 		k_iterator& operator++() { ++it; return *this; }
 		bool operator!=(const k_iterator& other) { return it != other.it; }
 	};
 	
 	class v_iterator {
+		friend class map;
+		friend class iterwrap<v_iterator>;
 		typename set<node>::iterator it;
-	public:
 		v_iterator(typename set<node>::iterator it) : it(it) {}
 		
+	public:
 		Tvalue& operator*() { return const_cast<Tvalue&>((*it).value); }
 		v_iterator& operator++() { ++it; return *this; }
 		bool operator!=(const v_iterator& other) { return it != other.it; }
 	};
 	
 	class cv_iterator {
+		friend class map;
+		friend class iterwrap<cv_iterator>;
 		typename set<node>::iterator it;
-	public:
 		cv_iterator(typename set<node>::iterator it) : it(it) {}
 		
+	public:
 		const Tvalue& operator*() { return (*it).value; }
 		cv_iterator& operator++() { ++it; return *this; }
 		bool operator!=(const cv_iterator& other) { return it != other.it; }

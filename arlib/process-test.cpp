@@ -32,6 +32,7 @@ test("process", "array,string,runloop", "process")
 	test_expfail("unimplemented");
 #else
 	test_skip("kinda slow");
+	if (RUNNING_ON_VALGRIND) test_skip_force("valgrind doesn't understand CLONE_PIDFD");
 	
 	autoptr<runloop> loop = runloop::create();
 	//ugly, but the alternative is nesting lambdas forever or busywait. and I need a way to break it anyways

@@ -1,5 +1,6 @@
 #pragma once
 #include "global.h"
+#include "array.h"
 
 //Hash values are guaranteed stable within the process, but nothing else. Do not persist them outside the process.
 //They are allowed to change along with the build target, Arlib version, build time, kernel version, etc.
@@ -19,6 +20,10 @@ size_t hash(const uint8_t * val, size_t n);
 static inline size_t hash(const char * val)
 {
 	return hash((uint8_t*)val, strlen(val));
+}
+static inline size_t hash(const bytesr& val)
+{
+	return hash(val.ptr(), val.size());
 }
 
 
@@ -47,6 +52,7 @@ inline uint32_t hash_shuffle(uint32_t val)
 inline uint64_t hash_shuffle(uint64_t val)
 {
 	//http://zimbry.blogspot.se/2011/09/better-bit-mixing-improving-on.html Mix13
+	// update staticmap.cpp if changing this
 	val ^= val >> 30;
 	val *= 0xbf58476d1ce4e5b9;
 	val ^= val >> 27;

@@ -219,6 +219,7 @@ static void redirect_machine(LPBYTE victim, LPBYTE replacement)
 #endif
 
 
+typedef void(*WuTF_funcptr)();
 static void WuTF_redirect_function(WuTF_funcptr victim, WuTF_funcptr replacement)
 {
 	DWORD prot;

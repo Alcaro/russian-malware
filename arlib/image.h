@@ -173,9 +173,14 @@ struct oimage : public image {
 	//Always emits a packed image, where stride = width*byteperpix.
 	bool init_decode_png(bytesr pngdata);
 	
-	//Calls zero or more platform-specific external libraries to decode the image.
+	//Calls zero or more platform-specific external libraries to decode the image. Not included in init_decode().
 	bool init_decode_extern(bytesr data);
 	
 	//Calls init_decode(). If that fails, tries init_decode_extern().
 	bool init_decode_permissive(bytesr data);
+	
+	// TODO: unimplemented
+	// Always emits 0rgb8888.
+	bool init_decode_jpg(bytesr jpgdata); // TODO: delete one of these
+	bool init_decode_jpg2(bytesr jpgdata);
 };

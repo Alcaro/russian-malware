@@ -35,6 +35,7 @@
 #include "terminal.h"
 #include "test.h"
 #include "zip.h"
+#include "staticmap.h"
 
 #ifndef ARGUI_NONE
 #include "gui/window.h"

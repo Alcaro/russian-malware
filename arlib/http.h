@@ -106,7 +106,8 @@ public:
 #endif
 	
 	//Multiple requests may be sent to the same object. This will make them use HTTP Keep-Alive.
-	//The requests must be to the same protocol-domain-port tuple. http://example.com/ does not count as same as http://example.com:80/
+	//If the object has any outstanding requests, all must be to the same protocol-domain-port tuple, otherwise subsequent ones fail.
+	// If the object is empty, the request may go to anywhere. http://example.com/ does not count as same as http://example.com:80/
 	//Failures are reported in the callback. Results are not guaranteed to be reported in any particular order.
 	void send(req q, function<void(rsp)> callback);
 	//If the HTTP object is currently trying to send a request with this ID, it's cancelled.
@@ -116,14 +117,7 @@ public:
 	bool cancel(uintptr_t id);
 	
 	//Cancels and discards every unfinished operation, and resets this object to its freshly constructed state.
-	void reset()
-	{
-		lasthost = location();
-		requests.reset();
-		next_send = 0;
-		sock = NULL;
-		state = st_boundary;
-	}
+	void reset();
 	
 	
 	struct location {
@@ -143,6 +137,8 @@ public:
 	static string urlencode(cstring in);
 	
 private:
+	void lesser_reset(); // Resets the HTTP object except the pending requests array. Only safe for internal use.
+	
 	void resolve(size_t id);
 	void resolve_err_v(size_t id, int err)
 	{

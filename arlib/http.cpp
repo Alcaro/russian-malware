@@ -86,9 +86,13 @@ void HTTP::send(req q, function<void(rsp)> callback)
 		if (!parse_url(r.q.url, false, loc)) return resolve_err_v(requests.size()-1, rsp::e_bad_url);
 		if (loc.scheme != lasthost.scheme || loc.domain != lasthost.domain || loc.port != lasthost.port)
 		{
-			return resolve_err_v(requests.size()-1, rsp::e_different_host);
+			if (requests.size() > 1)
+				return resolve_err_v(requests.size()-1, rsp::e_different_host);
+			lesser_reset();
+			lasthost = std::move(loc);
 		}
-		lasthost.path = loc.path;
+		else
+			lasthost.path = std::move(loc.path);
 	}
 	
 	if (requests.size() == 1)
@@ -109,6 +113,19 @@ bool HTTP::cancel(uintptr_t id)
 		}
 	}
 	return false;
+}
+
+void HTTP::reset()
+{
+	requests.reset();
+	lesser_reset();
+}
+void HTTP::lesser_reset()
+{
+	lasthost = location();
+	next_send = 0;
+	sock = NULL;
+	state = st_boundary;
 }
 
 void HTTP::try_compile_req()

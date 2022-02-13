@@ -291,42 +291,152 @@ array<string> file::listdir(cstring path)
 }
 
 
-#define MMAP_THRESHOLD 1024*1024
-file2::mmap_t file2::mmap(cstring filename)
+bool file2::open(cstring filename, mode m)
 {
-	if (path_corrupt(filename)) return nullptr;
+	reset();
+	if (path_corrupt(filename)) return false;
 	
-	HANDLE file = CreateFile(filename.c_str(), GENERIC_READ, FILE_SHARE_ALL, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-	if (file == INVALID_HANDLE_VALUE) return NULL;
+	DWORD dispositions[] = { OPEN_EXISTING, OPEN_ALWAYS, OPEN_EXISTING, CREATE_ALWAYS, CREATE_NEW };
+	DWORD access = (m==m_read ? GENERIC_READ : GENERIC_READ|GENERIC_WRITE);
+	this->fd = CreateFile(filename.c_str(), access, FILE_SHARE_ALL, NULL, dispositions[m], FILE_ATTRIBUTE_NORMAL, NULL);
+	return (this->fd != INVALID_HANDLE_VALUE);
+}
+
+size_t file2::read(bytesw by)
+{
+	DWORD ret;
+	ReadFile(fd, by.ptr(), by.size(), &ret, nullptr);
+	return ret;
+}
+size_t file2::pread(off_t pos, bytesw by)
+{
+	OVERLAPPED ov;
+	ov.Offset = pos;
+	ov.OffsetHigh = pos>>16>>16;
+	ov.hEvent = 0;
+	DWORD ret;
+	ReadFile(fd, by.ptr(), by.size(), &ret, &ov);
+	return ret;
+}
+size_t file2::write(bytesr by)
+{
+	DWORD ret;
+	WriteFile(fd, by.ptr(), by.size(), &ret, nullptr);
+	return ret;
+}
+size_t file2::pwrite(off_t pos, bytesr by)
+{
+	OVERLAPPED ov;
+	ov.Offset = pos;
+	ov.OffsetHigh = pos>>16>>16;
+	ov.hEvent = 0;
+	DWORD ret;
+	WriteFile(fd, by.ptr(), by.size(), &ret, &ov);
+	return ret;
+}
+static size_t writev(file2& f, bool pwrite, off_t pos, arrayview<iovec> iov)
+{
+	size_t ret = 0;
 	
-	LARGE_INTEGER len_li;
-	if (!GetFileSizeEx(file, &len_li) || (LONGLONG)(size_t)len_li.QuadPart != len_li.QuadPart) { CloseHandle(file); return NULL; }
-	size_t len = len_li.QuadPart;
+	uint8_t buf[4096];
+	size_t iov_at = 0;
 	
-	if (len <= MMAP_THRESHOLD)
+	while (iov_at < iov.size())
 	{
-		uint8_t* data = xmalloc(len);
-		DWORD len2;
-		if (!ReadFile(file, data, len, &len2, NULL) || len2 != len)
+		bytesr by = bytesr((uint8_t*)iov[iov_at].iov_base, iov[iov_at].iov_len);
+		if (iov_at < iov.size()-1 && iov[iov_at].iov_len + iov[iov_at+1].iov_len <= sizeof(buf))
 		{
-			free(data);
-			CloseHandle(file);
-			return NULL;
+			size_t buf_pos = 0;
+			while (iov_at < iov.size() && buf_pos + iov[iov_at].iov_len <= sizeof(buf))
+			{
+				memcpy(buf+buf_pos, iov[iov_at].iov_base, iov[iov_at].iov_len);
+				buf_pos += iov[iov_at].iov_len);
+				iov_at++;
+			}
+			by = bytesr(buf, buf_pos);
 		}
-		return { data, len };
+		else
+			iov_at++;
+		
+		size_t chunk = (pwrite ? f.pwrite(pos, by) : f.write(by));
+		ret += chunk;
+		pos += chunk;
+		if (chunk != buf_pos) break;
 	}
+	return ret;
+}
+size_t file2::writev(arrayview<iovec> iov)
+{
+	return ::writev(*this, false, 0, iov);
+}
+size_t file2::pwritev(off_t pos, arrayview<iovec> iov)
+{
+	return ::writev(*this, true, pos, iov);
+}
+
+size_t file2::sector_size()
+{
+	// can be calculated with
+	//#include <winternl.h>
+	//size_t sector_size()
+	//{
+	//	// this struct isn't in my headers
+	//	// the identical FILE_STORAGE_INFO is, but only if _WIN32_WINNT >= _WIN32_WINNT_WIN8
+	//	struct my_FILE_FS_SECTOR_SIZE_INFORMATION {
+	//		ULONG LogicalBytesPerSector;
+	//		ULONG PhysicalBytesPerSectorForAtomicity;
+	//		ULONG PhysicalBytesPerSectorForPerformance;
+	//		ULONG FileSystemEffectivePhysicalBytesPerSectorForAtomicity;
+	//		ULONG Flags;
+	//		ULONG ByteOffsetForSectorAlignment;
+	//		ULONG ByteOffsetForPartitionAlignment;
+	//	};
+	//	
+	//	HANDLE h = CreateFile("C:/windows", GENERIC_READ, 7, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+	//	my_FILE_FS_SECTOR_SIZE_INFORMATION fsi = {};
+	//	fsi.FileSystemEffectivePhysicalBytesPerSectorForAtomicity = 512;
+	//	IO_STATUS_BLOCK iosb;
+	//	NtQueryVolumeInformationFile(h, &iosb, &fsi, sizeof(fsi), (FS_INFORMATION_CLASS)11 /* FileFsSectorSizeInformation */);
+	//	CloseHandle(h);
+	//	
+	//	// there are several atomicity fields; this is the correct one, according to
+	//	// https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-fscc/3e75d97f-1d0b-4e47-b435-73c513837a57
+	//	return fsi.FileSystemEffectivePhysicalBytesPerSectorForAtomicity;
+	//}
+	// but that requires a HANDLE to the directory (aka messing with things like GetFinalPathNameByHandle), and it just returns 512 anyways.
+	return 512;
+}
+
+off_t file2::size()
+{
+	LARGE_INTEGER len_li;
+	if (!GetFileSizeEx(this->fd, &len_li) || (LONGLONG)(size_t)len_li.QuadPart != len_li.QuadPart) return 0;
+	return len_li.QuadPart;
+}
+
+bool file2::resize(off_t newsize)
+{
+	LARGE_INTEGER li;
+	li.QuadPart = newsize;
+	SetFilePointerEx(fd, li, nullptr, FILE_BEGIN);
+	return SetEndOfFile(fd);
+}
+
+file2::mmapw_t file2::mmapw(bool writable)
+{
+	size_t len = this->size();
+	if (!len) return {};
 	
-	HANDLE mem = CreateFileMapping(file, NULL, PAGE_READONLY, 0, 0, NULL);
-	CloseHandle(file);
-	if (mem == NULL) return NULL;
-	uint8_t* ptr = (uint8_t*)MapViewOfFile(mem, FILE_MAP_READ, 0, 0, 0);
+	HANDLE mem = CreateFileMapping(this->fd, NULL, writable ? PAGE_READWRITE : PAGE_READONLY, 0, 0, NULL);
+	if (mem == NULL) return {};
+	uint8_t* ptr = (uint8_t*)MapViewOfFile(mem, writable ? FILE_MAP_WRITE : FILE_MAP_READ, 0, 0, 0);
 	CloseHandle(mem);
+	if (!ptr) return {};
 	
 	return { ptr, len };
 }
-file2::mmap_t::~mmap_t()
+void file2::mmap_t::unmap()
 {
-	if (count > MMAP_THRESHOLD) UnmapViewOfFile(items);
-	else free(items);
+	UnmapViewOfFile(items);
 }
 #endif

@@ -1,3 +1,9 @@
+#ifdef ARLIB_TESTRUNNER
+#ifndef ARLIB_TEST
+#define ARLIB_TEST
+#endif
+#endif
+
 #include "test.h"
 
 string tostringhex_dbg(const arrayview<uint8_t>& item)
@@ -29,9 +35,6 @@ string tostringhex_dbg(const arrayview<uint8_t>& item)
 }
 
 #ifdef ARLIB_TESTRUNNER
-#ifndef ARLIB_TEST
-#define ARLIB_TEST
-#endif
 #include "array.h"
 #include "os.h"
 #include "argparse.h"

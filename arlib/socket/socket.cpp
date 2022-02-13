@@ -13,7 +13,6 @@
 	#define MSG_DONTWAIT 0
 	#define SOCK_CLOEXEC 0
 	#define SOCK_NONBLOCK 0
-	#define EINPROGRESS WSAEINPROGRESS
 	#define close closesocket
 	#ifdef _MSC_VER
 		#pragma comment(lib, "ws2_32.lib")
@@ -107,8 +106,10 @@ static int connect(cstring domain, int port)
 	timeout.tv_sec = 4;
 	timeout.tv_usec = 0;
 	setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
-#endif
 	if (connect(fd, addr->ai_addr, addr->ai_addrlen) != 0 && errno != EINPROGRESS)
+#else
+	if (connect(fd, addr->ai_addr, addr->ai_addrlen) != 0 && WSAGetLastError() != WSAEWOULDBLOCK)
+#endif
 	{
 		freeaddrinfo(addr);
 		close(fd);

@@ -32,7 +32,7 @@ struct exepath_finder {
 			uintptr_t high = 0;
 			sscanf(ent->d_name, "%zx-%zx", &low, &high);
 			
-			uintptr_t target = (uintptr_t)(void*)&file::exepath;
+			uintptr_t target = (uintptr_t)this;
 			if (target < high && low <= target)
 			{
 				strcat(linkpath, ent->d_name);
@@ -97,7 +97,7 @@ static int g_exepath_dirlen;
 oninit_static()
 {
 	GetModuleFileNameA((HMODULE)&__ImageBase, g_exepath, MAX_PATH);
-	for (int i=0;g_exepath[i];i++)
+	for (size_t i=0;g_exepath[i];i++)
 	{
 		if (g_exepath[i]=='\\') g_exepath[i]='/';
 	}
