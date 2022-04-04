@@ -1,5 +1,78 @@
 #include "stringconv.h"
 
+size_t tostring_len(  signed long long val) { return ilog10(abs(val)|1) + (val < 0) + 1; }
+size_t tostring_len(unsigned long long val) { return ilog10(val|1) + 1; }
+
+size_t tostring_ptr(char* buf, unsigned long long val, size_t len)
+{
+	char* iter = buf+len;
+	while (iter > buf)
+	{
+		*--iter = '0'+val%10;
+		val /= 10;
+	}
+	return len;
+}
+size_t tostring_ptr(char* buf, signed long long val, size_t len)
+{
+	if (val < 0) { tostring_ptr(buf, (unsigned long long)-val, len); *buf = '-'; return len; }
+	else return tostring_ptr(buf, (unsigned long long)val, len);
+}
+
+template<typename T>
+string tostring_inner(T val)
+{
+	size_t len = tostring_len(val);
+	string ret;
+	char* ptr = (char*)ret.construct(len).ptr();
+	tostring_ptr(ptr, val, len);
+	return ret;
+}
+string tostring(  signed long long val) { return tostring_inner(val); }
+string tostring(unsigned long long val) { return tostring_inner(val); }
+
+
+static const char hexdigits[16] = { '0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F' };
+template<typename T>
+string tostringhex_inner(T val, size_t mindigits)
+{
+	uint8_t buf[16];
+	uint8_t* bufend = buf+sizeof(buf);
+	uint8_t* iter = bufend;
+	do {
+		*--iter = hexdigits[val%16];
+		val /= 16;
+	} while (val);
+	while ((size_t)(bufend-iter) < mindigits) *--iter = '0';
+	return string(bytesr(iter, bufend-iter));
+}
+string tostringhex(unsigned long long val, size_t mindigits) { return tostringhex_inner(val, mindigits); }
+
+string tostringhex(arrayview<uint8_t> val)
+{
+	string ret;
+	arrayvieww<uint8_t> retb = ret.construct(val.size()*2);
+	for (size_t i=0;i<val.size();i++)
+	{
+		retb[i*2+0] = hexdigits[val[i]>>4];
+		retb[i*2+1] = hexdigits[val[i]&15];
+	}
+	return ret;
+}
+
+size_t tostringhex_ptr(char* buf, unsigned long long val, size_t len)
+{
+	char* iter = buf+len;
+	while (iter > buf)
+	{
+		*--iter = hexdigits[val%16];
+		val /= 16;
+	}
+	return len;
+}
+
+
+
 template<typename Tu> bool fromstring_int_inner(const char * in, const char * end, Tu& out)
 {
 	out = 0;
@@ -155,68 +228,6 @@ bool fromstringhex(cstring s, array<uint8_t>& val)
 
 
 
-static const char hexdigits[16] = { '0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F' };
-template<typename Ts, typename Tu>
-string tostring_inner(Ts vals)
-{
-	Tu val = (vals < 0 ? -vals : vals);
-	uint8_t buf[20]; // can't write directly to string's inline buffer; [ui]64 can need 20+nul bytes, and writes must go backwards
-	uint8_t* bufend = buf+sizeof(buf); // (nul isn't needed in this function, string ctor gets length)
-	uint8_t* iter = bufend;
-	do {
-		*--iter = '0'+val%10;
-		val /= 10;
-	} while (val);
-	if (vals < 0) *--iter = '-';
-	return string(bytesr(iter, bufend-iter));
-}
-template<typename T>
-string tostringhex_inner(T val, size_t mindigits)
-{
-	uint8_t buf[16];
-	uint8_t* bufend = buf+sizeof(buf);
-	uint8_t* iter = bufend;
-	do {
-		*--iter = hexdigits[val%16];
-		val /= 16;
-	} while (val);
-	while ((size_t)(bufend-iter) < mindigits) *--iter = '0';
-	return string(bytesr(iter, bufend-iter));
-}
-string tostring(  signed long long val) { return tostring_inner<signed long long, unsigned long long>(val); }
-string tostring(unsigned long long val) { return tostring_inner<unsigned long long, unsigned long long>(val); }
-string tostringhex(unsigned long long val, size_t mindigits) { return tostringhex_inner(val, mindigits); }
-#if SIZE_MAX < ULLONG_MAX
-string tostring(  signed long val) { return tostring_inner<signed long, unsigned long>(val); }
-string tostring(unsigned long val) { return tostring_inner<unsigned long, unsigned long>(val); }
-string tostringhex(unsigned long val, size_t mindigits) { return tostringhex_inner(val, mindigits); }
-#endif
-string tostring(unsigned val, size_t mindigits)
-{
-	uint8_t buf[24]; // can't write directly to string's inline buffer; [ui]64 can need 20+nul bytes, and writes must go backwards
-	uint8_t* bufend = buf+sizeof(buf);
-	uint8_t* iter = bufend;
-	do {
-		*--iter = '0'+val%10;
-		val /= 10;
-	} while (val);
-	while ((size_t)(bufend-iter) < mindigits) *--iter = '0';
-	return string(bytesr(iter, bufend-iter));
-}
-
-
-string tostringhex(arrayview<uint8_t> val)
-{
-	string ret;
-	arrayvieww<uint8_t> retb = ret.construct(val.size()*2);
-	for (size_t i=0;i<val.size();i++)
-	{
-		retb[i*2+0] = hexdigits[val[i]>>4];
-		retb[i*2+1] = hexdigits[val[i]&15];
-	}
-	return ret;
-}
-
 
 #include "test.h"
 #include <math.h>
@@ -345,4 +356,6 @@ test("string conversion - integer", "", "string")
 	assert( fromstringhex("0FFFFFFFFFFFFFFFF", u64));
 	assert(!fromstringhex("10000000000000000", u64));
 	assert( fromstringhex("0000000000000000FFFFFFFFFFFFFFFF", u64));
+	
+	assert_eq(format("abc",1,-2,fmt_pad<4>(4u),fmt_hex((uint16_t)0xAA),fmt_hex<6>((uint16_t)0xAAA)), "abc1-2000400AA000AAA");
 }

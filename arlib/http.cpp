@@ -1,6 +1,10 @@
 #ifdef ARLIB_SOCKET
 #include "http.h"
 
+// when rewriting this to coroutine runloop, check if WinHTTP or WinInet is usable
+// probably not, they contain an absurd amount of dubious functionality
+// especially around authentication (wtf is that 'supports impersonation' feature)
+
 bool HTTP::parse_url(cstring url, bool relative, location& out)
 {
 	if (!url) return false;

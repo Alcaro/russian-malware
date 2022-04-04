@@ -13,27 +13,30 @@ class DNS {
 		string domain;
 		uintptr_t timeout_id;
 		
-		function<void(string domain, string ip)> callback;
+		function<void(string domain, bytesr ip)> callback;
 	};
 	map<uint16_t, query> queries;
 	
-	map<string, string> hosts_txt;
+	map<string, bytearray> hosts_txt;
 	
-	void init(cstring resolver, int port, runloop* loop);
+	void init(bytesr resolver, int port, runloop* loop);
 	
 	uint16_t pick_trid();
 	
 public:
-	static string default_resolver();
+	static bytearray default_resolver();
 	
 	DNS(runloop* loop) { init(default_resolver(), 53, loop); }
-	DNS(cstring resolver, int port, runloop* loop) { init(resolver, port, loop); }
+	DNS(bytesr resolver, int port, runloop* loop) { init(resolver, port, loop); }
 	
-	void resolve(cstring domain, unsigned timeout_ms, function<void(string domain, string ip)> callback);
-	void resolve(cstring domain, function<void(string domain, string ip)> callback)
+	void resolve(cstring domain, unsigned timeout_ms, function<void(string domain, bytesr ip)> callback);
+	void resolve(cstring domain, function<void(string domain, bytesr ip)> callback)
 	{
 		resolve(domain, 2000, callback);
 	}
+	
+	void resolve(cstring domain, unsigned timeout_ms, function<void(string domain, string ip)> callback) = delete;
+	void resolve(cstring domain, function<void(string domain, string ip)> callback) = delete;
 	
 	~DNS()
 	{

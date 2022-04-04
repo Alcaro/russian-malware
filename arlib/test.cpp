@@ -63,7 +63,7 @@ static testlist* g_testlist = NULL;
 
 static testlist* cur_test;
 
-// funny code because this tests Arlib itself, relying on array<> to work when testing array<> is unwise
+// linked lists because this tests Arlib itself, relying on array<> to work when testing array<> is unwise
 _testdecl::_testdecl(void(*func)(), const char * filename, int line, const char * name, const char * requires, const char * provides)
 {
 	testlist* next = xmalloc(sizeof(testlist));

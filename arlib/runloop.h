@@ -168,29 +168,18 @@ public:
 // - not use virtual inheritance. Single and multiple inheritance is fine, as are virtual functions.
 // All public members of base_timer are available on the resulting object.
 //DECL_G_TIMER uses the global runloop.
-#define DECL_TIMER(name, parent_t)                                                  \
-	class JOIN(name, _t) : public runloop::base_timer<JOIN(name, _t)> {             \
-		template<typename Tp>                                                       \
-		typename std::enable_if_t<sizeof(&*std::declval<Tp>().loop) >= 0, runloop*> \
-		get_loop_inner(Tp* parent)                                                  \
-		{                                                                           \
-			return parent->loop;                                                    \
-		}                                                                           \
-		template<typename Tp>                                                       \
-		typename std::enable_if_t<sizeof(std::declval<Tp>().loop()) >= 0, runloop*> \
-		get_loop_inner(Tp* parent)                                                  \
-		{                                                                           \
-			return parent->loop();                                                  \
-		}                                                                           \
-	public:                                                                         \
-		runloop* get_loop() {                                                       \
-			parent_t* parent_off = (parent_t*)nullptr;                              \
-			JOIN(name,_t)* child_off = &parent_off->name;                           \
-			size_t offset = (uint8_t*)child_off - (uint8_t*)parent_off;             \
-			parent_t* parent = (parent_t*)((uint8_t*)this - offset);                \
-			return get_loop_inner(parent);                                          \
-		}                                                                           \
-	} name; friend class JOIN(name, _t)
+#define DECL_TIMER(name, parent_t)                                              \
+	class JOIN(name,_t) : public runloop::base_timer<JOIN(name,_t)> {           \
+	public:                                                                     \
+		template<typename Tp = parent_t>                                        \
+		runloop* get_loop() {                                                   \
+			Tp* parent = container_of<&parent_t::name>(this);                   \
+			if constexpr (std::is_member_object_pointer_v<decltype(&Tp::loop)>) \
+				return parent->loop;                                            \
+			else                                                                \
+				return parent->loop();                                          \
+		}                                                                       \
+	} name; friend class JOIN(name,_t)
 #define DECL_G_TIMER(name, parent_t) runloop::g_timer name
 	
 	//You probably don't want these. Use DECL_TIMER instead.

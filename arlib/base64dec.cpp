@@ -81,7 +81,7 @@ size_t base64_dec_raw(arrayvieww<uint8_t> out, cstring text)
 		in = in_real;
 		outptr = outptr-3 + final_chunk;
 	}
-	while (in < inend && *in < 0x80 && decode[(uint8_t)*in] == SP) in++;
+	while (in < inend && (uint8_t)*in < 0x80 && decode[(uint8_t)*in] == SP) in++;
 	
 	if (in != inend) return 0;
 	return outptr-out.ptr();

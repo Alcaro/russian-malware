@@ -17,9 +17,9 @@
 string socket::ip_to_string(arrayview<uint8_t> ip)
 {
 	char ret[INET6_ADDRSTRLEN];
-	int af = (ip.size() == 4 ? AF_INET : ip.size() == 16 ? AF_INET6 : AF_UNSPEC);
-if (af == AF_INET6) return ""; // TODO: test
-	return inet_ntop(af, ip.ptr(), ret, INET6_ADDRSTRLEN);
+	if (ip.size() == 4) return inet_ntop(AF_INET, ip.ptr(), ret, INET6_ADDRSTRLEN);
+	if (ip.size() == 16) return inet_ntop(AF_INET6, ip.ptr(), ret, INET6_ADDRSTRLEN);
+	return "";
 }
 #else
 string socket::ip_to_string(arrayview<uint8_t> ip)
@@ -87,25 +87,27 @@ which IPs should be rendered as v4? ::ffff:0.0.0.0/96 only probably
 #endif
 
 static_assert(sizeof(sockaddr_storage) >= sizeof(sockaddr_in6));
-bool socket::ip_to_sockaddr(struct sockaddr_storage * sa, arrayview<uint8_t> bytes)
+size_t socket::ip_to_sockaddr(struct sockaddr_storage * sa, arrayview<uint8_t> bytes, uint16_t port)
 {
 	if (bytes.size() == 4)
 	{
 		sockaddr_in* sa4 = (sockaddr_in*)sa;
 		memset(sa4, 0, sizeof(sockaddr_in));
 		sa4->sin_family = AF_INET;
+		sa4->sin_port = htons(port);
 		memcpy(&sa4->sin_addr.s_addr, bytes.ptr(), 4);
-		return true;
+		return sizeof(sockaddr_in);
 	}
 	if (bytes.size() == 16)
 	{
 		sockaddr_in6* sa6 = (sockaddr_in6*)sa;
 		memset(sa6, 0, sizeof(sockaddr_in6));
 		sa6->sin6_family = AF_INET6;
+		sa6->sin6_port = htons(port);
 		memcpy(&sa6->sin6_addr.s6_addr, bytes.ptr(), 16);
-		return true;
+		return sizeof(sockaddr_in6);
 	}
-	return false;
+	return 0;
 }
 
 
@@ -125,8 +127,6 @@ return false; // TODO: enable
 #else
 bool socket::string_to_ip4(arrayvieww<uint8_t> out, cstring str)
 {
-	if (str.contains_nul()) return false;
-	
 	const char* inp = (char*)str.bytes().ptr();
 	const char* inpe = inp + str.length();
 	
@@ -154,8 +154,6 @@ bool socket::string_to_ip4(arrayvieww<uint8_t> out, cstring str)
 //TODO: implement
 bool socket::string_to_ip6(arrayvieww<uint8_t> out, cstring str)
 {
-	if (str.contains_nul()) return false;
-	
 	return false;
 }
 #endif

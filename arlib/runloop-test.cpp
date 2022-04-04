@@ -209,6 +209,7 @@ public:
 	DECL_TIMER(t3, loop_tester2);
 	DECL_TIMER(t4, loop_tester2);
 };
+static_assert(std::is_member_function_pointer_v<decltype(&loop_tester2::loop)>);
 test("private runloop", "function,array,set,time", "runloop")
 {
 	test_runloop(false);

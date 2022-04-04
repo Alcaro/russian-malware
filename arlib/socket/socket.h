@@ -27,7 +27,7 @@ public:
 #endif
 	// To avoid amplification attacks, any homemade protocol must have the first packet longer than the first reply.
 	// For example, it can contain a 256 character message explaining that this is a 256 byte message to avoid amplification attacks.
-	static socket* create_udp(cstring domain, int port, runloop* loop);
+	static socket* create_udp(bytesr ip, int port, runloop* loop);
 	
 	//Acts like create(), but no DNS lookups are done, and write() can fail or return partial success.
 	//It is also unsafe to send a 0-byte buffer to such a socket. Wrapped sockets ignore them.
@@ -99,7 +99,8 @@ public:
 	static bool string_to_ip4(arrayvieww<uint8_t> out, cstring str);
 	static bool string_to_ip6(arrayvieww<uint8_t> out, cstring str);
 	
-	static bool ip_to_sockaddr(struct sockaddr_storage * sa, arrayview<uint8_t> bytes);
+	// Returns number of bytes actually used, or 0 on failure.
+	static size_t ip_to_sockaddr(struct sockaddr_storage * sa, arrayview<uint8_t> bytes, uint16_t port);
 	
 	
 #ifdef ARLIB_SSL

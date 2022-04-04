@@ -8,9 +8,9 @@
 //This is a streaming parser. It returns a sequence of event objects.
 //For example, the document
 /*
-{ "foo": [ 1, 2, 3 ] }
+{ "foo": [ 1, 2, 3.0 ] }
 */
-//would yield { enter_map } { map_key, "foo" } { enter_list } { num, 1 } { num, 2 } { num, 3 } { exit_list } { exit_map }
+//would yield { enter_map } { map_key, "foo" } { enter_list } { num, "1" } { num, "2" } { num, "3.0" } { exit_list } { exit_map } { finish }
 //The parser keeps trying after an { error }, giving you a partial view of the damaged document; however,
 // there are no guarantees on how much you can see, and it is likely for one error to cause many more, or yield misplaced nodes.
 //enter/exit types are always paired, even in the presense of errors. However, they may be anywhere;
@@ -94,7 +94,7 @@ class jsonwriter {
 			}
 			else if (m_indent_depth)
 			{
-				cstring indent_str = ("        "+8-m_indent_size);
+				cstring indent_str = (&"        "[8-m_indent_size]);
 				m_data += '\n';
 				for (int i=0;i<m_indent_depth;i++)
 				{

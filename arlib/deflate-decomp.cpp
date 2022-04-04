@@ -49,13 +49,11 @@ static bool unpack_huffman_dfl(uint16_t * out, const uint8_t * in, size_t in_len
 		n_len[in[n]]++;
 	
 	size_t used_bits = 0;
-	size_t n_set = 0;
 	uint16_t bits_start[16];
 	for (size_t n=1;n<16;n++)
 	{
 		bits_start[n] = used_bits;
 		used_bits += (0x10000>>n) * n_len[n];
-		n_set += n_len[n];
 	}
 	
 	// if everything defined as accepted by RFC 1951 is a valid DEFLATE bytestram and everything else is forbidden,

@@ -1,10 +1,6 @@
 #include "staticmap.h"
 #include "endian.h"
 #include "hash.h"
-#ifdef __unix__
-#include <sys/file.h>
-#endif
-#include"stringconv.h"
 
 static_assert(sizeof(uint8_t) == 1);
 static_assert(sizeof(uint64_t) == 8);
@@ -72,18 +68,9 @@ static uint64_t sm_hash(bytesr by)
 
 bool staticmap::open(cstring fn, bool map_writable)
 {
-	if (!f.open(fn, file2::m_write)) return false;
+	if (!f.open(fn, (file2::mode)(file2::m_write | file2::m_exclusive))) return false;
 	this->map_writable = map_writable;
 	this->sector_size = f.sector_size();
-	
-#if defined(__unix__) && !defined(staticmap)
-	// the equivalent on windows is dwShareMode = 0, too lazy to pipe that through f.open()
-	if (flock(f.peek_handle(), LOCK_EX|LOCK_NB) < 0)
-	{
-		f.close();
-		return false;
-	}
-#endif
 	
 	mmap = f.mmapw(map_writable);
 	if (mmap.size() == 0)
@@ -462,7 +449,10 @@ void staticmap::reset()
 void staticmap::sync()
 {
 	if (!*synced)
+	{
 		f.pwrite(off_r_sigactive, synced);
+		f.sync();
+	}
 	*synced = true;
 }
 
@@ -505,6 +495,7 @@ bool staticmap::iterator::operator!=(const iterator& other)
 	return (a != b);
 }
 
+#include "set.h"
 void staticmap::fsck()
 {
 	array<uint64_t> objects_file;

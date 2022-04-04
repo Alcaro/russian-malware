@@ -79,26 +79,12 @@ static void MAYBE_UNUSED setblock(socketint_t fd, bool newblock)
 #endif
 }
 
-static addrinfo * parse_hostname(cstring domain, uint16_t port, bool udp)
+static int connect(bytesr ip, int port)
 {
-	addrinfo hints;
-	memset(&hints, 0, sizeof(addrinfo));
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = udp ? SOCK_DGRAM : SOCK_STREAM;
-	hints.ai_flags = AI_NUMERICHOST;
+	struct sockaddr_storage addr;
+	if (!socket::ip_to_sockaddr(&addr, ip, port)) return -1;
 	
-	addrinfo * addr = NULL;
-	getaddrinfo(domain.c_str(), tostring(port), &hints, &addr); // why does getaddrinfo take port as a string
-	
-	return addr;
-}
-
-static int connect(cstring domain, int port)
-{
-	addrinfo * addr = parse_hostname(domain, port, false);
-	if (!addr) return -1;
-	
-	socketint_t fd = mksocket(addr->ai_family, addr->ai_socktype | SOCK_CLOEXEC | SOCK_NONBLOCK, addr->ai_protocol);
+	socketint_t fd = mksocket(addr.ss_family, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, IPPROTO_TCP);
 	if (fd < 0) return -1;
 #ifndef _WIN32
 	//because 30 second pauses are unequivocally detestable
@@ -106,16 +92,14 @@ static int connect(cstring domain, int port)
 	timeout.tv_sec = 4;
 	timeout.tv_usec = 0;
 	setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(timeout));
-	if (connect(fd, addr->ai_addr, addr->ai_addrlen) != 0 && errno != EINPROGRESS)
+	if (::connect(fd, (sockaddr*)&addr, sizeof(addr)) != 0 && errno != EINPROGRESS)
 #else
-	if (connect(fd, addr->ai_addr, addr->ai_addrlen) != 0 && WSAGetLastError() != WSAEWOULDBLOCK)
+	if (::connect(fd, (sockaddr*)&addr, sizeof(addr)) != 0 && WSAGetLastError() != WSAEWOULDBLOCK)
 #endif
 	{
-		freeaddrinfo(addr);
 		close(fd);
 		return -1;
 	}
-	freeaddrinfo(addr);
 	
 	// Nagle's algorithm - made sense in the 80s, but these days, the saved bandwidth isn't worth the added latency.
 	// Better combine stuff in userspace, syscalls are (relatively) expensive these days.
@@ -208,10 +192,10 @@ public:
 
 class socket_raw_udp : public socket {
 public:
-	socket_raw_udp(socketint_t fd, sockaddr * addr, socklen_t addrlen, runloop* loop)
-		: fd(fd), loop(loop), peeraddr((uint8_t*)addr, addrlen)
+	socket_raw_udp(socketint_t fd, sockaddr * addr, socklen_t addrlen, runloop* loop) : fd(fd), loop(loop)
 	{
-		peeraddr_cmp.resize(addrlen);
+		memcpy(&peeraddr, addr, addrlen);
+		peeraddr_len = addrlen;
 	}
 	
 	socketint_t fd;
@@ -224,22 +208,23 @@ public:
 	function<void()> cb_read;
 	function<void()> cb_write;
 	
-	array<uint8_t> peeraddr;
-	array<uint8_t> peeraddr_cmp;
+	sockaddr_storage peeraddr;
+	socklen_t peeraddr_len;
 	
 	int recv(arrayvieww<uint8_t> data)
 	{
-		socklen_t len = peeraddr_cmp.size();
-		int ret = fixret(::recvfrom(fd, (char*)data.ptr(), data.size(), MSG_NOSIGNAL, (sockaddr*)peeraddr_cmp.ptr(), &len));
+		sockaddr_storage peeraddr_cmp;
+		socklen_t len = peeraddr_len;
+		int ret = fixret(::recvfrom(fd, (char*)data.ptr(), data.size(), MSG_NOSIGNAL, (sockaddr*)&peeraddr_cmp, &len));
 		//discard data from unexpected sources. source IPs can be forged under UDP, but probably helps a little
 		//TODO: may be better to implement recvfrom as an actual function on those sockets
-		if (len != (socklen_t)peeraddr.size() || peeraddr != peeraddr_cmp) return 0;
+		if (len != peeraddr_len || memcmp(&peeraddr, &peeraddr_cmp, peeraddr_len) != 0) return 0;
 		return ret;
 	}
 	
 	int send(arrayview<uint8_t> data)
 	{
-		return fixret(::sendto(fd, (char*)data.ptr(), data.size(), MSG_NOSIGNAL, (sockaddr*)peeraddr.ptr(), peeraddr.size()));
+		return fixret(::sendto(fd, (char*)data.ptr(), data.size(), MSG_NOSIGNAL, (sockaddr*)&peeraddr, peeraddr_len));
 	}
 	
 	/*private*/ void on_readable(uintptr_t) { cb_read(); }
@@ -280,7 +265,7 @@ public:
 //A flexible socket sends a DNS request, then seamlessly opens a TCP or SSL connection to the returned IP.
 class socket_flex : public socket {
 public:
-	socket* i_connect(cstring domain, cstring ip, int port)
+	socket* i_connect(cstring domain, bytesr ip, int port)
 	{
 		socket* ret = socket_raw::create(connect(ip, port), this->loop);
 #ifdef ARLIB_SSL
@@ -299,7 +284,7 @@ public:
 #ifdef ARLIB_SSL
 		this->ssl = ssl;
 #endif
-		child = i_connect(domain, domain, port);
+		child = i_connect(domain, string_to_ip(domain), port);
 		if (!child)
 		{
 			this->port = port;
@@ -321,7 +306,7 @@ public:
 	function<void()> cb_read;
 	function<void()> cb_write; // call once when connection is ready, or forever if connection is broken
 	
-	/*private*/ void dns_cb(string domain, string ip)
+	/*private*/ void dns_cb(string domain, bytesr ip)
 	{
 		child = i_connect(domain, ip, port);
 		dns = NULL;
@@ -467,14 +452,14 @@ socket* socket::create_ssl(cstring domain, int port, runloop* loop)
 }
 #endif
 
-socket* socket::create_udp(cstring domain, int port, runloop* loop)
+socket* socket::create_udp(bytesr ip, int port, runloop* loop)
 {
-	addrinfo * addr = parse_hostname(domain, port, true);
-	if (!addr) return NULL;
+	struct sockaddr_storage addr;
+	size_t addrlen = socket::ip_to_sockaddr(&addr, ip, port);
+	if (!addrlen) return nullptr;
 	
-	socketint_t fd = mksocket(addr->ai_family, addr->ai_socktype | SOCK_CLOEXEC | SOCK_NONBLOCK, addr->ai_protocol);
-	socket* ret = new socket_raw_udp(fd, addr->ai_addr, addr->ai_addrlen, loop);
-	freeaddrinfo(addr);
+	socketint_t fd = mksocket(addr.ss_family, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, IPPROTO_UDP);
+	socket* ret = new socket_raw_udp(fd, (sockaddr*)&addr, addrlen, loop);
 	//TODO: teach the wrapper about UDP, then add it
 	
 	return ret;

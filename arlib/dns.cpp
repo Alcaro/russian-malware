@@ -11,10 +11,10 @@
 #endif
 
 // could swap this entire object for DnsQueryEx, but that needs windows 8
-string DNS::default_resolver()
+bytearray DNS::default_resolver()
 {
 #ifdef __unix__
-	return ("\n"+file::readall("/etc/resolv.conf")).split<1>("\nnameserver ")[1].split<1>("\n")[0];
+	return socket::string_to_ip(("\n"+file::readall("/etc/resolv.conf")).split<1>("\nnameserver ")[1].split<1>("\n")[0]);
 #else
 	// TODO: figure out why this fails
 	/*
@@ -54,17 +54,17 @@ printf("%p\n",ipaa->FirstDnsServerAddress->Address);
 		if (GetNetworkParams(&info, &info_size) == ERROR_SUCCESS)
 		{
 			FIXED_INFO* info2 = (FIXED_INFO*)buf.ptr();
-			return info2->DnsServerList.IpAddress.String;
+			return socket::string_to_ip(info2->DnsServerList.IpAddress.String);
 		}
-		else return "";
+		else return nullptr;
 	}
-	if (status == ERROR_SUCCESS) return info.DnsServerList.IpAddress.String;
-	else return "";
+	if (status == ERROR_SUCCESS) return socket::string_to_ip(info.DnsServerList.IpAddress.String);
+	else return nullptr;
 	//*/
 #endif
 }
 
-void DNS::init(cstring resolver, int port, runloop* loop)
+void DNS::init(bytesr resolver, int port, runloop* loop)
 {
 	this->loop = loop;
 	this->sock = socket::create_udp(resolver, port, loop);
@@ -73,7 +73,8 @@ void DNS::init(cstring resolver, int port, runloop* loop)
 #ifdef __unix__
 	for (string line : file::readallt("/etc/hosts").split("\n"))
 #else
-	hosts_txt.insert("localhost", "127.0.0.1"); // commented out and hardcoded in default hosts file
+	uint8_t localhost[] = { 127,0,0,1 };
+	hosts_txt.insert("localhost", bytesr(localhost)); // commented out and hardcoded in default hosts file
 	for (string line : file::readallt("C:/Windows/System32/drivers/etc/hosts").split("\n"))
 #endif
 	{
@@ -97,7 +98,10 @@ void DNS::init(cstring resolver, int port, runloop* loop)
 			while (classify(line[i]) == 2) i++;
 			if (domstart == i) continue;
 			
-			hosts_txt.insert(line.substr(domstart, i), addr);
+			uint8_t raw_ip[16];
+			size_t iplen = socket::string_to_ip(raw_ip, addr);
+			if (iplen)
+				hosts_txt.insert(line.substr(domstart, i), bytesr(raw_ip, iplen));
 		}
 	}
 }
@@ -111,14 +115,15 @@ uint16_t DNS::pick_trid()
 	}
 }
 
-void DNS::resolve(cstring domain, unsigned timeout_ms, function<void(string domain, string ip)> callback)
+void DNS::resolve(cstring domain, unsigned timeout_ms, function<void(string domain, bytesr ip)> callback)
 {
-	if (!domain) return callback(domain, "");
+	if (!domain) return callback(domain, nullptr);
 	
-	uint8_t discard[16];
-	if (socket::string_to_ip(discard, domain)) return callback(domain, domain);
+	uint8_t raw_ip[16];
+	size_t iplen = socket::string_to_ip(raw_ip, domain);
+	if (iplen) return callback(domain, bytesr(raw_ip, iplen));
 	
-	string* hosts_result = hosts_txt.get_or_null(domain);
+	bytearray* hosts_result = hosts_txt.get_or_null(domain);
 	if (hosts_result) return callback(domain, *hosts_result);
 	
 #ifdef ARLIB_TEST
@@ -210,7 +215,7 @@ void DNS::timeout(uint16_t trid)
 	query q = std::move(queries.get(trid));
 	queries.remove(trid);
 	loop->raw_timer_remove(q.timeout_id);
-	q.callback(std::move(q.domain), ""); // don't move higher, callback could delete the dns object
+	q.callback(std::move(q.domain), nullptr); // don't move higher, callback could delete the dns object
 }
 
 void DNS::sock_cb()
@@ -227,13 +232,12 @@ void DNS::sock_cb()
 		
 		for (auto& pair : l_queries)
 		{
-			pair.value.callback(pair.value.domain, "");
+			pair.value.callback(pair.value.domain, nullptr);
 		}
 		return;
 	}
 	if (nbytes == 0) return;
-	arrayview<uint8_t> bytes(packet, nbytes);
-	bytestream stream = bytes;
+	bytestream stream = bytesr(packet, nbytes);
 	
 	//header:
 	//4567 8180 0001 0001 0000 0000
@@ -255,10 +259,10 @@ void DNS::sock_cb()
 	if (!queries.contains(trid)) return; // possible if the timeout was hit already, or whatever
 	query& q = queries.get(trid);
 	
-	string ret = "";
+	bytesr ret;
 	
 	{
-	if ((stream.u16b()&~0x0080) != 0x8100) goto fail; // QR, RD, RA (RA optional)
+	if ((stream.u16b()&~0x0480) != 0x8100) goto fail; // QR, RD (discard AA and RA)
 	if (stream.u16b() != 0x0001) goto fail; // QDCOUNT
 	uint16_t ancount = stream.u16b(); // git.io gives eight different IPs
 	if (ancount < 0x0001) goto fail; // ANCOUNT
@@ -292,19 +296,19 @@ again:
 		goto again;
 	}
 	
-	if (type != 0x0001) goto fail; // type A
+	if (type != 1 && type != 28) goto fail; // type A, AAAA
 	
 	size_t iplen = stream.u16b();
 	if (stream.remaining() < iplen) goto fail;
 	if (ancount==1 && nscount==0 && arcount==0 && stream.remaining() != iplen) goto fail;
 	
-	ret = socket::ip_to_string(stream.bytes(iplen));
+	ret = stream.bytes(iplen);
 	
 	//ignore remaining answers, as well as nscount and arcount
 	
 	}
 fail:
-	function<void(string domain, string ip)> callback = q.callback;
+	function<void(string domain, bytesr ip)> callback = std::move(q.callback);
 	string q_domain = std::move(q.domain);
 	loop->raw_timer_remove(q.timeout_id);
 	queries.remove(trid);
@@ -320,66 +324,76 @@ test("DNS", "udp,string,ipconv", "dns")
 	
 	autoptr<runloop> loop = runloop::create();
 	
-	assert(isdigit(DNS::default_resolver()[0])); // TODO: fails on IPv6 ::1
+	bytearray resolver = DNS::default_resolver();
+	assert(resolver.size() == 4 || resolver.size() == 16);
 	
 	DNS dns(loop);
 	int n_done = 0;
 	int n_total = 0;
 	n_total++; // dummy addition to ensure n_done != n_total prior to loop->enter
-	n_total++; dns.resolve("google-public-dns-b.google.com", bind_lambda([&](string domain, string ip)
+	n_total++; dns.resolve("google-public-dns-b.google.com", bind_lambda([&](string domain, bytesr ipraw)
 		{
 			n_done++; if (n_done == n_total) loop->exit(); // put this above assert, otherwise it deadlocks
+			string ip = socket::ip_to_string(ipraw);
 			assert_eq(domain, "google-public-dns-b.google.com");
 			assert_eq(ip, "8.8.4.4"); // use public-b only, to ensure IP isn't byteswapped
 		}));
-	n_total++; dns.resolve("not-a-subdomain.google-public-dns-a.google.com", bind_lambda([&](string domain, string ip)
+	n_total++; dns.resolve("not-a-subdomain.google-public-dns-a.google.com", bind_lambda([&](string domain, bytesr ipraw)
 		{
 			n_done++; if (n_done == n_total) loop->exit();
+			string ip = socket::ip_to_string(ipraw);
 			assert_eq(domain, "not-a-subdomain.google-public-dns-a.google.com");
 			assert_eq(ip, "");
 		}));
-	n_total++; dns.resolve("git.io", bind_lambda([&](string domain, string ip)
+	n_total++; dns.resolve("git.io", bind_lambda([&](string domain, bytesr ipraw)
 		{
 			n_done++; if (n_done == n_total) loop->exit();
+			string ip = socket::ip_to_string(ipraw);
 			assert_eq(domain, "git.io");
 			assert_ne(ip, ""); // this domain returns eight values in answer section, must be parsed properly
 		}));
-	n_total++; dns.resolve("stacked.muncher.se", bind_lambda([&](string domain, string ip)
+	n_total++; dns.resolve("stacked.muncher.se", bind_lambda([&](string domain, bytesr ipraw)
 		{
 			n_done++; if (n_done == n_total) loop->exit();
+			string ip = socket::ip_to_string(ipraw);
 			assert_eq(domain, "stacked.muncher.se");
 			assert_ne(ip, ""); // this domain is a CNAME
 		}));
-	n_total++; dns.resolve("devblogs.microsoft.com", bind_lambda([&](string domain, string ip)
+	n_total++; dns.resolve("devblogs.microsoft.com", bind_lambda([&](string domain, bytesr ipraw)
 		{
 			n_done++; if (n_done == n_total) loop->exit();
+			string ip = socket::ip_to_string(ipraw);
 			assert_eq(domain, "devblogs.microsoft.com");
 			assert_ne(ip, ""); // this domain is a CNAME to another CNAME to a third CNAME
 		}));
-	n_total++; dns.resolve("", bind_lambda([&](string domain, string ip) // this must fail
+	n_total++; dns.resolve("", bind_lambda([&](string domain, bytesr ipraw) // this must fail
 		{
 			n_done++; if (n_done == n_total) loop->exit();
+			string ip = socket::ip_to_string(ipraw);
 			assert_eq(domain, "");
 			assert_eq(ip, "");
 		}));
-	n_total++; dns.resolve("localhost", bind_lambda([&](string domain, string ip)
+	n_total++; dns.resolve("localhost", bind_lambda([&](string domain, bytesr ipraw)
 		{
 			n_done++; if (n_done == n_total) loop->exit();
+			string ip = socket::ip_to_string(ipraw);
 			assert_eq(domain, "localhost");
 			// silly way to say 'can be either of those, but must be one of them'
 			if (ip != "::1") assert_eq(ip, "127.0.0.1");
 		}));
-	n_total++; dns.resolve("127.0.0.1", bind_lambda([&](string domain, string ip)
+	n_total++; dns.resolve("127.0.0.1", bind_lambda([&](string domain, bytesr ipraw)
 		{
 			n_done++; if (n_done == n_total) loop->exit();
+			string ip = socket::ip_to_string(ipraw);
 			assert_eq(domain, "127.0.0.1");
 			//if it's already an IP, it must remain an IP
 			assert_eq(ip, "127.0.0.1");
 		}));
 	//an invalid IP
-	n_total++; dns.resolve("127.0.0.", bind_lambda([&](string domain, string ip)
+	n_total++; dns.resolve("127.0.0.", bind_lambda([&](string domain, bytesr ipraw)
 		{
 			n_done++; if (n_done == n_total) loop->exit();
+			string ip = socket::ip_to_string(ipraw);
 			assert_eq(domain, "127.0.0.");
 			assert_eq(ip, "");
 		}));

@@ -262,7 +262,7 @@ public:
 		void to_valid()
 		{
 			while (pos < parent->m_valid.size() && !parent->m_valid[pos]) pos++;
-			if (pos == parent->m_valid.size()) pos = -1;
+			if (pos >= parent->m_valid.size()) pos = -1; // can be > if m_valid shrank while the iterator exists
 		}
 		
 		iterator(const set<T>* parent, size_t pos) : parent(parent), pos(pos)
@@ -284,7 +284,7 @@ public:
 			return *this;
 		}
 		
-		bool operator!=(const iterator& other)
+		bool operator!=(const iterator& other) const
 		{
 			return (this->parent != other.parent || this->pos != other.pos);
 		}

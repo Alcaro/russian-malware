@@ -13,13 +13,7 @@ static bytearray debugfile_storage;
 
 class debug_file2 {
 public:
-	enum mode {
-		m_read,
-		m_write,          // If the file exists, opens it. If it doesn't, creates a new file.
-		m_wr_existing,    // Fails if the file doesn't exist.
-		m_replace,        // If the file exists, it's either deleted and recreated, or truncated.
-		m_create_excl,    // Fails if the file does exist.
-	};
+	enum mode { m_write, m_exclusive };
 	
 	using mmapw_t = bytesw;
 	
@@ -47,6 +41,8 @@ public:
 		debugfile_prev.append(debugfile_storage);
 		return ret;
 	}
+	
+	void sync() {}
 	
 	bool resize(off_t newsize)
 	{

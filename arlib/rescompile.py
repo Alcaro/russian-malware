@@ -4,7 +4,7 @@ import os, struct, zlib
 
 # silly tricks so __pycache__ goes away
 # why is there no programmatic control over that thing, other than setting an env and reexecing? why is it not a dotfile?
-# why does it even exist? no other scripting language I'm aware of does that, other than memory-only things
+# why does it even exist? no other scripting language I'm aware of caches the compiled form to disk
 __name__ = "not __main__"
 exec(open(os.path.dirname(__file__)+"/redeflate.py","rt").read())
 #from redeflate import deflate_slow
@@ -36,6 +36,7 @@ img_type_names = ["IMG_0F", "IMG_17", "IMG_1F", "IMG_80", "IMG_81", "IMG_83", "I
 
 if use_incbin:
 	body += r"""
+#  define ASM_DATA(text) __asm__(".data\n" text ".text\n")
 #if defined(__unix__)
 #  define ASM_RODATA(text) \
      __asm__(".section .rodata,\"a\",@progbits\n" text ".text\n")
@@ -48,6 +49,7 @@ if use_incbin:
 #  define ASM_RODATA(text) __asm__(".section .rdata,\"dr\"\n" text ".text\n")
 #  define ASM_LABEL(varname, size) varname ":\n"
 #endif
+
 
 #if UINTPTR_MAX == UINT64_MAX
 #  define ASM_POINTER ".quad "
@@ -83,7 +85,7 @@ static_assert(ifmt_xrgb8888_c == ifmt_xrgb8888);
     ".balign 4\n" \
     ASM_LABEL("_ZN9resources15imgbuf_inflatedE", bufsize) \
     ".zero " STR(bufsize) "\n"); \
-    ASM_RODATA(text)
+    ASM_DATA(text)
 #define ASM_IMAGE(varname, width, height, format_c, ptr) \
     ".globl " varname "\n" \
     ASM_LABEL(varname, ASM_POINTER_SIZE) \

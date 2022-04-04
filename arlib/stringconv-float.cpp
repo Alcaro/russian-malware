@@ -447,7 +447,7 @@ string tostring_float(T f)
 	{
 		auto ret = std::to_chars(buf, buf+sizeof(buf), f, std::chars_format::scientific);
 		end = ret.ptr;
-		if (end[-2] == '0' && end[-4] == 'e') // can't overflow, shortest possible output in scientific is 1e+01
+		if (end[-2] == '0' && end[-4] == 'e') // can't underflow, shortest possible output in scientific is 1e+01
 		{
 			end[-2] = end[-1];
 			end--;
@@ -476,7 +476,7 @@ string tostring_float(T f)
 		return tostring_float_part2(signbit(f), true, 1, abs((int64_t)f));
 	}
 	
-	bool fixed = (fabs(f) >= (T)0.0001 && fabs(f) < (T)10000000000000000.0);
+	bool fixed = (fabs(f) >= (T)0.0001 && abs((int64_t)f) < (int64_t)(T)10000000000000000.0);
 	namespace dbp = jkj::dragonbox::policy;
 	auto r = jkj::dragonbox::to_decimal<T>(f, dbp::cache::compact, dbp::trailing_zero::ignore, dbp::sign::ignore);
 	return tostring_float_part2(signbit(f), fixed, r.exponent, r.significand);

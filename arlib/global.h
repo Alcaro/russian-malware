@@ -87,6 +87,14 @@ template<typename T> T launder(T v)
 	return v;
 }
 
+// Returns whatever is currently in that register. The value can be passed around, but any math or deref is undefined behavior.
+template<typename T> T uninitialized()
+{
+	T out;
+	__asm__ volatile("" : "=r"(out)); // optimizes better with volatile - without it, calling twice will insert empty asm once and copy result
+	return out;
+}
+
 typedef void(*funcptr)();
 
 #define using(obj) if(obj;true)

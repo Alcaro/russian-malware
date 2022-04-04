@@ -704,17 +704,11 @@ public:
 };
 
 
-template<> class array<bool> {}; // TODO: delete once I'm confident nothing uses this, mar14 or later
-
 // bitarray - somewhat like array<bool>, but stores eight bits per byte, not one.
-// Also contains small string optimization, won't allocate until sizeof(void*)*8.
+// Also contains small string optimization, won't allocate until sizeof(uint8_t*)*8.
 class bitarray {
 protected:
-	//extra variable to silence a warning
-	//  division 'sizeof (uint8_t* {aka unsigned char*}) / sizeof (uint8_t {aka unsigned char})'
-	//  does not compute the number of array elements [-Wsizeof-pointer-div]
-	static const size_t ptr_size = sizeof(uint8_t*);
-	static const size_t n_inline = ptr_size/sizeof(uint8_t)*8;
+	static const size_t n_inline = 8*sizeof(uint8_t*)/sizeof(uint8_t); // rearranging this may provoke -Wsizeof-pointer-div
 	
 	// unused but allocated bits must, at all points, be clear
 	union {

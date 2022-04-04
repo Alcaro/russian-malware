@@ -352,5 +352,19 @@ test("map", "array", "set")
 		cstring b = a.get_or(42, "");
 		assert_eq(b, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
 	}
+	
+	{
+		// ensure half-invalidated iterator doesn't do anything crazy
+		map<int,int> a;
+		for (size_t i : range(28))
+			a.insert(i, i*3);
+		auto it = a.begin();
+		for (size_t i : range(20))
+			++it;
+		for (size_t i : range(24))
+			a.remove(i);
+		++it;
+		assert(!(it != a.end())); // no operator== on this guy, only !=
+	}
 }
 #endif

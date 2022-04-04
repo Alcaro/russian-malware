@@ -971,7 +971,7 @@ test("string", "array,memeq", "string")
 		a += "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 		assert_eq(a, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ");
 		assert_eq(b, "abcdefghijklmnopqrstuvwxyz");
-		a = a;
+		a.operator=(a);
 		a = a.substr(0, ~1);
 	}
 	
