@@ -1,9 +1,11 @@
 #include "file.h"
 
+// separate file so the ctors can be optimized out if unused
+// for other platforms, see https://stackoverflow.com/a/1024937
+
 #ifdef __linux__
 #include <unistd.h>
 #include <dirent.h>
-//separate file so this ctor can be optimized out if unused
 
 namespace {
 struct exepath_finder {

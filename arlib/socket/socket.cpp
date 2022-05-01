@@ -269,7 +269,7 @@ public:
 	{
 		socket* ret = socket_raw::create(connect(ip, port), this->loop);
 #ifdef ARLIB_SSL
-		if (ret && this->ssl) ret = socket::wrap_ssl_raw(ret, domain, this->loop);
+		if (ret && this->ssl) ret = socket::wrap_ssl_raw(ret, domain.c_str(), this->loop);
 #endif
 		return ret;
 	}
@@ -380,7 +380,7 @@ public:
 	/*private*/ void set_loop()
 	{
 		if (!child) return;
-		child->callback(cb_read, tosend ? bind_this(&socketbuf::trysend_void) : NULL);
+		child->callback(cb_read, tosend.size() ? bind_this(&socketbuf::trysend_void) : NULL);
 		
 		if (cb_write || (cb_read && !child))
 		{
@@ -393,7 +393,7 @@ public:
 	}
 	/*private*/ bool trysend(bool in_runloop)
 	{
-		arrayview<uint8_t> bytes = tosend.pull_buf();
+		arrayview<uint8_t> bytes = tosend.pull_begin(1);
 		if (!bytes.size()) return true;
 		int nbytes = child->send(bytes);
 		if (nbytes < 0)
@@ -401,7 +401,7 @@ public:
 			if (in_runloop) cancel();
 			return false;
 		}
-		tosend.pull_done(nbytes);
+		tosend.pull_finish(nbytes);
 		
 		set_loop();
 		return true;
@@ -439,6 +439,10 @@ socket* socket::create(cstring domain, int port, runloop* loop)
 {
 	return new socketbuf(new socket_flex(domain, port, loop), loop);
 }
+socket* socket::create(bytesr ip, int port, runloop* loop)
+{
+	return new socketbuf(socket_raw::create(connect(ip, port), loop), loop);
+}
 
 socket* socket::create_raw(cstring domain, int port, runloop* loop)
 {
@@ -446,7 +450,7 @@ socket* socket::create_raw(cstring domain, int port, runloop* loop)
 }
 
 #ifdef ARLIB_SSL
-socket* socket::create_ssl(cstring domain, int port, runloop* loop)
+socket* socket::create_ssl(cstrnul domain, int port, runloop* loop)
 {
 	return new socketbuf(new socket_flex(domain, port, loop, true), loop);
 }
@@ -471,14 +475,17 @@ socket* socket::wrap(socket* inner, runloop* loop)
 }
 
 #ifdef ARLIB_SSL
-socket* socket::wrap_ssl(socket* inner, cstring domain, runloop* loop)
+socket* socket::wrap_ssl(socket* inner, cstrnul domain, runloop* loop)
 {
 	return wrap(wrap_ssl_raw(inner, domain, loop), loop);
 }
 
-socket* socket::create_sslmaybe(bool ssl, cstring domain, int port, runloop* loop)
+socket* socket::create_sslmaybe(bool ssl, cstrnul domain, int port, runloop* loop)
 {
-	return (ssl ? socket::create_ssl : socket::create)(domain, port, loop);
+	if (ssl)
+		return socket::create_ssl(domain, port, loop);
+	else
+		return socket::create(domain, port, loop);
 }
 #endif
 

@@ -126,7 +126,7 @@ again:
 	return path;
 }
 
-#ifdef ARGUI_NONE
+#ifndef ARLIB_GUI
 file::impl* file::open_impl(cstring filename, mode m)
 {
 	return open_impl_fs(filename, m);

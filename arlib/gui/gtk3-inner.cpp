@@ -1,10 +1,10 @@
 #include "window.h"
 #include "../file.h"
-#ifdef ARGUI_GTK3
+#ifdef ARLIB_GUI_GTK3
 #include <gtk/gtk.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef ARGUIPROT_X11
+#ifdef ARLIB_GUI_X11
 #include <gdk/gdkx.h>
 #endif
 
@@ -470,7 +470,7 @@ class widget_canvas;
 
 
 
-#if defined(ARGUIPROT_X11) && defined(ARLIB_OPENGL)
+#if defined(ARLIB_GUI_X11) && defined(ARLIB_OPENGL)
 struct widget_viewport::impl {
 	Window child;
 	

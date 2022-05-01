@@ -3,7 +3,7 @@
 #include <stdarg.h>
 #include <string.h>
 
-#ifndef ARGUI_NONE
+#ifdef ARLIB_GUI
 #if defined(ARGUI_MANUAL_LAYOUT)
 //This is in practice only used on Windows, but it's theoretically usable on other operating systems too. Maybe I'll need it on OSX.
 widget_padding::widget_padding(bool vertical)

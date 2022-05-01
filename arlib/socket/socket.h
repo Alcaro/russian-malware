@@ -22,8 +22,9 @@ public:
 	//If the server doesn't exist or doesn't respond, reports a broken connection.
 	//Once the connection is established, it reports writability to its runloop. However, writes before that will succeed.
 	static socket* create(cstring domain, int port, runloop* loop);
+	static socket* create(bytesr ip, int port, runloop* loop);
 #ifdef ARLIB_SSL
-	static socket* create_ssl(cstring domain, int port, runloop* loop); // TODO: server
+	static socket* create_ssl(cstrnul domain, int port, runloop* loop); // TODO: server
 #endif
 	// To avoid amplification attacks, any homemade protocol must have the first packet longer than the first reply.
 	// For example, it can contain a 256 character message explaining that this is a 256 byte message to avoid amplification attacks.
@@ -41,7 +42,7 @@ public:
 #ifdef ARLIB_SSL
 	//Super simple function, just calls create() or create_ssl().
 	//Suitable as default implementation of a 'create socket' callback.
-	static socket* create_sslmaybe(bool ssl, cstring domain, int port, runloop* loop);
+	static socket* create_sslmaybe(bool ssl, cstrnul domain, int port, runloop* loop);
 #endif
 	
 	
@@ -105,9 +106,9 @@ public:
 	
 #ifdef ARLIB_SSL
 	//Wraps the socket in a SSL layer. This function can accept a raw socket.
-	static socket* wrap_ssl(socket* inner, cstring domain, runloop* loop);
+	static socket* wrap_ssl(socket* inner, cstrnul domain, runloop* loop);
 	//Like the above, but with create_raw's caveats.
-	static socket* wrap_ssl_raw(socket* inner, cstring domain, runloop* loop)
+	static socket* wrap_ssl_raw(socket* inner, cstrnul domain, runloop* loop)
 	{
 #ifdef ARLIB_SSL_OPENSSL
 		return wrap_ssl_raw_openssl(inner, domain, loop);
@@ -132,15 +133,15 @@ public:
 	}
 	
 #ifdef ARLIB_SSL_OPENSSL
-	static socket* wrap_ssl_raw_openssl(socket* inner, cstring domain, runloop* loop);
+	static socket* wrap_ssl_raw_openssl(socket* inner, cstrnul domain, runloop* loop);
 	static socket* wrap_ssl_raw_openssl_noverify(socket* inner, runloop* loop);
 #endif
 #ifdef ARLIB_SSL_SCHANNEL
-	static socket* wrap_ssl_raw_schannel(socket* inner, cstring domain, runloop* loop);
+	static socket* wrap_ssl_raw_schannel(socket* inner, cstrnul domain, runloop* loop);
 	static socket* wrap_ssl_raw_schannel_noverify(socket* inner, runloop* loop);
 #endif
 #ifdef ARLIB_SSL_BEARSSL
-	static socket* wrap_ssl_raw_bearssl(socket* inner, cstring domain, runloop* loop);
+	static socket* wrap_ssl_raw_bearssl(socket* inner, cstrnul domain, runloop* loop);
 #endif
 	
 	static socket* unsafe_ssl_not_available(); // unimplemented, gives a linker error if used

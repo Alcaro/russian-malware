@@ -1,6 +1,6 @@
-#ifdef ARGUIPROT_X11
+#ifdef ARLIB_GUI_X11
 #include "aropengl.h"
-#ifdef ARGUI_NONE
+#ifndef ARLIB_GUI
 #include "../game.h"
 #endif
 

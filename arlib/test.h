@@ -66,7 +66,7 @@ static inline string tostringhex_dbg(const array<uint8_t>& item) { return tostri
 #ifdef ARLIB_TEST
 class _testdecl {
 public:
-	_testdecl(void(*func)(), const char * filename, int line, const char * name, const char * requires, const char * provides);
+	_testdecl(void(*func)(), const char * filename, int line, const char * name, const char * needs, const char * provides);
 };
 
 void _testfail(cstring why, cstring file, int line);
@@ -185,9 +185,9 @@ void _assert_range(const T&  actual, const char * actual_exp,
 //If multiple tests provide the same feature, all of them must run before anything depending on it can run
 // (however, the test will run even if the prior one fails).
 //Requiring a feature that no test provides, or cyclical dependencies, causes a test failure. Providing something nothing needs is fine.
-#define test(name, requires, provides) \
+#define test(name, needs, provides) \
 	static void TESTFUNCNAME(); \
-	static KEEP_OBJECT _testdecl JOIN(_testdecl, __LINE__)(TESTFUNCNAME, __FILE__, __LINE__, name, requires, provides); \
+	static KEEP_OBJECT _testdecl JOIN(_testdecl, __LINE__)(TESTFUNCNAME, __FILE__, __LINE__, name, needs, provides); \
 	static void TESTFUNCNAME()
 #define assert(x) do { if (!(x)) { _testfail("Failed assertion " #x, __FILE__, __LINE__); } } while(0)
 #define assert_msg(x, msg) do { if (!(x)) { _testfail((string)"Failed assertion " #x ": "+msg, __FILE__, __LINE__); } } while(0)

@@ -188,7 +188,7 @@ protected:
 private:
 	void dump()
 	{
-		puts(log.substr(1,~0).c_str());
+		puts(log.substr_nul(1));
 		size_t rem = inner.remaining();
 		if (rem == 0) return;
 		else if (inner.remaining() < 64) puts(tostringhex_dbg(inner.bytes(rem)));

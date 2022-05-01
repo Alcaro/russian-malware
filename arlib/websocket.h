@@ -30,7 +30,7 @@ class WebSocket : nocopy {
 	function<void()> cb_error;
 	
 #ifdef ARLIB_SSL
-	function<socket*(bool ssl, cstring domain, int port, runloop* loop)> cb_mksock = socket::create_sslmaybe;
+	function<socket*(bool ssl, cstrnul domain, int port, runloop* loop)> cb_mksock = socket::create_sslmaybe;
 #else
 	function<socket*(cstring domain, int port, runloop* loop)> cb_mksock = socket::create;
 #endif
@@ -46,7 +46,7 @@ public:
 	
 	//A custom socket creation function, if you want proxy support.
 #ifdef ARLIB_SSL
-	void wrap_socks(function<socket*(bool ssl, cstring domain, int port, runloop* loop)> cb) { cb_mksock = cb; }
+	void wrap_socks(function<socket*(bool ssl, cstrnul domain, int port, runloop* loop)> cb) { cb_mksock = cb; }
 #else
 	void wrap_socks(function<socket*(cstring domain, int port, runloop* loop)> cb) { cb_mksock = cb; }
 #endif

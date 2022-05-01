@@ -100,9 +100,9 @@ public:
 	
 	//A custom socket creation function, if you want proxy support.
 #ifdef ARLIB_SSL
-	void wrap_socks(function<socket*(bool ssl, cstring domain, int port, runloop* loop)> cb) { cb_mksock = cb; }
+	void wrap_socks(function<socket*(bool ssl, cstrnul domain, int port, runloop* loop)> cb) { cb_mksock = cb; }
 #else
-	void wrap_socks(function<socket*(cstring domain, int port, runloop* loop)> cb) { cb_mksock = cb; }
+	void wrap_socks(function<socket*(cstrnul domain, int port, runloop* loop)> cb) { cb_mksock = cb; }
 #endif
 	
 	//Multiple requests may be sent to the same object. This will make them use HTTP Keep-Alive.
@@ -161,9 +161,9 @@ private:
 	
 	runloop* loop;
 #ifdef ARLIB_SSL
-	function<socket*(bool ssl, cstring domain, int port, runloop* loop)> cb_mksock = socket::create_sslmaybe;
+	function<socket*(bool ssl, cstrnul domain, int port, runloop* loop)> cb_mksock = socket::create_sslmaybe;
 #else
-	function<socket*(cstring domain, int port, runloop* loop)> cb_mksock = socket::create;
+	function<socket*(cstrnul domain, int port, runloop* loop)> cb_mksock = socket::create;
 #endif
 	autoptr<socket> sock;
 	

@@ -84,6 +84,18 @@ class set : public linqbase<set<T>> {
 		return !m_valid[pos];
 	}
 	
+	template<typename T2>
+	static std::enable_if_t<sizeof(hash(std::declval<T2>())), size_t> local_hash(const T2& item, int overload_resolut)
+	{
+		return hash(item);
+	}
+	
+	template<typename T2> // don't enable_if, evaluating whether (T)declval<T2>() is legal breaks struct JSON { map<string,JSON> children; }
+	static size_t local_hash(const T2& item, float overload_resolut)
+	{
+		return hash((T)item);
+	}
+	
 	//If the object exists, returns the index where it can be found.
 	//If not, and want_empty is true, returns a suitable empty slot to insert it in, or -1 if the object should rehash.
 	//If no such object and want_empty is false, returns -1.
@@ -92,7 +104,7 @@ class set : public linqbase<set<T>> {
 	{
 		if (!m_data) return -1;
 		
-		size_t hashv = hash_shuffle(hash(item));
+		size_t hashv = hash_shuffle(local_hash<T2>(item, 0));
 		size_t i = 0;
 		
 		size_t emptyslot = -1;
@@ -408,7 +420,7 @@ public:
 		else return def;
 	}
 	template<typename Tk2> // sizeof && because not using Tk2 is a hard error, not a SFINAE
-	std::enable_if_t<sizeof(Tk2) && std::is_same_v<Tvalue, string>, cstring>
+	std::enable_if_t<sizeof(Tk2) && std::is_same_v<Tvalue, string>, cstrnul>
 	get_or(const Tk2& key, const char * def) const
 	{
 		node* ret = items.get_or_null(key);

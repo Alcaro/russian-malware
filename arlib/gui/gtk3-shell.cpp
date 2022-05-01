@@ -1,9 +1,9 @@
 #include "window.h"
-#ifdef ARGUI_GTK3
+#ifdef ARLIB_GUI_GTK3
 #include <stdlib.h>
 #include <string.h>
 #include <gtk/gtk.h>
-#ifdef ARGUIPROT_X11
+#ifdef ARLIB_GUI_X11
 #include <gdk/gdkx.h>
 #endif
 

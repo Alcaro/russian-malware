@@ -26,6 +26,25 @@ static inline size_t hash(const bytesr& val)
 	return hash(val.ptr(), val.size());
 }
 
+template<typename T>
+class hashable_pointer {
+	T* ptr;
+public:
+	hashable_pointer() = default;
+	hashable_pointer(T* ptr) : ptr(ptr) {}
+	T* operator->() { return ptr; }
+	T& operator*() { return *ptr; }
+	const T* operator->() const { return ptr; }
+	const T& operator*() const { return *ptr; }
+	operator T*() { return ptr; }
+	operator const T*() const { return ptr; }
+	explicit operator bool() const { return ptr; }
+	size_t hash() const { return (uintptr_t)ptr; }
+	bool operator==(const hashable_pointer& other) const { return ptr == other.ptr; }
+	bool operator==(T* other) const { return ptr == other; }
+};
+
+
 
 //implementation from https://stackoverflow.com/a/263416
 static inline size_t hashall() { return 2166136261; }

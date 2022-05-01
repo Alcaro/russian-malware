@@ -54,9 +54,9 @@ public:
 	// Other operations have same performance characteristics as a normal hashmap, but worse constant factors.
 	// You can't create two staticmap objects on the same backing file.
 	staticmap() {}
-	staticmap(cstring fn, bool map_writable = false) { open(fn, map_writable); }
+	staticmap(cstrnul fn, bool map_writable = false) { open(fn, map_writable); }
 	// If not open, any operation except open() and dtor are undefined behavior. If it is open, opening again is also UB.
-	bool open(cstring fn, bool map_writable = false);
+	bool open(cstrnul fn, bool map_writable = false);
 	
 	size_t size() { return rd64(32); } // rd64(off_r_entries)
 	bytesw get_or_empty(bytesr key, bool* found = nullptr); // If nonnull, found allows telling empty value apart from nonexistent.

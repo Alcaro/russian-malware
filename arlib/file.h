@@ -2,11 +2,13 @@
 #include "global.h"
 #include "string.h"
 #include "array.h"
+#include "time.h"
 #ifdef __unix__
 #include <unistd.h>
 #include <sys/uio.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <dirent.h>
 #endif
 #ifdef _WIN32
 #include <windows.h>
@@ -81,7 +83,7 @@ public:
 		m_create_excl,    // Fails if the file does exist.
 		
 		m_exclusive = 8, // OR with any other mode. Tries to claim exclusive write access, or with m_read, simply deny all writers.
-		                 // The request may be bypassable on some OSes. However, if both processes use Arlib, the second one will be stopped.
+		                 // The request may be bypassable, or not honored by default, on some OSes. However, if both processes use Arlib, the second one will be stopped.
 	};
 	
 	class mmapw_t;
@@ -116,9 +118,9 @@ public:
 	file2() {}
 	file2(file2&& f) { fd = f.fd; f.fd = null_fd; }
 	file2& operator=(file2&& f) { reset(); fd = f.fd; f.fd = null_fd; return *this; }
-	file2(cstring filename, mode m = m_read) { open(filename, m); }
+	file2(cstrnul filename, mode m = m_read) { open(filename, m); }
 	~file2() { reset(); }
-	bool open(cstring filename, mode m = m_read);
+	bool open(cstrnul filename, mode m = m_read);
 	void close() { reset(); }
 	operator bool() const { return fd != null_fd; }
 	
@@ -144,6 +146,9 @@ public:
 	bool resize(off_t newsize); // May or may not seek to the file's new size.
 	void seek(off_t pos); // Seeking outside the file is not allowed.
 	off_t tell();
+	
+	timestamp time();
+	void set_time(timestamp t);
 #else
 	size_t read(bytesw by) { return max(::read(fd, by.ptr(), by.size()), 0); }
 	size_t pread(off_t pos, bytesw by) { return max(::pread(fd, by.ptr(), by.size(), pos), 0); }
@@ -158,6 +163,9 @@ public:
 	bool resize(off_t newsize) { return (ftruncate(fd, newsize) == 0); }
 	//void seek(off_t pos);
 	//off_t tell() { 
+	
+	timestamp time() { struct stat st; fstat(fd, &st); return timestamp::from_native(st.st_mtim); }
+	void set_time(timestamp t) { struct timespec times[] = { { 0, UTIME_OMIT }, t.to_native() }; futimens(fd, times); }
 #endif
 	
 	// mmap objects are not tied to the file object. You can keep using the mmap, unless you need the sync_map function.
@@ -165,7 +173,7 @@ public:
 	// If you don't care about concurrent writers, and the file is small, it may be faster to read into a normal malloc.
 	// As long as the file is mapped, it can't be resized.
 	mmap_t mmap() { return mmapw(false); }
-	static mmap_t mmap(cstring filename) { return file2(filename).mmap(); }
+	static mmap_t mmap(cstrnul filename) { return file2(filename).mmap(); }
 	// If not writable, the compiler will let you write, but doing so will segfault at runtime.
 	mmapw_t mmapw(bool writable = true)
 	{
@@ -173,7 +181,7 @@ public:
 		mmap_t::map(ret, *this, writable);
 		return ret;
 	}
-	static mmapw_t mmapw(cstring filename) { return file2(filename, m_wr_existing).mmapw(); }
+	static mmapw_t mmapw(cstrnul filename) { return file2(filename, m_wr_existing).mmapw(); }
 	
 	// Resizes the file, and its associated mmap object. Same as unmapping, resizing and remapping, but optimizes slightly better.
 	bool resize(off_t newsize, mmap_t& map) { return resize(newsize, (bytesr&)map, false); }

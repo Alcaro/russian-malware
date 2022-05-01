@@ -43,9 +43,9 @@ class argparse {
 	
 	string m_appname;
 	refarray<arg_base> m_args;
-	function<void(cstring error)> m_onerror;
+	function<void(cstrnul error)> m_onerror;
 	bool m_early_stop = false;
-#ifndef ARGUI_NONE
+#ifdef ARLIB_GUI
 	bool m_accept_cli = false;
 	bool m_has_gui = false;
 #endif
@@ -221,7 +221,7 @@ public:
 		return add('\0', accept_no_value, accept_value, std::move(cb));
 	}
 	
-#ifndef ARGUI_NONE
+#ifdef ARLIB_GUI
 	void add_cli() { m_accept_cli = true; }
 	bool has_gui() { return m_has_gui; }
 #else
@@ -239,7 +239,7 @@ private:
 	
 	string get_usage();
 	void usage();
-	void error(cstring why);
+	void error(cstrnul why);
 	void single_arg(arg_base& arg, const char * value, arglevel_t arglevel, bool* used_value);
 	void single_arg(cstring name, const char * value, arglevel_t arglevel, bool* used_value);
 	void single_arg(char sname, const char * value, arglevel_t arglevel, bool* used_value);
@@ -247,7 +247,7 @@ private:
 public:
 	//The handler should not return; if it does, the default handler (print error to stderr and terminate) is called.
 	//If you want to do something else, throw an exception.
-	void onerror(function<void(cstring error)> handler)
+	void onerror(function<void(cstrnul error)> handler)
 	{
 		m_onerror = handler;
 	}

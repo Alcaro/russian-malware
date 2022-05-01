@@ -10,7 +10,7 @@ class window;
 class windowmenu_menu;
 class widget_base;
 
-#if defined(ARGUI_WINDOWS)
+#if defined(ARLIB_GUI_WINDOWS)
 #define ARGUI_MANUAL_LAYOUT
 #endif
 
@@ -659,7 +659,7 @@ public:
 
 
 //If Arlib doesn't support the features you want, it is allowed (but not really recommended) to implement your own widget class.
-//Check widget_base to see what you need to implement, and use #ifdef ARGUI_GTK3 or ARGUI_WINDOWS.
+//Check widget_base to see what you need to implement, and use #ifdef ARLIB_GUI_GTK3 or ARLIB_GUI_WINDOWS.
 //Don't use widget_base directly, you want WIDGET_BASE.
 
 
@@ -798,7 +798,7 @@ uintptr_t _window_get_widget_color(unsigned int type, void* handle, void* draw, 
 size_t _widget_listbox_search(function<const char *(size_t row, int column)> get_cell, size_t rows,
                               const char * prefix, size_t start, bool up);
 
-#ifdef ARGUIPROT_X11
+#ifdef ARLIB_GUI_X11
 //Returns the display and screen we should use.
 //The concept of screens only exists on X11, so this should not be used elsewhere.
 //Only I/O drivers should have any reason to use this.

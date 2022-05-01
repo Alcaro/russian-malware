@@ -123,7 +123,7 @@ socket* socks5::connect(
 #ifdef ARLIB_SSL
                         bool ssl,
 #endif
-                        cstring domain, int port, runloop* loop)
+                        cstrnul domain, int port, runloop* loop)
 {
 	socks5_par par = { loop, socket::create(m_host, m_port, loop), domain, (uint16_t)port };
 	socket* sock = wrap_socks5(par);

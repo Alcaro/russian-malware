@@ -14,11 +14,11 @@ void argparse::usage()
 {
 	exit(0);
 }
-void argparse::error(cstring why)
+void argparse::error(cstrnul why)
 {
 	m_onerror(why);
 	
-	fprintf(stderr, "%s: %s\n", (const char*)m_appname, why.c_str().c_str());
+	fprintf(stderr, "%s: %s\n", (const char*)m_appname, (const char*)why);
 	exit(1);
 }
 void argparse::single_arg(arg_base& arg, const char * value, arglevel_t arglevel, bool* used_value)
@@ -86,7 +86,7 @@ void argparse::parse_pre(const char * const * argv)
 }
 void argparse::parse(const char * const * argv)
 {
-#if !defined(ARGUI_NONE) && !defined(ARGUI_GTK4) && !defined(ARLIB_TEST)
+#if defined(ARLIB_GUI) && !defined(ARLIB_GUI_GTK4) && !defined(ARLIB_TEST)
 	abort(); // should be unreachable
 #endif
 	parse_pre(argv);
@@ -213,8 +213,8 @@ static void test_one_pack(const char * opts, cstring extras, bool error, const c
 	args.add('O', "optstr", &hos, &os);
 	if (extras) args.add("", &extra);
 	
-	if (error) args.onerror([](cstring){ throw 42; });
-	else args.onerror([](cstring error){ puts(error.c_str()); assert_unreachable(); });
+	if (error) args.onerror([](cstrnul){ throw 42; });
+	else args.onerror([](cstrnul error){ puts(error); assert_unreachable(); });
 	
 	try {
 		args.parse(argvp);

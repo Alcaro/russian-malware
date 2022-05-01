@@ -234,7 +234,8 @@ namespace {
 
 static bool path_corrupt(cstring path)
 {
-	if (path[0] == '\0') return true;
+	if (path.contains_nul()) return true;
+	if (!path) return true;
 	if (path[0] == '/') return true; // TODO: this fails on network shares (\\?\, \\.\, and \??\ should be considered corrupt)
 	if (path[1] == ':' && path[2] != '/') return true;
 	if (path.contains("\\")) return true;
@@ -428,6 +429,18 @@ void file2::sync()
 	FlushFileBuffers(fd);
 }
 
+timestamp file2::time()
+{
+	FILETIME ft;
+	GetFileTime(fd, nullptr, nullptr, &ft);
+	return timestamp::from_native(ft);
+}
+void file2::set_time(timestamp t)
+{
+	FILETIME ft = t.to_native();
+	SetFileTime(fd, nullptr, nullptr, &ft);
+}
+
 void file2::mmap_t::map(bytesr& by, file2& src, bool writable)
 {
 	by = nullptr;
@@ -449,4 +462,5 @@ void file2::mmap_t::unmap(bytesr& by)
 		UnmapViewOfFile(by.ptr());
 	by = nullptr;
 }
+
 #endif

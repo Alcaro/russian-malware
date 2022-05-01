@@ -54,7 +54,7 @@ struct testlist {
 	
 	const char * name;
 	
-	const char * requires;
+	const char * needs;
 	const char * provides;
 	testlist* next;
 };
@@ -64,14 +64,14 @@ static testlist* g_testlist = NULL;
 static testlist* cur_test;
 
 // linked lists because this tests Arlib itself, relying on array<> to work when testing array<> is unwise
-_testdecl::_testdecl(void(*func)(), const char * filename, int line, const char * name, const char * requires, const char * provides)
+_testdecl::_testdecl(void(*func)(), const char * filename, int line, const char * name, const char * needs, const char * provides)
 {
 	testlist* next = xmalloc(sizeof(testlist));
 	next->func = func;
 	next->filename = filename;
 	next->line = line;
 	next->name = name;
-	next->requires = requires;
+	next->needs = needs;
 	next->provides = provides;
 	next->next = g_testlist;
 	g_testlist = next;
@@ -164,13 +164,13 @@ void _test_nothrow(int add)
 	nothrow_level += add;
 }
 
-static void _testfail(cstring why)
+static void _testfail(cstrnul why)
 {
 	if (result == err_ok || (result==err_skip && !show_verbose))
 		puts("");
 	
 	result = err_fail;
-	puts(why.c_str());
+	puts(why);
 	fflush(stdout);
 	debug_break();
 	test_throw(err_fail);
@@ -249,28 +249,28 @@ void _test_runloop_latency(uint64_t us)
 
 static void err_print(testlist* err)
 {
-	printf("%s (at %s:%d, requires %s, provides %s)\n", err->name, err->filename, err->line, err->requires, err->provides);
+	printf("%s (at %s:%d, needs %s, provides %s)\n", err->name, err->filename, err->line, err->needs, err->provides);
 }
 
-//whether 'a' must be before 'b'; alternatively, whether 'a' provides something 'b' requires
+//whether 'a' must be before 'b'; alternatively, whether 'a' provides something 'b' needs
 //false is not conclusive, 'a' could require being before 'c' which is before 'b'
-static bool test_requires(testlist* a, testlist* b)
+static bool test_needs(testlist* a, testlist* b)
 {
-	if (!*a->requires) return false;
+	if (!*a->needs) return false;
 	if (!*b->provides) return false;
 	//kinda funny code to avoid using Arlib features before they're tested
 	//except strtoken, but even in the worst case, I can just revert it or set this to 'return false'
-	return strtoken(a->requires, b->provides, ',');
+	return strtoken(a->needs, b->provides, ',');
 }
 
 //whether 'a' must be before any test in 'list'
 //true if 'a' must be before itself
 //actually returns pointer to the preceding test
-static testlist* test_requires_any(testlist* a, testlist* list)
+static testlist* test_needs_any(testlist* a, testlist* list)
 {
 	while (list)
 	{
-		if (test_requires(a, list)) return list;
+		if (test_needs(a, list)) return list;
 		list = list->next;
 	}
 	return NULL;
@@ -293,7 +293,7 @@ static testlist* sort_tests(testlist* unsorted)
 		
 		while (try_next)
 		{
-			if (!test_requires_any(try_next, unsorted))
+			if (!test_needs_any(try_next, unsorted))
 			{
 				*try_next_p = try_next->next;
 				
@@ -320,15 +320,15 @@ static testlist* sort_tests(testlist* unsorted)
 			testlist* b = unsorted;
 			do
 			{
-				a = test_requires_any(a, unsorted);
-				b = test_requires_any(b, unsorted);
-				b = test_requires_any(b, unsorted);
+				a = test_needs_any(a, unsorted);
+				b = test_needs_any(b, unsorted);
+				b = test_needs_any(b, unsorted);
 			}
 			while (a != b);
 			do
 			{
 				err_print(a);
-				a = test_requires_any(a, unsorted);
+				a = test_needs_any(a, unsorted);
 			}
 			while (a != b);
 			
@@ -382,7 +382,7 @@ int main(int argc, char* argv[])
 	args.add("all", &all_tests);
 	args.add("twice", &run_twice);
 	args.add("filter", &filter);
-#ifdef ARGUI_NONE
+#ifndef ARLIB_GUI
 	args.parse(argv);
 #else
 	arlib_init(args, argv);
@@ -395,8 +395,8 @@ int main(int argc, char* argv[])
 	
 	for (testlist* outer = alltests; outer; outer = outer->next)
 	{
-		if (outer->requires[0] == '\0') continue;
-		array<cstring> required = cstring(outer->requires).csplit(",");
+		if (outer->needs[0] == '\0') continue;
+		array<cstring> required = cstring(outer->needs).csplit(",");
 		for (size_t i=0;i<required.size();i++)
 		{
 			bool found = false;

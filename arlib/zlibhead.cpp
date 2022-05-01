@@ -2,6 +2,7 @@
 
 uint32_t inflator::zlibhead::adler32(bytesr by, uint32_t adler_prev)
 {
+	// could simd this, but not much point, it's not a bottleneck
 	uint32_t a = adler_prev&0xFFFF;
 	uint32_t b = adler_prev>>16;
 	
@@ -49,7 +50,7 @@ inflator::ret_t inflator::zlibhead::inflate()
 			// ignore 00F0 CMF.CINFO, inflator ignores window size (and it's almost always 7, the maximum)
 			// ignore C000 FLG.FLEVEL, it's just informational, and there are too many compressors for it to make sense anymore
 			    (head&0x2000) != 0x0000 || // FLG.FDICT, not supported
-			    (__builtin_bswap16(head)%31) != 0) return ret_error; // FLG.FCHECK, must be a multiple of 31
+			    (__builtin_bswap16(head)%31) != 0) return ret_error; // FLG.FCHECK (1F00 bits), must be a multiple of 31
 			// (are both 0 and 31 allowed in FCHECK if 0 is the correct checksum? I think they are)
 			
 			inf.m_state = 0;

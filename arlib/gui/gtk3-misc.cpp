@@ -1,5 +1,5 @@
 #include "window.h"
-#if defined(ARGUI_GTK3) || defined(ARGUI_GTK4)
+#if defined(ARLIB_GUI_GTK3) || defined(ARLIB_GUI_GTK4)
 #include "../file.h"
 #include "../os.h"
 #include "../set.h"
@@ -12,7 +12,7 @@
 #include <errno.h>
 #include <string.h>
 #include <gtk/gtk.h>
-#ifdef ARGUIPROT_X11
+#ifdef ARLIB_GUI_X11
 #include <gdk/gdkx.h>
 #else
 //TODO: if not X11, disable Viewport but keep other widgets
@@ -79,7 +79,7 @@ int main(int argc, char** argv)
 
 //#include<sys/resource.h>
 
-#if defined(ARGUIPROT_X11) && defined(ARLIB_OPENGL)
+#if defined(ARLIB_GUI_X11) && defined(ARLIB_OPENGL)
 struct window_x11_info window_x11;
 #endif
 
@@ -89,7 +89,7 @@ static void init_gui_shared_early()
 #ifdef DEBUG
 	//g_log_set_always_fatal((GLogLevelFlags)(G_LOG_LEVEL_CRITICAL|G_LOG_LEVEL_WARNING));
 #endif
-#if defined(ARGUIPROT_X11) && defined(ARLIB_OPENGL)
+#if defined(ARLIB_GUI_X11) && defined(ARLIB_OPENGL)
 	gdk_set_allowed_backends("x11");
 	XInitThreads();
 #endif
@@ -100,7 +100,7 @@ static void init_gui_shared_early()
 
 static void init_gui_shared_late()
 {
-#if defined(ARGUIPROT_X11) && defined(ARLIB_OPENGL)
+#if defined(ARLIB_GUI_X11) && defined(ARLIB_OPENGL)
 	if (args.m_has_gui)
 	{
 		window_x11.display = gdk_x11_get_default_xdisplay();
@@ -109,7 +109,7 @@ static void init_gui_shared_late()
 #endif
 }
 
-#ifdef ARGUI_GTK3
+#ifdef ARLIB_GUI_GTK3
 void arlib_init()
 {
 	int argc = 1;
@@ -212,6 +212,7 @@ void arlib_init(argparse& args, char** argv)
 	{
 		//shitty way to detect if the error is windowing initialization or bad arguments, but gtk doesn't seem to offer anything better
 		//this is, of course, twice the fun with localization enabled
+		//I also don't know what this would do if there are multiple errors
 		if (args.m_accept_cli && strstr(error->message, "annot open display"))
 			args.m_has_gui = false;
 		else
@@ -228,7 +229,7 @@ string window_config_path()
 }
 #endif
 
-#ifdef ARGUI_GTK4
+#ifdef ARLIB_GUI_GTK4
 void arlib_init()
 {
 	init_gui_shared_early();
@@ -771,9 +772,6 @@ public:
 			if ((int)pair.key == submit_fds[0]) // leave this fd in the runloop
 				continue;
 #endif
-			if ((int)pair.key == process::_sigchld_fd_runloop_only())
-				continue;
-			
 			if (RUNNING_ON_VALGRIND)
 				free(pair.value.valgrind_dummy); // intentional double free, to make valgrind print a stack trace of the malloc
 			else

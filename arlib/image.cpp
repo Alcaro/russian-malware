@@ -550,7 +550,7 @@ void image::convert_scanline<ifmt_rgb888_by, ifmt_xrgb8888>(void* out, const voi
 }
 
 
-#ifdef ARGUI_GTK3
+#ifdef ARLIB_GUI_GTK3
 #include <gtk/gtk.h>
 
 static bool image_decode_gtk(oimage* out, arrayview<uint8_t> data)
@@ -632,7 +632,7 @@ bool oimage::init_decode_extern(arrayview<uint8_t> data)
 {
 	this->fmt = ifmt_none;
 	return
-#ifdef ARGUI_GTK3
+#ifdef ARLIB_GUI_GTK3
 		image_decode_gtk(this, data) ||
 #endif
 		false;

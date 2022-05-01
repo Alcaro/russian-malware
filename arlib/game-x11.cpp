@@ -1,4 +1,4 @@
-#if defined(ARLIB_GAME) && defined(ARGUIPROT_X11)
+#if defined(ARLIB_GAME) && defined(ARLIB_GUI_X11)
 #include "game.h"
 #include "runloop.h"
 #include <X11/Xlib.h>

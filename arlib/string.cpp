@@ -144,7 +144,7 @@ string string::create_usurp(char * str)
 	return ret;
 }
 
-string::string(array<uint8_t>&& bytes) : cstring(noinit())
+string::string(array<uint8_t>&& bytes) : cstrnul(noinit())
 {
 	cstring tmp(bytes);
 	memcpy((void*)this, (void*)&tmp, sizeof(string));
@@ -1446,7 +1446,7 @@ test("string::natcompare", "array,memeq", "string")
 	}
 	
 	{
-		cstring strs[] = {
+		cstrnul strs[] = {
 		  "a$",
 		  "a1",
 		  "a2",
@@ -1487,12 +1487,12 @@ test("string::natcompare", "array,memeq", "string")
 		puts("");
 		for (size_t a=0;a<ARRAY_SIZE(strs);a++)
 		{
-			printf("%s%-5s",(a?" | ":"        "),strs[a].c_str().c_str());
+			printf("%s%-5s",(a?" | ":"        "),(const char*)strs[a]);
 		}
 		puts("");
 		for (size_t b=0;b<ARRAY_SIZE(strs);b++)
 		{
-			printf("%-5s", strs[b].c_str().c_str());
+			printf("%-5s", (const char*)strs[b]);
 			for (size_t a=0;a<ARRAY_SIZE(strs);a++)
 			{
 				printf(" | %-5d",string::inatcompare3(strs[a], strs[b]));

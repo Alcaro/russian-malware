@@ -18,10 +18,6 @@
 #define UNLIKELY(expr)  (expr)
 #endif
 
-#if __cplusplus < 201703L
-#error need C++17
-#endif
-
 // TODO: create a cfunction class, like string/cstring
 // or maybe ofunction, like image/oimage
 

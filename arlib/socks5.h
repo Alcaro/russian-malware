@@ -16,7 +16,7 @@ class socks5 {
 	uint16_t m_port;
 	
 public:
-	void configure(cstring host, int port, runloop* loop) {
+	void configure(cstrnul host, int port, runloop* loop) {
 		//ignore runloop, but demand it because everything else does
 		m_host = host;
 		m_port = port;
@@ -31,8 +31,8 @@ public:
 	}
 	
 #ifdef ARLIB_SSL
-	socket* connect(bool ssl, cstring domain, int port, runloop* loop);
+	socket* connect(bool ssl, cstrnul domain, int port, runloop* loop);
 #else
-	socket* connect(cstring domain, int port, runloop* loop);
+	socket* connect(cstrnul domain, int port, runloop* loop);
 #endif
 };

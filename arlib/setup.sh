@@ -7,6 +7,7 @@ program=$1
 [[ -z $program ]] && program=$(basename $(pwd))
 
 mkdir obj
+echo Signature: 8a477f597d28d172789f06886806bc55 > obj/CACHEDIR.TAG
 
 cat > arlib.h <<EOF
 #pragma once

@@ -66,7 +66,7 @@ static uint64_t sm_hash(bytesr by)
 	return hash_shuffle(hash);
 }
 
-bool staticmap::open(cstring fn, bool map_writable)
+bool staticmap::open(cstrnul fn, bool map_writable)
 {
 	if (!f.open(fn, (file2::mode)(file2::m_write | file2::m_exclusive))) return false;
 	this->map_writable = map_writable;

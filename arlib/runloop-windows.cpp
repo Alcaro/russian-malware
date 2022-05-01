@@ -5,7 +5,7 @@
 #include "test.h"
 #include <windows.h>
 
-#if defined(ARLIB_GAME) || !defined(ARGUI_NONE)
+#if defined(ARLIB_GAME) || defined(ARLIB_GUI)
 #define ENABLE_MSGPUMP
 void _window_process_events();
 #endif

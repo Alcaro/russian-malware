@@ -252,6 +252,8 @@ static int y()
 		assert_eq(g_x, 1);
 		return 42;
 	}
+	//assert(false); // should be unreachable
+	//return 0; // but clang doesn't 
 }
 test("contextmanager", "", "")
 {

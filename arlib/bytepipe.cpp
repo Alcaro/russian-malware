@@ -2,125 +2,115 @@
 
 void bytepipe::try_swap()
 {
-	if (buf1st == buf1end)
+	if (buf1st == buf1end && buf2end != 0)
 	{
 		buf1.swap(buf2);
-		buf1st = 0;
+		buf1st = buf2st;
 		buf1end = buf2end;
+		buf2st = 0;
 		buf2end = 0;
-		if (buf2.size() > 65536) buf2.resize(65536);
 	}
 }
 
-void bytepipe::push_one(arrayview<uint8_t> bytes)
+void bytepipe::push(bytesr bytes)
 {
-	arrayvieww<uint8_t> tmp = push_buf(bytes.size());
-	memcpy(tmp.ptr(), bytes.ptr(), bytes.size());
-	push_done(bytes.size());
+	bytesw target = push_begin(bytes.size());
+	memcpy(target.ptr(), bytes.ptr(), bytes.size());
+	push_finish(bytes.size());
 }
 
-void bytepipe::push_one(cstring str)
+bytesw bytepipe::push_begin(size_t nbytes)
 {
-	push(str.bytes());
-}
-
-arrayvieww<uint8_t> bytepipe::push_buf(size_t bytes)
-{
-	if (buf2end + bytes > buf2.size())
-	{
+	if (buf2.size() - buf2end < nbytes)
 		try_swap();
-	}
-	if (buf2end + bytes > buf2.size())
+	if (buf2.size() - buf2end < nbytes)
 	{
-		size_t newsize = buf2.size();
-		while (buf2end + bytes > newsize) newsize *= 2;
-		buf2.resize(newsize);
+		size_t b2s = buf2.size();
+		while (b2s-buf2end < nbytes)
+			b2s *= 2;
+		buf2.resize(b2s);
 	}
 	return buf2.skip(buf2end);
 }
 
-arrayview<uint8_t> bytepipe::pull_buf_full()
+bytesr bytepipe::pull_begin(size_t nbytes)
 {
-	if (buf1end+buf2end > buf1.size())
+	// - if the requested amount doesn't exist, just say so
+	// - if buf1 is empty, swap the buffers
+	// - if the requested amount exists in buf1 (after the swap, if applicable), return that
+	// - if the requested amount fits in buf1, memmove+memcpy and set buf2st nonzero
+	// - else an allocation must be made
+	if (size() < nbytes)
 	{
+		return {};
+	}
+	try_swap();
+	size_t size1 = buf1end - buf1st;
+	if (size1 >= nbytes)
+	{
+		return buf1.slice(buf1st, size1);
+	}
+	if (nbytes <= buf1.size())
+	{
+		size_t size2 = nbytes - size1;
 		if (buf1st != 0)
-		{
-			memmove(buf1.ptr(), buf1.skip(buf1st).ptr(), buf1end-buf1st);
-			buf1end -= buf1st;
-			buf1st = 0;
-		}
-		if (buf1end+buf2end > buf1.size())
-		{
-			if (buf1end > buf2end) buf1.resize(buf1.size()*2);
-			else buf1.resize(buf2.size()*2);
-		}
+			memmove(buf1.ptr(), buf1.ptr()+buf1st, size1);
+		memcpy(buf1.ptr()+size1, buf2.ptr()+buf2st, size2);
+		buf1st = 0;
+		buf1end = nbytes;
+		buf2st += size2;
+		return buf1.slice(0, nbytes);
 	}
-	
-	memcpy(buf1.slice(buf1end, buf2end).ptr(), buf2.ptr(), buf2end);
-	buf1end += buf2end;
-	buf2end = 0;
-	
-	return buf1.slice(buf1st, buf1end-buf1st);
+	else
+	{
+		size_t size2 = buf2end-buf2st;
+		bytearray newbuf;
+		newbuf.resize(bitround(size()));
+		memcpy(newbuf.ptr(), buf1.ptr()+buf1st, size1);
+		memcpy(newbuf.ptr()+size1, buf2.ptr()+buf2st, size2);
+		buf1 = std::move(newbuf);
+		buf1st = 0;
+		buf1end = size1+size2;
+		buf2st = 0;
+		buf2end = 0;
+		return buf1.slice(0, buf1end);
+	}
 }
 
-array<uint8_t> bytepipe::pull_buf_full_drain()
+bytesr bytepipe::pull_line()
 {
-	if (buf1st != 0)
-	{
-		memmove(buf1.skip(buf1st).ptr(), buf1.ptr(), buf1end-buf1st);
-		buf1end -= buf1st;
-	}
-	if (buf2end != 0)
-	{
-		if (buf1end+buf2end > buf1.size())
-		{
-			size_t newsize = buf1.size();
-			while (buf1end+buf2end > newsize) newsize *= 2;
-			buf1.resize(newsize);
-		}
-		memcpy(buf1.skip(buf1end).ptr(), buf2.ptr(), buf2end);
-		buf1end += buf2end;
-	}
+	bytesr chunk1 = buf1.slice(buf1st, buf1end-buf1st);
+	const uint8_t * nl1 = (uint8_t*)memchr(chunk1.ptr(), '\n', chunk1.size());
+	if (nl1)
+		return pull(nl1+1 - chunk1.ptr());
 	
-	array<uint8_t> ret = std::move(buf1);
-	ret.resize(buf1end);
+	bytesr chunk2 = buf2.slice(buf2st, buf2end-buf2st);
+	const uint8_t * nl2 = (uint8_t*)memchr(chunk2.ptr(), '\n', chunk2.size());
+	if (nl2)
+		return pull(nl2+1 - chunk2.ptr() + chunk1.size());
 	
-	reset();
-	return ret;
+	return {};
 }
 
-arrayview<uint8_t> bytepipe::pull_line()
+bytesr bytepipe::trim_line(bytesr line)
 {
-	uint8_t* start = buf1.ptr()+buf1st;
-	size_t len = buf1end-buf1st;
-	uint8_t* nl = (uint8_t*)memchr(start, '\n', len);
-	if (nl)
-	{
-		return arrayview<uint8_t>(start, nl+1-start);
-	}
-	
-	nl = (uint8_t*)memchr(buf2.ptr(), '\n', buf2end);
-	if (nl)
-	{
-		size_t pos = buf1end-buf1st + nl+1-buf2.ptr();
-		return pull_buf_full().slice(0, pos);
-	}
-	
-	return NULL;
-}
-
-arrayview<uint8_t> bytepipe::trim_line(arrayview<uint8_t> line)
-{
-	if (line.size()==1) return NULL;
+	if (line.size()==1) return {};
 	if (line[line.size()-2]=='\r') return line.slice(0, line.size()-2);
 	else return line.slice(0, line.size()-1);
 }
 
+void bytepipe::bufsize(size_t newsize)
+{
+	if (newsize > buf1end) buf1.resize(newsize);
+	if (newsize > buf2end) buf2.resize(newsize);
+}
+
 void bytepipe::reset()
 {
-	buf1.resize(1024);
+	buf1.resize(256);
 	buf1st = 0;
 	buf1end = 0;
-	buf2.resize(1024);
+	buf2.resize(256);
+	buf2st = 0;
 	buf2end = 0;
 }

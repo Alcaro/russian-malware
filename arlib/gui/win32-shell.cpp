@@ -1,5 +1,5 @@
 #include "window.h"
-#ifdef ARGUI_WINDOWS
+#ifdef ARLIB_GUI_WINDOWS
 #include <windows.h>
 #include <commctrl.h>
 

@@ -1,5 +1,5 @@
 #include "os.h"
-#include "test.h"
+#include "time.h"
 
 // Returns a*b/c, but gives the correct answer if a*b doesn't fit in uint64_t.
 // (May give wrong answer if a*b/c doesn't fit, or if b*c > UINT64_MAX.)
@@ -45,6 +45,29 @@ uint64_t time_us()
 uint64_t time_ms()
 {
 	return time_us() / 1000;
+}
+
+#define WINDOWS_TICK 10000000
+#define SEC_TO_UNIX_EPOCH 11644473600LL
+
+timestamp timestamp::from_native(FILETIME time)
+{
+	int64_t tmp = ((uint64_t)time.dwHighDateTime << 32) | time.dwLowDateTime;
+	
+	timestamp ret;
+	ret.sec = tmp / WINDOWS_TICK - SEC_TO_UNIX_EPOCH;
+	ret.nsec = tmp % WINDOWS_TICK * (1000000000/WINDOWS_TICK);
+	return ret;
+}
+
+FILETIME timestamp::to_native() const
+{
+	int64_t tmp = (sec + SEC_TO_UNIX_EPOCH) * WINDOWS_TICK + nsec / (1000000000/WINDOWS_TICK);
+	
+	FILETIME ret;
+	ret.dwLowDateTime = tmp & 0xFFFFFFFF;
+	ret.dwHighDateTime = tmp>>32;
+	return ret;
 }
 #else
 #include <time.h>
@@ -125,6 +148,8 @@ time_t timegm(struct tm * t)
     return (result);
 }
 #endif
+
+#include "test.h"
 
 test("time", "", "time")
 {

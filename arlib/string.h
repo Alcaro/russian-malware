@@ -59,6 +59,11 @@ static inline bool isualnum(uint8_t c) { return char_props[c] & 0x68; }
 // In most contexts, it's called stringview, but I feel that's too long.
 // Long ago, cstring was just a typedef to 'const string&', hence its name.
 
+// The child classes put various constraints on their contents that the parent does not; they do not obey the Liskov substitution principle.
+// Any attempt to turn a string into cstring&, then call operator= or otherwise mutate it, is object slicing and undefined behavior.
+
+class cstring;
+class cstrnul;
 class string;
 
 #define OBJ_SIZE 16 // maximum 120, or the inline length overflows
@@ -69,6 +74,7 @@ class string;
 
 class cstring {
 	friend class string;
+	friend class cstrnul;
 	friend bool operator==(const cstring& left, const cstring& right);
 #if __GNUC__ == 7
 	template<size_t N> friend inline bool operator==(const cstring& left, const char (&right)[N]);
@@ -179,28 +185,8 @@ public:
 	cstring() { init_empty(); }
 	cstring(const cstring& other) = default;
 	
-#if __GNUC__ == 7
-	// disgusting hack to help gcc optimize string literal arguments properly
-	// gcc 8+ optimizes properly, no need for this
-	template<size_t N> void init_from_nocopy_literal(const char (&str)[N])
-	{
-#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ >= 8 && __GNUC__ <= 10 && __cplusplus >= 201103
-		// https://gcc.gnu.org/bugzilla/show_bug.cgi?id=91212
-		// (dead code, but will keep as a reminder that this bug exists)
-		init_from_nocopy((uint8_t*)str, strlen(str), true);
-#else
-		init_from_nocopy((uint8_t*)str, N-1, str[N-1]=='\0');
-#endif
-	}
-	
-	template<typename T, typename = std::enable_if_t<std::is_same_v<T,const char*> || std::is_same_v<T,char*>>>
-	cstring(T str) { init_from_nocopy(str); }
-	template<size_t N> cstring(const char (&str)[N]) { init_from_nocopy_literal<N>(str); }
-	template<size_t N> cstring(char (&str)[N]) { init_from_nocopy(str); } // hack on a hack - char buf[32] isn't a literal
-#else
 	cstring(const char * str) { init_from_nocopy(str); }
-#endif
-	
+	cstring(const char8_t * str) { init_from_nocopy((char*)str); }
 	cstring(arrayview<uint8_t> bytes) { init_from_nocopy(bytes); }
 	cstring(arrayview<char> chars) { init_from_nocopy(chars.reinterpret<uint8_t>()); }
 	cstring(nullptr_t) { init_empty(); }
@@ -208,10 +194,10 @@ public:
 	cstring(arrayview<uint8_t> bytes, bool has_nul) { init_from_nocopy(bytes, has_nul); }
 	cstring& operator=(const cstring& other) = default;
 	cstring& operator=(const char * str) { init_from_nocopy(str); return *this; }
+	cstring& operator=(const char8_t * str) { init_from_nocopy((char*)str); return *this; }
 	cstring& operator=(nullptr_t) { init_empty(); return *this; }
 	
 	explicit operator bool() const { return length() != 0; }
-	//explicit operator const char * () const { return ptr_withnul(); }
 	
 	char operator[](int index) const { return ptr()[index]; }
 	
@@ -366,6 +352,7 @@ private:
 		}
 		operator const char *() const { return ptr; }
 		const char * c_str() const { return ptr; }
+		inline operator cstrnul() const;
 		~c_string() { if (do_free) free(ptr); }
 	};
 public:
@@ -374,14 +361,46 @@ public:
 };
 
 
-class string : public cstring {
+// Like cstring, but guaranteed to have a nul terminator.
+class cstrnul : public cstring {
 	friend class cstring;
+	friend class string;
+	forceinline const char * ptr_withnul() const { return (char*)ptr(); }
+	
+	class has_nul {};
+	cstrnul(noinit) : cstring(noinit()) {}
+	cstrnul(arrayview<uint8_t> bytes, has_nul) : cstring(noinit()) { init_from_nocopy(bytes, true); }
+	
+public:
+	cstrnul() { init_empty(); }
+	cstrnul(const cstrnul& other) = default;
+	cstrnul(const char * str) { init_from_nocopy(str); }
+	
+	cstrnul(nullptr_t) { init_empty(); }
+	cstrnul& operator=(const cstring& other) = delete;
+	cstrnul& operator=(const cstrnul& other) = default;
+	cstrnul& operator=(const char * str) { init_from_nocopy(str); return *this; }
+	cstrnul& operator=(nullptr_t) { init_empty(); return *this; }
+	
+	explicit operator bool() const { return length() != 0; }
+	operator const char * () const { return ptr_withnul(); }
+	
+	cstrnul substr_nul(int32_t start) const
+	{
+		start = realpos(start);
+		return cstrnul(arrayview<uint8_t>(ptr()+start, length()-start), has_nul());
+	}
+};
+
+
+class string : public cstrnul {
+	friend class cstring;
+	friend class cstrnul;
 	
 	static size_t bytes_for(size_t len) { return bitround(len+1); }
 	forceinline uint8_t * ptr() { return (uint8_t*)cstring::ptr(); }
 	forceinline const uint8_t * ptr() const { return cstring::ptr(); }
 	void resize(size_t newlen);
-	forceinline const char * ptr_withnul() const { return (char*)ptr(); }
 	
 	void init_from(const char * str)
 	{
@@ -481,38 +500,22 @@ public:
 	string& operator+=(unsigned right) = delete;
 	
 	
-	string() : cstring(noinit()) { init_empty(); }
-	string(const string& other) : cstring(noinit()) { init_from(other); }
-	string(string&& other) : cstring(noinit()) { init_from(std::move(other)); }
+	string() : cstrnul(noinit()) { init_empty(); }
+	string(const string& other) : cstrnul(noinit()) { init_from(other); }
+	string(string&& other) : cstrnul(noinit()) { init_from(std::move(other)); }
 	
-#if __GNUC__ == 7
-	// disgusting hack to help gcc optimize string literal arguments properly
-	template<size_t N> void init_from_literal(const char (&str)[N])
-	{
-#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ >= 8 && __GNUC__ <= 10 && __cplusplus >= 201103
-		// https://gcc.gnu.org/bugzilla/show_bug.cgi?id=91212
-		init_from(arrayview<uint8_t>((uint8_t*)str, strlen(str)));
-#else
-		init_from(arrayview<uint8_t>((uint8_t*)str, N-1));
-#endif
-	}
-	template<typename T, typename Ttest = std::enable_if_t<std::is_same_v<T,const char*> || std::is_same_v<T,char*>>>
-	forceinline string(T str) : cstring(noinit()) { init_from(str); } // disgusting hack to optimize string literal arguments
-	template<size_t N> forceinline string(const char (&str)[N]) : cstring(noinit()) { init_from_literal<N>(str); }
-	template<size_t N> forceinline string(char (&str)[N]) : cstring(noinit()) { init_from(str); } // hack on a hack - char buf[32] isn't a literal
-#else
-	forceinline string(const char * str) : cstring(noinit()) { init_from(str); }
-#endif
-	
-	forceinline string(cstring other) : cstring(noinit()) { init_from(other); }
-	forceinline string(arrayview<uint8_t> bytes) : cstring(noinit()) { init_from(bytes); }
-	forceinline string(arrayview<char> chars) : cstring(noinit()) { init_from(chars.reinterpret<uint8_t>()); }
+	forceinline string(cstring other) : cstrnul(noinit()) { init_from(other); }
+	forceinline string(arrayview<uint8_t> bytes) : cstrnul(noinit()) { init_from(bytes); }
+	forceinline string(arrayview<char> chars) : cstrnul(noinit()) { init_from(chars.reinterpret<uint8_t>()); }
+	forceinline string(const char * str) : cstrnul(noinit()) { init_from(str); }
+	forceinline string(const char8_t * str) : cstrnul(noinit()) { init_from((char*)str); }
 	string(array<uint8_t>&& bytes);
 	forceinline string(nullptr_t) = delete;
 	forceinline string& operator=(const string& other) { reinit_from(other); return *this; }
 	forceinline string& operator=(const cstring& other) { reinit_from(other); return *this; }
 	forceinline string& operator=(string&& other) { reinit_from(std::move(other)); return *this; }
 	forceinline string& operator=(const char * str) { reinit_from(str); return *this; }
+	forceinline string& operator=(const char8_t * str) { reinit_from((char*)str); return *this; }
 	forceinline string& operator=(nullptr_t) { deinit(); init_empty(); return *this; }
 	~string() { deinit(); }
 	
@@ -565,6 +568,7 @@ private:
 	static int natcompare3(cstring a, cstring b, bool case_insensitive);
 public:
 };
+cstring::c_string::operator cstrnul() const { return ptr; }
 
 // TODO: I need a potentially-owning string class
 // cstring never owns memory, string always does, new one has a flag for whether it does

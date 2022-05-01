@@ -222,9 +222,12 @@ public:
 		int nev = epoll_wait(epoll_fd, ev, 16, next);
 		for (int i=0;i<nev;i++)
 		{
-			fd_cbs& cbs = fdinfo[ev[i].data.fd];
-			     if ((ev[i].events & RD_EV) && cbs.cb_read)  cbs.cb_read( ev[i].data.fd);
-			else if ((ev[i].events & WR_EV) && cbs.cb_write) cbs.cb_write(ev[i].data.fd);
+			fd_cbs* cbs = fdinfo.get_or_null(ev[i].data.fd); // can be null if multiple were readable, and one's callback removes the other
+			// will return false positive if fds 3 and 4 are readable, processing 3 closes 4, and another 4 is created and added,
+			// but that only causes an extra EWOULDBLOCK that does no harm
+			if (!cbs) continue;
+			     if ((ev[i].events & RD_EV) && cbs->cb_read)  cbs->cb_read( ev[i].data.fd);
+			else if ((ev[i].events & WR_EV) && cbs->cb_write) cbs->cb_write(ev[i].data.fd);
 		}
 	}
 	
@@ -246,7 +249,7 @@ public:
 	/*private*/ void submit_cb(uintptr_t)
 	{
 		function<void()> cb;
-		//we know the write pushed a complete one of those, we can assume we can read it out
+		//we know the write pushed a complete function, we can assume we can read it out
 		if (read(submit_fds[0], &cb, sizeof(cb)) != sizeof(cb)) abort();
 		cb();
 	}
@@ -337,7 +340,7 @@ runloop* runloop::create()
 	return runloop_wrap_blocktest(new runloop_linux());
 }
 
-#ifdef ARGUI_NONE
+#ifndef ARLIB_GUI
 runloop* runloop::global()
 {
 	static runloop* ret = NULL;

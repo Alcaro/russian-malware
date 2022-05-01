@@ -316,10 +316,10 @@ public:
 
 }
 
-socket* socket::wrap_ssl_raw_schannel(socket* inner, cstring domain, runloop* loop)
+socket* socket::wrap_ssl_raw_schannel(socket* inner, cstrnul domain, runloop* loop)
 {
 	socketssl_schannel* ret = new socketssl_schannel();
-	if (!ret->init(inner, domain.c_str(), false, loop)) { delete ret; return NULL; }
+	if (!ret->init(inner, domain, false, loop)) { delete ret; return NULL; }
 	else return ret;
 }
 socket* socket::wrap_ssl_raw_schannel_noverify(socket* inner, runloop* loop)

@@ -1,6 +1,6 @@
 #pragma once
 #include "../global.h"
-#ifndef ARGUI_NONE
+#ifdef ARLIB_GUI
 #include "../gui/window.h"
 #endif
 
@@ -121,7 +121,7 @@ protected:
 		return create(context::create(width, height, parent, window, flags), symNames, symDest);
 	}
 	
-#ifndef ARGUI_NONE
+#ifdef ARLIB_GUI
 	bool create(widget_viewport* port, uint32_t flags, const char * symNames, funcptr* symDest)
 	{
 		uintptr_t newwindow;
@@ -135,7 +135,7 @@ protected:
 #endif
 	
 public:
-#ifndef ARGUI_NONE
+#ifdef ARLIB_GUI
 	//If the object is created via window IDs, this must be called after the window is resized.
 	//If created from a viewport or gameview, this is configured automatically, and not necessary.
 	//In both cases, make sure to also call gl.Viewport(0, 0, width, height) (or disable resizing), or OpenGL will do something weird.
@@ -165,7 +165,7 @@ public:
 	//Not needed if the object is created from a viewport.
 	void destroy()
 	{
-#ifndef ARGUI_NONE
+#ifdef ARLIB_GUI
 		if (port)
 		{
 			port->set_child(0, NULL, NULL);
@@ -186,7 +186,7 @@ public:
 	
 private:
 	context* core = NULL;
-#ifndef ARGUI_NONE
+#ifdef ARLIB_GUI
 	widget_viewport* port = NULL;
 #endif
 };

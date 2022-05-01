@@ -7,14 +7,14 @@ aropengl() {}
 aropengl(context* core) { create(core); }
 aropengl(uint32_t width, uint32_t height, uintptr_t parent, uintptr_t* window, uint32_t flags) {
 	create(width, height, parent, window, flags); }
-#ifndef ARGUI_NONE
+#ifdef ARLIB_GUI
 aropengl(widget_viewport* port, uint32_t flags) { create(port, flags); }
 #endif
 
 bool create(context* core) { return aropengl_base::create(core, internalGetSymNames(), internalGetSymDest()); }
 bool create(uint32_t width, uint32_t height, uintptr_t parent, uintptr_t* window, uint32_t flags) {
 	return aropengl_base::create(width, height, parent, window, flags, internalGetSymNames(), internalGetSymDest()); }
-#ifndef ARGUI_NONE
+#ifdef ARLIB_GUI
 bool create(widget_viewport* port, uint32_t flags) {
 	return aropengl_base::create(port, flags, internalGetSymNames(), internalGetSymDest()); }
 #endif

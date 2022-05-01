@@ -165,7 +165,7 @@ again:
 	parse_url(q.url, false, loc); // known to succeed, it was tested in send()
 	
 	bytepipe tosend;
-	tosend.push(method, " ", loc.path, " HTTP/1.1\r\n");
+	tosend.push_text(method, " ", loc.path, " HTTP/1.1\r\n");
 	
 	bool httpHost = false;
 	bool httpContentLength = false;
@@ -177,28 +177,29 @@ again:
 		if (head.startswith("Content-Length:")) httpContentLength = true;
 		if (head.startswith("Content-Type:")) httpContentType = true;
 		if (head.startswith("Connection:")) httpConnection = true;
-		tosend.push(head, "\r\n");
+		tosend.push_text(head, "\r\n");
 	}
 	
-	if (!httpHost) tosend.push("Host: ", loc.domain, "\r\n");
-	if (!httpContentLength && method != "GET") tosend.push("Content-Length: ", tostring(q.body.size()), "\r\n");
+	if (!httpHost) tosend.push_text("Host: ", loc.domain, "\r\n");
+	if (!httpContentLength && method != "GET") tosend.push_text("Content-Length: ", tostring(q.body.size()), "\r\n");
 	if (!httpContentType && q.body)
 	{
 		if (q.body && (q.body[0] == '[' || q.body[0] == '{'))
-			tosend.push("Content-Type: application/json\r\n");
+			tosend.push_text("Content-Type: application/json\r\n");
 		else
-			tosend.push("Content-Type: application/x-www-form-urlencoded\r\n");
+			tosend.push_text("Content-Type: application/x-www-form-urlencoded\r\n");
 	}
-	if (!httpConnection) tosend.push("Connection: keep-alive\r\n");
+	if (!httpConnection) tosend.push_text("Connection: keep-alive\r\n");
 	
-	tosend.push("\r\n");
+	tosend.push_text("\r\n");
 	
 	tosend.push(q.body);
 	
-	bool ok = true;
-	if (ok && sock->send(tosend.pull_buf( )) < 0) ok = false;
-	if (ok && sock->send(tosend.pull_next()) < 0) ok = false;
-	if (!ok) sock = NULL;
+	while (sock && tosend.size())
+	{
+		if (sock->send(tosend.pull_any()) < 0)
+			sock = nullptr;
+	}
 	
 	next_send++;
 }

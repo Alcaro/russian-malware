@@ -1,4 +1,4 @@
-#if __GNUC__ >= 11 && !defined(_WIN32)
+#if (__GNUC__ >= 11 || __clang_major__ >= 14) && !defined(_WIN32)
 #define HAVE_TO_CHARS
 
 // from_chars
@@ -11,7 +11,7 @@
 // as such, I cannot use it
 //#define HAVE_FROM_CHARS
 
-#include <charconv> // this includes <cctype> in gcc <= 11, which does not like Arlib's overridden ctype functions
+#include <charconv> // this includes <cctype> in gcc <= 11.3, which does not like Arlib's overridden ctype functions
 #if __GNUC__ >= 12
 #warning rearrange the includes
 #endif
@@ -470,13 +470,14 @@ string tostring_float(T f)
 	if (UNLIKELY(isinf(f))) return signbit(f) ? "-inf" : "inf";
 	
 	// special case integers
-	if ((T)(int64_t)f == f && abs((int64_t)f) < (int64_t)(T)10000000000000000)
+	// contains a few weird pieces to help the compiler optimize some common subexpressions
+	if (fabs(f) < (T)10000000000000000 && (T)(int64_t)fabs(f) == fabs(f))
 	{
 		// the function gets confused by fixed=true exponent>0, but it ends up doing what's needed
-		return tostring_float_part2(signbit(f), true, 1, abs((int64_t)f));
+		return tostring_float_part2(signbit(f), true, 1, (int64_t)fabs(f));
 	}
 	
-	bool fixed = (fabs(f) >= (T)0.0001 && abs((int64_t)f) < (int64_t)(T)10000000000000000.0);
+	bool fixed = (fabs(f) >= (T)0.0001 && fabs(f) < (T)10000000000000000);
 	namespace dbp = jkj::dragonbox::policy;
 	auto r = jkj::dragonbox::to_decimal<T>(f, dbp::cache::compact, dbp::trailing_zero::ignore, dbp::sign::ignore);
 	return tostring_float_part2(signbit(f), fixed, r.exponent, r.significand);
@@ -1063,12 +1064,14 @@ test("string conversion - float to string", "", "string")
 	assert_eq(tostring(5.3169119831396629013e+36), "5.316911983139663e+36"); // another increment-last
 	assert_eq(tostring(5.3169119831396634916e+36), "5.316911983139664e+36"); // (four of these six are just the tricky ones' neighbors,
 	assert_eq(tostring(5.3169119831396646722e+36), "5.316911983139665e+36"); //  for human readers)
+	assert_eq(tostring(9223372036854775808.0), "9.223372036854776e+18"); // abs((int64_t)this) is less than the 10000000000000000 threshold
 	
 	assert_eq(tostring(0.000099999990197829902172088623046875f ), "9.999999e-5");
 	assert_eq(tostring(0.0000999999974737875163555145263671875f), "0.0001"); // (float)0.0001 < 0.0001, but should be decimal anyways
 	assert_eq(tostring(0.0001000000047497451305389404296875f   ), "0.000100000005"); // also test the two numbers around it
 	assert_eq(tostring( 9999999198822400.0f), "9999999198822400");
-	assert_eq(tostring(10000000272564224.0f), "1e+16");
+	assert_eq(tostring(10000000000000000.0f), "1e+16");
+	assert_eq(10000000000000000.0f, 10000000272564224.0f);
 	assert_eq(tostring(10000001346306048.0f), "1.0000001e+16");
 	assert_eq(tostring(0.0000000000000000000000000000000000000000000014012984643248170709f), "1e-45"); // smallest positive float
 	assert_eq(tostring(340282346638528859811704183484516925440.0f), "3.4028235e+38"); // max possible float
@@ -1087,4 +1090,5 @@ test("string conversion - float to string", "", "string")
 	assert_eq(tostring(4.30373586499999995214071901727947988547384738922119140625e-15f), "4.303736e-15"); // easy to round wrong
 	assert_eq(tostring(-1234567948140544.0f), "-1234567948140544"); // longest float
 	assert_eq(tostring(-1.2345678e+23f), "-1.2345678e+23"); // longest float in exponential form
+	assert_eq(tostring(9223372036854775808.0f), "9.223372e+18"); // INT64_MIN again
 }

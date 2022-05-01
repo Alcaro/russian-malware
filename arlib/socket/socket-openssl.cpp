@@ -43,7 +43,7 @@ public:
 	string domain;
 #endif
 	
-	socketssl_openssl(socket* parent, cstring domain, runloop* loop, bool permissive)
+	socketssl_openssl(socket* parent, cstrnul domain, runloop* loop, bool permissive)
 	{
 		this->loop = loop;
 		
@@ -53,7 +53,7 @@ public:
 		to_sock = BIO_new(BIO_s_mem());
 		from_sock = BIO_new(BIO_s_mem());
 		
-		SSL_set_tlsext_host_name(ssl, (const char*)domain.c_str());
+		SSL_set_tlsext_host_name(ssl, (const char*)domain);
 		SSL_set_bio(ssl, from_sock, to_sock);
 		
 		//what kind of drugs are SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER,
@@ -67,14 +67,14 @@ public:
 		if (!permissive)
 		{
 			X509_VERIFY_PARAM* param = SSL_get0_param(ssl);
-			X509_VERIFY_PARAM_set1_host(param, domain.c_str(), 0);
+			X509_VERIFY_PARAM_set1_host(param, domain, 0);
 		}
 #endif
 		
 #if OPENSSL_VERSION_NUMBER >= 0x10100000 // >= 1.1.0
 //#error test, especially [gs]et0 vs [gs]et1
 //#error also check whether set_tlsext_host_name is needed
-		SSL_set1_host(ssl, domain.c_str());
+		SSL_set1_host(ssl, domain);
 #endif
 		
 		update();
@@ -104,7 +104,7 @@ public:
 			if (!permissive)
 			{
 				X509* cert = SSL_get_peer_certificate(ssl);
-				if (!validate_hostname(domain.c_str(), cert))
+				if (!validate_hostname(domain, cert))
 					sock = NULL;
 				X509_free(cert);
 			}
@@ -253,7 +253,7 @@ public:
 	}
 };
 
-socket* socket::wrap_ssl_raw_openssl(socket* inner, cstring domain, runloop* loop)
+socket* socket::wrap_ssl_raw_openssl(socket* inner, cstrnul domain, runloop* loop)
 {
 	initialize();
 	if (!ctx) return NULL;

@@ -1,7 +1,7 @@
 #include "window.h"
 #include "../file.h"
 #include "../os.h"
-#ifdef ARGUI_WINDOWS
+#ifdef ARLIB_GUI_WINDOWS
 #include <windows.h>
 #include <commdlg.h>
 #ifdef ARLIB_WUTF

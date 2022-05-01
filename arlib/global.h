@@ -348,6 +348,9 @@ protected:
 	NO_MOVE(nomove);
 };
 
+// For use in, for example, std::conditional. All usage of this class should be annotated with [[no_unique_address]].
+struct empty_class {};
+
 #ifndef ARLIB_STANDALONE
 template<typename T>
 class autoptr : nocopy {
@@ -491,6 +494,7 @@ forceinline bool memeq(const void * a, const void * b, size_t len)
 {
 #ifdef __GNUC__
 	if (!__builtin_constant_p(len)) return !memcmp(a, b, len);
+#endif
 	
 #if defined(__i386__) || defined(__x86_64__)
 	// several ideas borrowed from clang !memcmp(variable, constant, constant) output
@@ -522,7 +526,6 @@ forceinline bool memeq(const void * a, const void * b, size_t len)
 	// no point doing an SSE version, large constant sizes are rare
 #else
 #error enable the above on platforms where unaligned mem access is fast
-#endif
 #endif
 	
 	return !memcmp(a, b, len);
@@ -890,7 +893,7 @@ using std::signbit;
 //     A hybrid DLL calling LoadLibrary is safe, as long as it also calls FreeLibrary.
 // - If a normal DLL imports a symbol that doesn't exist from another DLL, LoadLibrary's caller gets an error.
 //     If a hybrid DLL imports a symbol that doesn't exist, it will remain as NULL, and will crash if called. You can't even
-//     NULL check them, compiler will optimize it out. If you need that feature, use LoadLibrary or an applicable Arlib wrapper.
+//     NULL check them, compiler will optimize it out. If you need that feature, use LoadLibrary or an appropriate wrapper.
 // - Compiler-supported thread local storage in DLLs paths is unlikely to work. (TlsAlloc is fine.)
 // - It uses a couple of GCC extensions, with no MSVC equivalent. (Though the rest of Arlib isn't tested under MSVC either.)
 // - Not tested outside i386 and x86_64, and likely to misbehave arbitrarily.

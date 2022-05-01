@@ -5,7 +5,7 @@
 //clock_gettime(CLOCK_MONOTONIC, &tv);
 //return tv.tv_sec*(uint64_t)1000000000 + tv.tv_nsec;}
 #include "window.h"
-#ifdef ARGUI_GTK3
+#ifdef ARLIB_GUI_GTK3
 #include <gtk/gtk.h>
 #include <stdlib.h>
 #include <string.h>

@@ -73,8 +73,8 @@ void WebSocket::activity()
 		if (line == "")
 		{
 			inHandshake = false;
-			sock->send(tosend.pull_buf());
-			sock->send(tosend.pull_next());
+			while (tosend.size())
+				sock->send(tosend.pull_any());
 			tosend.reset();
 		}
 		msg = msg.skip(lf+1);
@@ -165,7 +165,8 @@ void WebSocket::send(arrayview<uint8_t> message, int type)
 	header.u32b(0); // mask key
 	if (inHandshake)
 	{
-		tosend.push(header.finish(), message);
+		tosend.push(header.finish());
+		tosend.push(message);
 	}
 	else
 	{

@@ -28,16 +28,18 @@
 #include "crc32.h"
 #include "deflate.h"
 #include "image.h"
+#include "prioqueue.h"
 #include "process.h"
 #include "regex.h"
 #include "runloop.h"
 #include "serialize.h"
+#include "staticmap.h"
 #include "terminal.h"
 #include "test.h"
+#include "time.h"
 #include "zip.h"
-#include "staticmap.h"
 
-#ifndef ARGUI_NONE
+#ifdef ARLIB_GUI
 #include "gui/window.h"
 #endif
 

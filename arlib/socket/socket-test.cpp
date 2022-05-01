@@ -92,14 +92,14 @@ test("TCP client",  "dns", "tcp")
 	socket_test_http(socket::create("www.nic.ad.jp",  80, loop), loop);
 }
 
-static void ssltest(function<socket*(socket* inner, cstring domain, runloop* loop)> wrap_raw,
+static void ssltest(function<socket*(socket* inner, cstrnul domain, runloop* loop)> wrap_raw,
                     function<socket*(socket* inner,                 runloop* loop)> wrap_raw_unsafe)
 {
 	test_skip("too slow");
 	
 	autoptr<runloop> loop = runloop::create();
 	
-	auto dotest = [&](cstring desc, cstring domain, int port, bool should_succeed = true, bool unsafe = false) {
+	auto dotest = [&](cstring desc, cstrnul domain, int port, bool should_succeed = true, bool unsafe = false) {
 		testctx(desc) {
 			socket* sock_raw = socket::create_raw(domain, port, loop);
 			socket* sock_ssl = (!unsafe ? wrap_raw(sock_raw, domain, loop) : wrap_raw_unsafe(sock_raw, loop));

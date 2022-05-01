@@ -207,7 +207,7 @@ public:
 	MAKE_DESTRUCTIBLE_FROM_CALLBACK();
 	bool errored = false;
 	
-	socketssl_bearssl(socket* inner, cstring domain, runloop* loop, bool permissive)
+	socketssl_bearssl(socket* inner, cstrnul domain, runloop* loop, bool permissive)
 	{
 		this->sock = inner;
 		
@@ -219,7 +219,7 @@ public:
 		//	br_ssl_engine_set_x509(&s.sc.eng, &s.xwc.vtable);
 		//}
 		br_ssl_engine_set_buffer(&s.sc.eng, s.iobuf, sizeof(s.iobuf), true);
-		br_ssl_client_reset(&s.sc, domain.c_str(), false);
+		br_ssl_client_reset(&s.sc, domain, false);
 		
 		set_child_cb();
 	}
@@ -388,7 +388,7 @@ public:
 };
 }
 
-socket* socket::wrap_ssl_raw_bearssl(socket* inner, cstring domain, runloop* loop)
+socket* socket::wrap_ssl_raw_bearssl(socket* inner, cstrnul domain, runloop* loop)
 {
 	initialize();
 	if (alloc_certs_initial == alloc_certs) return NULL;

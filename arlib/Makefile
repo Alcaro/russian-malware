@@ -211,12 +211,12 @@ DEFINES += ARLIB_OBJNAME=$(OBJNAME)
 ifeq ($(ARGUI),1)
   SOURCES_ARLIB += arlib/gui/*.cpp
   ifeq ($(OS),windows)
-    DEFINES += ARGUI_WINDOWS
+    DEFINES += ARLIB_GUI ARLIB_GUI_WINDOWS
     CONF_LFLAGS += -lgdi32 -lcomctl32 -lcomdlg32
     ARTERMINAL_HASGUI = 1
   endif
   ifeq ($(OS),linux)
-    DEFINES += ARGUI_GTK3 ARGUIPROT_X11
+    DEFINES += ARLIB_GUI ARLIB_GUI_GTK3 ARLIB_GUI_X11
     CONF_CFLAGS += $(shell pkg-config --cflags gtk+-3.0)
     CONF_LFLAGS += -lX11 $(shell pkg-config --libs gtk+-3.0)
     ifneq ($(OPT),0)
@@ -226,15 +226,13 @@ ifeq ($(ARGUI),1)
   endif
 else ifeq ($(ARGUI),gtk4)
   SOURCES_ARLIB += arlib/gui/*.cpp
-  DEFINES += ARGUI_GTK4
+  DEFINES += ARLIB_GUI ARLIB_GUI_GTK4
   CONF_CFLAGS += $(shell pkg-config --cflags gtk4)
   CONF_LFLAGS += -lX11 $(shell pkg-config --libs gtk4)
   ifneq ($(OPT),0)
     # these are useful on debug builds, but on release builds, they just waste space
     DEFINES += G_DISABLE_CAST_CHECKS
   endif
-else
-  DEFINES += ARGUI_NONE
 endif
 
 ifeq ($(ARGAME),1)
@@ -252,7 +250,7 @@ ifeq ($(AROPENGL),1)
   SOURCES_ARLIB += arlib/opengl/*.cpp
   DEFINES += ARLIB_OPENGL
   ifeq ($(OS),linux)
-    DEFINES += ARGUIPROT_X11
+    DEFINES += ARLIB_GUI_X11
     CONF_LFLAGS += -lX11
   endif
   ifeq ($(AROPENGL_D3DSYNC),1)
@@ -345,6 +343,7 @@ ifeq ($(ARSOCKET),1)
     OBJS_LATE += arlib/deps/bearssl-0.6/build-$(OS)$(WINBITS)/libbearssl.a
     arlib/deps/bearssl-0.6/build-$(OS)$(WINBITS)/libbearssl.a:
       # BearSSL detects mingw32-make as Unix; override some variables into something shell-neutral
+	  @echo Signature: 8a477f597d28d172789f06886806bc55 > arlib/deps/bearssl-0.6/build-$(OS)$(WINBITS)/CACHEDIR.TAG
 	  $(MAKE) -C arlib/deps/bearssl-0.6/ lib CFLAGS='$(OPTFLAGS) -fpic' BUILD=build-$(OS)$(WINBITS) OBJDIR=build-$(OS)$(WINBITS) CC=$(CC) MKDIR=mkdir
   endif
   ifneq ($(filter-out schannel openssl bearssl,$(ARSOCKET_SSL)),)
@@ -391,8 +390,6 @@ TRUE_CFLAGS := -std=c99 $(CCXXFLAGS) $(CONF_CFLAGS) $(CFLAGS)
 # - Ban non-twos-complement signed - will probably enable various other language simplifications and improvements
 # - void foo(auto arg) (shorthand for template<typename T> void foo(T arg) - simplifies function::bind_member)
 # - Designated initializers (foo_t foo = { .a = 42, .b = 123 })
-# - complete <charconv>, to speed up tostring(float) (though I'll need to keep the current one around anyways, for Windows)
-#    present in GCC 11
 # - std::stacktrace (C++23), to delete the testcall macro (and probably simplify debug.cpp)
 # - [[trivially_relocatable]] http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p1144r3.html
 # - Lambdas without braces/return, function<int(int)> mul2 = [](int i) => i*2; https://wg21.link/p0573 (useful for LINQ)
@@ -408,10 +405,12 @@ TRUE_CFLAGS := -std=c99 $(CCXXFLAGS) $(CONF_CFLAGS) $(CFLAGS)
 # - Overloading operator[] depending on whether it's a read or write access, int x = std::map[key_t] mutating is silly
 #     not sure if map[key].foo.bar() should count as read or write; not all wishes are realistic
 # - Modules, if they're good (I haven't looked into them, it's easy to make a bad module system)
-# - Virtual constants - constants stored directly in the vtable (as opposed to a function that returns the constant)
+# - Virtual constants, constants stored directly in the vtable (as opposed to a function that returns the constant)
+# - Singleton tag on a class - there's exactly one instance of it, and it's a global. Compiler is allowed to optimize the this pointer into a constant.
+#     More for bsnes than myself, but we both would benefit.
 # - #elifdef, #elifndef
-# Much of the above exists in C++20, but I'm choosing to stay with C++17 for a while. I'd prefer to stay compatible with latest Ubuntu LTS.
-TRUE_CXXFLAGS := -std=c++17 -fno-rtti $(CCXXFLAGS) $(CONF_CXXFLAGS) $(CXXFLAGS)
+# Much of the above exists in C++20, I just haven't upgraded Arlib yet.
+TRUE_CXXFLAGS := -std=c++20 -fno-rtti $(CCXXFLAGS) $(CONF_CXXFLAGS) $(CXXFLAGS)
 TRUE_LFLAGS := $(CONF_LFLAGS) $(LFLAGS)
 
 obj:

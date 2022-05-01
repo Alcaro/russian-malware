@@ -1,8 +1,8 @@
 #include "regex.h"
 
 #if __cplusplus > 201703
-#error "switch to string literal as template parameter, it's legal now"
-#error "add some concepts, for type checking; if it hurts performance, undo it"
+//#error "switch to string literal as template parameter, it's legal now"
+//#error "add some concepts, for type checking; if it hurts performance, undo it"
 #endif
 
 #ifdef ARLIB_TEST // discard this if not testing, for compile time reasons

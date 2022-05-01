@@ -108,7 +108,7 @@ virtual void mouse_cb(function<void(int x, int y, uint8_t buttons)> cb) = 0;
 // - sound
 };
 
-#ifdef ARGUIPROT_X11
+#ifdef ARLIB_GUI_X11
 struct _XDisplay;
 typedef struct _XDisplay Display;
 struct window_x11_info {

@@ -189,7 +189,7 @@ void arlib_init_file()
 
 
 
-bool file2::open(cstring filename, mode m)
+bool file2::open(cstrnul filename, mode m)
 {
 	reset();
 	static const int flags[] = {
@@ -199,7 +199,7 @@ bool file2::open(cstring filename, mode m)
 		O_RDWR|O_CREAT|O_TRUNC|O_CLOEXEC, // m_replace
 		O_RDWR|O_CREAT|O_EXCL |O_CLOEXEC  // m_create_excl
 	};
-	fd = ::open(filename.c_str(), flags[m&7], 0644);
+	fd = ::open(filename, flags[m&7], 0644);
 	if (m & m_exclusive)
 	{
 		int op;

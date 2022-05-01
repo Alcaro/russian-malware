@@ -5,7 +5,7 @@ bool aropengl_base::create(context* core, const char * symNames, funcptr* symDes
 	destroy();
 	
 	this->core = core;
-#ifndef ARGUI_NONE
+#ifdef ARLIB_GUI
 	this->port = NULL;
 #endif
 	if (!core) return false;

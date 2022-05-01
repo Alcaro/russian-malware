@@ -8,6 +8,7 @@
 #include <linux/wait.h>
 #include <signal.h>
 #include <errno.h>
+#include <unistd.h>
 
 // too bad pidfd is linux only, sigchld is such an enormous pain
 
@@ -29,7 +30,8 @@ static int atoi_simple(const char * text)
 bool process::closefrom(int lowfd)
 {
 #ifdef __NR_close_range
-	// available on kernel >= 5.9, october 2020
+	// available on kernel >= 5.9, october 2020 (glibc wrapper in 2.34, august 2021)
+	// 20.04 uses 5.4, so will keep around for another month
 	if (syscall(__NR_close_range, lowfd, UINT_MAX, 0) == 0) return true;
 #endif
 	
@@ -240,19 +242,19 @@ void process::input::update(uintptr_t)
 {
 	if (pipe[1] == -1) return;
 	
-	if (buf)
+	if (buf.size())
 	{
-		arrayview<uint8_t> bytes = buf.pull_buf();
+		arrayview<uint8_t> bytes = buf.pull_begin();
 		ssize_t nbytes = ::write(pipe[1], bytes.ptr(), bytes.size());
 		if (nbytes < 0 && errno == EAGAIN) goto do_monitor;
 		if (nbytes <= 0) goto do_terminate;
-		buf.pull_done(nbytes);
+		buf.pull_finish(nbytes);
 	}
-	if (!buf && started && do_close) goto do_terminate;
+	if (!buf.size() && started && do_close) goto do_terminate;
 	
 do_monitor:
 	bool should_monitor;
-	should_monitor = (buf);
+	should_monitor = (buf.size());
 	if (should_monitor != monitoring)
 	{
 		loop->set_fd(pipe[1], NULL, (should_monitor ? bind_this(&input::update) : NULL));
