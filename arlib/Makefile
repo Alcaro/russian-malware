@@ -209,7 +209,7 @@ endif
 DEFINES += ARLIB_OBJNAME=$(OBJNAME)
 
 ifeq ($(ARGUI),1)
-  SOURCES_ARLIB += arlib/gui/*.cpp
+  #SOURCES_ARLIB += arlib/gui/*.cpp
   ifeq ($(OS),windows)
     DEFINES += ARLIB_GUI ARLIB_GUI_WINDOWS
     CONF_LFLAGS += -lgdi32 -lcomctl32 -lcomdlg32
@@ -225,7 +225,7 @@ ifeq ($(ARGUI),1)
     endif
   endif
 else ifeq ($(ARGUI),gtk4)
-  SOURCES_ARLIB += arlib/gui/*.cpp
+  #SOURCES_ARLIB += arlib/gui/*.cpp
   DEFINES += ARLIB_GUI ARLIB_GUI_GTK4
   CONF_CFLAGS += $(shell pkg-config --cflags gtk4)
   CONF_LFLAGS += -lX11 $(shell pkg-config --libs gtk4)
@@ -307,7 +307,7 @@ ifeq ($(ARWUTF),1)
 endif
 
 ifeq ($(ARSOCKET),1)
-  SOURCES_ARLIB += arlib/socket/*.cpp
+  #SOURCES_ARLIB += arlib/socket/*.cpp
   DEFINES += ARLIB_SOCKET
   
   ifeq ($(OS),windows)
@@ -334,7 +334,7 @@ ifeq ($(ARSOCKET),1)
   endif
   ifneq ($(findstring bearssl,$(ARSOCKET_SSL)),)
     DEFINES += ARLIB_SSL_BEARSSL
-    SOURCES_ARLIB += arlib/socket/bear-ser.c
+    #SOURCES_ARLIB += arlib/socket/bear-ser.c
     ifeq ($(OS),windows)
       CONF_LFLAGS += -lcrypt32
     endif
@@ -378,6 +378,8 @@ TRUE_CFLAGS := -std=c99 $(CCXXFLAGS) $(CONF_CFLAGS) $(CFLAGS)
 # C++20/etc wishlist:
 # - Coroutines, for runloop-related stuff (nearly every single socket-related operation is ugly)
 #    present in GCC 11
+# - If a lambda is a coroutine, the captures should be in the coroutine frame, not in the likely-temporary lambda object
+#    reportedly considered for c++23, but not approved yet
 # - Template string literals (for the regex parser)
 #    present in GCC 9
 # - Concepts (also for the regex parser, the errors are absurd)

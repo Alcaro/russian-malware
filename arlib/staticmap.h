@@ -4,7 +4,7 @@
 
 // Like map<bytesr,bytesw> (modulo memory management and some minor details), but persistent on disk.
 // The object assumes that
-// - all writes are ordered; each will complete before the next one starts
+// - all writes to the underlying file are ordered; each will complete before the next one starts
 // - writes <= sector size are atomic
 // - sector size is at least 512
 // which I believe (but didn't verify) are guaranteed by all journaling and COW file systems.
@@ -47,7 +47,7 @@ class staticmap : nocopy {
 	void recover();
 	
 public:
-	// If the map isn't writable, the returned bytesw objects will actually be bytesr, and must be immediately be casted as such.
+	// If the map isn't writable, every returned bytesw will actually be bytesr, and must be treated as such.
 	// If writable, such operations are not atomic. Memory corruption (for example UAF) can end up destroying the entire staticmap.
 	// Performance: Under normal operation, creating this object is O(1), other than an O(n) mmap of the entire file.
 	// If the object was not correctly destructed, including by power failure, will take O(n) to repair the file.
@@ -62,7 +62,7 @@ public:
 	bytesw get_or_empty(bytesr key, bool* found = nullptr); // If nonnull, found allows telling empty value apart from nonexistent.
 	bytesw insert(bytesr key, bytesr val); // If key already exists, it will be atomically replaced.
 	void remove(bytesr key); // If key doesn't exist, it's a noop.
-	void reset(); // The point of a staticmap is to be persistent, so you probably shouldn't call this.
+	void reset(); // The point of a staticmap is to be persistent; this one is mostly for testing and debugging.
 	
 	// Flushes all data to disk.
 	// Also ensures that if the process terminates before the next write operation, recreating the object after reboot will be quick.
@@ -95,7 +95,7 @@ public:
 	iterator end() { return mmap.ptr()+mmap.size(); }
 	
 	// Verifies that the backing store is correctly formed.
-	// If yes, returns and does nothing; if no, crashes, enters an infinite loop, abort()s, or otherwise misbehaves.
+	// If yes, returns and does nothing; if no, abort()s.
 	// Useful for debugging, less useful for anything else.
 	void fsck();
 };

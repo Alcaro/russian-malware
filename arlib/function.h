@@ -55,28 +55,24 @@ class function<Tr(Ta...)> {
 		if (LIKELY(!ref)) return;
 		if (!--ref->count)
 		{
-			bool do_del = ((void*)ref != ctx); // ref==ctx happens if binding a lambda capturing a lot
 			ref->destruct(ctx);
-			if (do_del)
-				delete ref;
+			delete ref;
 		}
 		ref = NULL;
 	}
 	
 	void init_free(Tfpr fp)
 	{
-		if (fp)
-		{
-			func = freewrap;
-			ctx = (void*)fp;
-			ref = NULL;
-		}
-		else
-		{
-			func = empty;
-			ctx = (void*)empty;
-			ref = NULL;
-		}
+		func = freewrap;
+		ctx = (void*)fp;
+		ref = NULL;
+	}
+	
+	void init_null()
+	{
+		func = empty;
+		ctx = (void*)empty;
+		ref = NULL;
 	}
 	
 	void init_ptr(Tfp fp, void* ctx)
@@ -118,7 +114,7 @@ class function<Tr(Ta...)> {
 			public:
 				holder(Tl l) : l(l) { rc.count = 1; rc.destruct = &holder::destruct; }
 				static Tr call(holder* self, Ta... args) { return self->l(std::forward<Ta>(args)...); }
-				static void destruct(void* self) { delete (holder*)self; }
+				static void destruct(void* self) { ((holder*)self)->l.~Tl(); } // don't delete self, line 59 does that
 			};
 			this->func = (Tfp)&holder::call;
 			this->ctx = new holder(std::move(lambda));
@@ -127,7 +123,7 @@ class function<Tr(Ta...)> {
 	}
 	
 public:
-	function() { init_free(NULL); }
+	function() { init_null(); }
 	function(const function& rhs) : ctx(rhs.ctx), func(rhs.func), ref(rhs.ref) { add_ref(); }
 	function(function&& rhs)      : ctx(rhs.ctx), func(rhs.func), ref(rhs.ref) { rhs.ref = NULL; }
 	function& operator=(const function& rhs)
@@ -136,7 +132,8 @@ public:
 		{ unref(); func = rhs.func; ctx = rhs.ctx; ref = rhs.ref; rhs.ref = NULL; return *this; }
 	~function() { unref(); }
 	
-	function(Tfpr fp) { init_free(fp); } // function(NULL) hits here
+	function(Tfpr fp) { init_free(fp); }
+	function(nullptr_t) { init_null(); }
 	
 	template<typename Tl>
 	function(Tl lambda,

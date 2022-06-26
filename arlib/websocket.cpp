@@ -1,216 +1,154 @@
 #ifdef ARLIB_SOCKET
 #include "websocket.h"
 #include "http.h"
-#include "endian.h"
-#include "stringconv.h"
 #include "bytestream.h"
 
-void WebSocket::connect(cstring target, arrayview<string> headers)
+async<bool> websocket::connect(cstring target, arrayview<string> headers)
 {
-	reset();
+	sock = nullptr;
 	
-	inHandshake = true;
-	gotFirstLine = false;
+	http_t::location loc;
+	if (!loc.parse(target))
+	{
+	fail:
+		sock = nullptr;
+		co_return false;
+	}
 	
-	HTTP::location loc;
-	if (!HTTP::parse_url(target, false, loc)) { cb_error(); return; }
-	
-	int defport;
-	if (loc.scheme == "ws") defport = 80;
+	if (loc.scheme == "ws")
+		sock = co_await cb_mksock(false, loc.domain, 80);
 #ifdef ARLIB_SSL
-	else if (loc.scheme == "wss") defport = 443;
+	else if (loc.scheme == "wss")
+		sock = co_await cb_mksock(true, loc.domain, 443);
 #endif
-	else { cb_error(); return; }
+	else
+		goto fail;
 	
-	sock = cb_mksock(
-#ifdef ARLIB_SSL
-	                 defport==443,
-#endif
-	                 loc.domain, loc.port>=0 ? loc.port : defport, loop);
-	if (!sock) { cb_error(); return; }
-	sock->callback(bind_this(&WebSocket::activity), NULL);
-	
-	sock->send(string(
-	           "GET "+loc.path+" HTTP/1.1\r\n"
-	           "Host: "+loc.domain+"\r\n"
-	           "Connection: upgrade\r\n"
-	           "Upgrade: websocket\r\n"
-	           //"Origin: "+loc.domain+"\r\n"
-	           "Sec-WebSocket-Version: 13\r\n"
-	           "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" // TODO: de-hardcode this
-	           ).bytes());
-	
+	sock.send_buf("GET ",loc.path," HTTP/1.1\r\n"
+				  "Host: ",loc.domain,"\r\n"
+				  "Connection: upgrade\r\n"
+				  "Upgrade: websocket\r\n"
+				  //"Origin: ",loc.domain,"\r\n"
+				  "Sec-WebSocket-Version: 13\r\n"
+				  "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"); // TODO: de-hardcode this
 	for (cstring s : headers)
 	{
-		sock->send((s+"\r\n").bytes());
+		sock.send_buf(s, "\r\n");
 	}
-	sock->send(cstring("\r\n").bytes());
+	sock.send_buf("\r\n");
+	sock.send_flush();
+	
+	if (!co_await sock.await_send())
+		goto fail;
+	
+	cstring line = co_await sock.line();
+	if (!line.startswith("HTTP/1.1 101 "))
+		goto fail;
+	while (true)
+	{
+		cstring line = co_await sock.line();
+		if (!line)
+			goto fail;
+		if (!bytepipe::trim_line(line))
+			break;
+	}
+	
+	co_return true;
 }
 
-void WebSocket::activity()
+// The returned bytesr is valid until next function call on this object.
+async<bytesr> websocket::msg(int* type)
 {
-	uint8_t bytes[4096];
-	int nbyte = sock->recv(bytes);
-	if (nbyte < 0)
-	{
-		cancel();
-		return;
-	}
-	msg += arrayview<uint8_t>(bytes, nbyte);
+	if (type)
+		*type = 0;
 	
-	while (inHandshake)
+	uint8_t type_raw = co_await sock.u8();
+	size_t size = co_await sock.u8();
+	if (size & 0x80) // the mask bit; https://datatracker.ietf.org/doc/html/rfc6455#section-5.1 says only client can set it
 	{
-		size_t lf = msg.find('\n');
-		if (lf == (size_t)-1) return;
-		
-		bool crlf = (lf > 0 && msg[lf-1]=='\r');
-		cstring line = msg.slice(0, lf-crlf);
-		if (!gotFirstLine)
-		{
-			if (!line.startswith("HTTP/1.1 101 ")) { cancel(); return; }
-			gotFirstLine = true;
-		}
-		if (line == "")
-		{
-			inHandshake = false;
-			while (tosend.size())
-				sock->send(tosend.pull_any());
-			tosend.reset();
-		}
-		msg = msg.skip(lf+1);
+	fail:
+		sock = nullptr;
+		co_return nullptr;
 	}
 	
-again:
-	if (msg.size() < 2) return;
-	
-	uint8_t headsizespec = msg[1]&0x7F;
-	uint8_t headsize = 2;
-	if (msg[1] & 0x80) headsize += 4;
-	if (headsizespec == 126) headsize += 2;
-	if (headsizespec == 127) headsize += 8;
-	
-	if (msg.size() < headsize) return;
-	
-	size_t msgsize = headsize + headsizespec;
-	if (headsizespec == 126) msgsize = headsize + readu_be16(msg.slice(2, 2).ptr());
-	if (headsizespec == 127) msgsize = headsize + readu_be64(msg.slice(2, 8).ptr());
-	
-	if (msg.size() < msgsize) return;
-	
-	size_t bodysize = msgsize-headsize;
-	
-	arrayvieww<uint8_t> out = msg.slice(headsize, bodysize);
-	
-	if (msg[1] & 0x80) // spec says server isn't allowed to mask, but no reason not to allow it
+	if (size == 126)
 	{
-		uint8_t key[4];
-		key[0] = msg[headsize-4+0];
-		key[1] = msg[headsize-4+1];
-		key[2] = msg[headsize-4+2];
-		key[3] = msg[headsize-4+3];
-		for (size_t i=0;i<bodysize;i++)
-		{
-			out[i] ^= key[i&3];
-		}
+		size = co_await sock.u16b();
+		if (size < 126) goto fail; // https://datatracker.ietf.org/doc/html/rfc6455#section-5.2 says overlong encodings are banned
 	}
-	
-	int type = (msg[0] & 0x0F);
-	if (type == t_ping) send(msg, t_pong);
-	
-	break_callback = false;
-	
-	if (type == t_text)
+	else if (size == 127)
 	{
-		if (cb_str) cb_str(out);
-		else cb_bin(out);
+		uint64_t size64 = co_await sock.u64b();
+		if (size64 <= 0xFFFF) goto fail; // overlong
+		if (size64 > SIZE_MAX) goto fail; // can't represent that
+		if (size64 > 0x7FFFFFFFFFFFFFFF) goto fail; // spec says size can't be this big, unclear why
+		size = size64;
 	}
-	if (type == t_binary)
-	{
-		if (cb_bin) cb_bin(out);
-		else cb_str(out);
-	}
+	// else nothing
 	
-	if (break_callback) // happens if cb_str doesn't like that input and resets websocket
-	{
-		return;
-	}
+	bytesr by = co_await sock.bytes(size);
+	if (!sock) co_return nullptr;
 	
-	msg = msg.skip(msgsize);
-	goto again;
+	// spec says server may send ping and pong, as well as fragmented messages
+	// I've never seen em
+	
+	if ((type_raw&0x0F) == t_close)
+		sock = nullptr;
+	if (type)
+		*type = (type_raw&0x0F);
+	co_return by;
 }
 
-void WebSocket::send(arrayview<uint8_t> message, int type)
+void websocket::send(bytesr by, int type)
 {
-	if (!sock) return;
+	uint8_t head_buf[2+8+4];
+	bytestreamw head = head_buf;
 	
-	bytestreamw header;
-	header.u8(0x80 | type); // frame-FIN, opcode
-	if (message.size() <= 125)
+	head.u8(0x80 | type);
+	if (by.size() < 126)
 	{
-		//apparently specially crafted websocket packets could confuse proxies and whatever
-		//not a problem for me, my users aren't hostile (and that'd be the proxy's fault, not mine), not gonna mask properly
-		//obvious follow up question: why is websocket on port 443 when it acts nothing like http
-		header.u8(message.size() | 0x80);
+		head.u8(0x80 | by.size());
 	}
-	else if (message.size() <= 65535)
+	else if (by.size() <= 0xFFFF)
 	{
-		header.u8(126 | 0x80);
-		header.u16b(message.size());
+		head.u8(0x80 | 126);
+		head.u16b(by.size());
 	}
 	else
 	{
-		header.u8(127 | 0x80);
-		header.u64b(message.size());
+		head.u8(0x80 | 127);
+		head.u64b(by.size());
 	}
-	header.u32b(0); // mask key
-	if (inHandshake)
-	{
-		tosend.push(header.finish());
-		tosend.push(message);
-	}
-	else
-	{
-		sock->send(header.finish());
-		sock->send(message);
-	}
+	head.u32b(0); // mask key (spec says must be random, but screw that, it doesn't protect against any plausible threat)
+	
+	sock.send_buf(head.finish());
+	sock.send_buf(by);
+	sock.send_flush();
 }
 
 #include "test.h"
-#ifdef ARLIB_TEST
-test("WebSocket", "tcp,ssl,bytepipe", "websocket")
+//co_test("websocket", "tcp,ssl,bytepipe", "websocket")
+co_test("websocket", "", "websocket")
 {
-	test_skip("kinda slow");
-	test_inconclusive("this server is super slow");
+	test_skip("takes two seconds");
 	
-	autoptr<runloop> loop = runloop::create();
-	string str;
-	function<void(cstring)> cb_str = bind_lambda([&](cstring str_inner){ loop->exit(); assert_eq(str, ""); str = str_inner; });
-	function<void()> cb_error = bind_lambda([&](){ loop->exit(); assert_unreachable(); });
+	websocket ws;
+	assert(co_await ws.connect("wss://ws.ifelse.io"));
 	
-	function<string()> recvstr = bind_lambda([&]()->string { str = ""; loop->enter(); string ret = str; return ret; });
-	
-	uintptr_t timer = loop->raw_set_timer_once(10000, cb_error);
-	
-	WebSocket ws(loop);
-	ws.callback(cb_str, cb_error);
-	
-	//this one is annoyingly slow, but I haven't found any alternatives
-	//the only other one that claims to be a websocket echo is wss://websocketstest.com/service, but it just kicks me immediately
-	ws.connect("wss://echo.websocket.org");
+	cstring hq = co_await ws.msg();
+	assert(cstring(hq).startswith("Request served by"));
 	ws.send("hello");
-	assert_eq(recvstr(), "hello");
+	assert_eq(cstring(co_await ws.msg()), "hello");
 	ws.send("hello");
-	assert_eq(recvstr(), "hello");
+	assert_eq(cstring(co_await ws.msg()), "hello");
 	ws.send("hello");
 	ws.send("hello");
-	assert_eq(recvstr(), "hello");
-	assert_eq(recvstr(), "hello");
+	assert_eq(cstring(co_await ws.msg()), "hello");
+	assert_eq(cstring(co_await ws.msg()), "hello");
 	
 	cstring msg128 = "128bytes128bytes128bytes128bytes128bytes128bytes128bytes128bytes"
 	                 "128bytes128bytes128bytes128bytes128bytes128bytes128bytes128bytes";
 	ws.send(msg128);
-	assert_eq(recvstr(), msg128);
-	loop->raw_timer_remove(timer);
+	assert_eq(cstring(co_await ws.msg()), msg128);
 }
-#endif
 #endif

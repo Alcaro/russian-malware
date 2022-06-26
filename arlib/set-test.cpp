@@ -212,6 +212,24 @@ test("set", "array,string", "set")
 		foo.add(n);
 		assert_eq(n_instancecount, 1);
 	}
+	
+	{
+#define A "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+#define B "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+#define C "cccccccccccccccccccccccccccccccc"
+		set<string> s;
+		s.add(A);
+		s.add(B);
+		
+		test_nomalloc {
+			assert(s.contains(A));
+			assert(s.contains(B));
+			assert(!s.contains(C));
+		}
+#undef A
+#undef B
+#undef C
+	}
 }
 
 test("map", "array", "set")
@@ -346,25 +364,37 @@ test("map", "array", "set")
 	}
 	
 	{
-		// ensure map<?, string>::get_or(?, "string literal") returns cstring, not string
-		map<int,string> a;
-		a.insert(42, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-		cstring b = a.get_or(42, "");
-		assert_eq(b, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-	}
-	
-	{
 		// ensure half-invalidated iterator doesn't do anything crazy
 		map<int,int> a;
-		for (size_t i : range(28))
+		for (int i : range(28))
 			a.insert(i, i*3);
 		auto it = a.begin();
-		for (size_t i : range(20))
+		for (int i : range(20))
 			++it;
-		for (size_t i : range(24))
+		for (int i : range(24))
 			a.remove(i);
 		++it;
 		assert(!(it != a.end())); // no operator== on this guy, only !=
+	}
+	
+	{
+		// ensure map<?, string>::get_or(?, "string literal") returns cstrnul, not string
+		map<string,string> a;
+#define A "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+#define B "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+#define C "cccccccccccccccccccccccccccccccc"
+		a.insert(A, B);
+		test_nomalloc {
+			assert_eq(a.get_or(A, C), B);
+			assert_eq(a.get_or(B, C), C);
+			assert_eq(a.get_or<cstring>(A, C), B);
+			assert_eq(a.get_or<cstring>(B, C), C);
+			assert_eq(a.get_or<cstrnul>(A, C), B);
+			assert_eq(a.get_or<cstrnul>(B, C), C);
+		}
+#undef A
+#undef B
+#undef C
 	}
 }
 #endif

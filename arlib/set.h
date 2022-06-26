@@ -85,13 +85,15 @@ class set : public linqbase<set<T>> {
 	}
 	
 	template<typename T2>
-	static std::enable_if_t<sizeof(hash(std::declval<T2>())), size_t> local_hash(const T2& item, int overload_resolut)
+	static std::enable_if_t<!!sizeof(hash(std::declval<T2>())), size_t>
+	local_hash(const T2& item, int overload_resolut)
 	{
 		return hash(item);
 	}
 	
-	template<typename T2> // don't enable_if, evaluating whether (T)declval<T2>() is legal breaks struct JSON { map<string,JSON> children; }
-	static size_t local_hash(const T2& item, float overload_resolut)
+	template<typename T2> // don't enable_if sizeof((T)declval<T2>()), check if that's legal breaks struct JSON { map<string,JSON> children; }
+	static std::enable_if_t<!std::is_same_v<T, T2>, size_t>
+	local_hash(const T2& item, float overload_resolut)
 	{
 		return hash((T)item);
 	}
@@ -363,7 +365,8 @@ public:
 		//node(node other) : key(other.key), value(other.value) {}
 		
 		size_t hash() const { return ::hash(key); }
-		bool operator==(const Tkey& other) { return key == other; }
+		template<typename T>
+		bool operator==(const T& other) { return key == other; }
 		bool operator==(const node& other) { return key == other.key; }
 	};
 private:

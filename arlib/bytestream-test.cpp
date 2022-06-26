@@ -12,7 +12,7 @@ test("bytestream", "array", "bytestream")
 	assert_eq(b.f32l(), 12345.0);
 	assert_eq(b.f32b(), 12345.0);
 	
-	bytestreamw w;
+	bytestreamw_dyn w;
 	w.u8(1);
 	w.u16l(0x0302);
 	w.u32b(0x04050607);

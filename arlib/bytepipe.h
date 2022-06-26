@@ -3,8 +3,8 @@
 #include "string.h"
 
 // A bytepipe accepts an infinite amount of bytes and returns them, first one first.
-// Guaranteed amortized O(1) per byte, unlike appending to a bytearray.
-// Exception: Will take longer if pull_line() is used and there is no line.
+// Unlike splicing and splitting a bytearray, this is guaranteed amortized O(1) per byte,
+//  except if pull_line() is not passed the proper skip argument.
 class bytepipe {
 	bytearray buf1;
 	size_t buf1st;
@@ -32,10 +32,10 @@ public:
 	// The basic API: Simply push and pull fixed-size buffers.
 	// For every function, the returned buffer is valid until the next non-const call on the object.
 	void push(bytesr bytes);
-	// Returns an empty bytesr if the object contains too few bytes.
-	bytesr pull(size_t nbytes) { bytesr ret = pull_begin(nbytes); pull_finish(nbytes); return ret.slice(0, nbytes); }
+	// Returns an empty bytesw if the object contains too few bytes. Feel free to scribble in it if you need some scratch space.
+	bytesw pull(size_t nbytes) { bytesw ret = pull_begin(nbytes); if (!ret) return ret; pull_finish(nbytes); return ret.slice(0, nbytes); }
 	// Returns one or more bytes. Usually more; O(1) calls will empty the bytepipe.
-	bytesr pull_any() { return pull(1); }
+	bytesw pull_any() { bytesw ret = pull_begin(); pull_finish(ret.size()); return ret; }
 	
 	template<typename... Ts> void push_text(Ts... args)
 	{
@@ -46,19 +46,22 @@ public:
 		push_finish(nbytes);
 	}
 	
-	//Returns data until and including the next \n. If there is no \n, returns an empty bytesr.
-	bytesr pull_line();
-	//Returns 'line' minus a trailing \r\n or \n. The \n must exist.
+	// Returns data until and including the next \n. If there is no \n, returns an empty bytesr.
+	// If the first N bytes in the pipe are known to not contain a \n, you can pass in said N.
+	bytesr pull_line(size_t skip = 0);
+	// Returns 'line' minus a trailing \r\n or \n, or if input is empty, returns the same.
+	// If the input is not empty, the \n must exist.
 	static bytesr trim_line(bytesr line);
+	static cstring trim_line(cstring line) { return trim_line(line.bytes()); }
 	
 	// If you don't know how much data you'll insert, you can use this.
-	// The returned buffer may be bigger than requested; if so, you're welcome to use the extra capacity, if you want.
+	// The returned buffer may be bigger than requested; if so, you're welcome to use the extra capacity too, if you want.
 	// Calling push_finish(0) is legal. If zero, you can also omit it completely. Don't call it twice.
-	bytesw push_begin(size_t nbytes = 512);
+	bytesw push_begin(size_t nbytes = 128);
 	void push_finish(size_t nbytes) { buf2end += nbytes; }
 	
 	// Like the above.
-	bytesr pull_begin(size_t nbytes = 1);
+	bytesw pull_begin(size_t nbytes = 1);
 	void pull_finish(size_t nbytes) { buf1st += nbytes; }
 	
 	size_t size() const { return buf1end - buf1st + buf2end - buf2st; }
@@ -68,5 +71,5 @@ public:
 	// Size must be a power of two, and must be nonzero. Sizes below 256 are not recommended.
 	void bufsize(size_t size);
 	
-	void reset();
+	void reset(size_t bufsize = 256);
 };

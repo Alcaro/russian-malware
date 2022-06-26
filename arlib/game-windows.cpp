@@ -1,6 +1,6 @@
 #if defined(ARLIB_GAME) && defined(_WIN32)
 #include "game.h"
-#include "runloop.h"
+#include "runloop2.h"
 #include <windowsx.h> // GET_X_LPARAM isn't in the usual header
 
 #define WS_BASE WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX // okay microsoft, did I miss anything?
@@ -209,7 +209,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 
 
-/*public*/ void tmp_step(bool wait) { runloop::global()->step(wait); }
+/*public*/ void step(bool wait) { runloop2::step(wait); }
 
 };
 

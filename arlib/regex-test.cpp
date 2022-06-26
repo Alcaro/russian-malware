@@ -106,6 +106,7 @@ test("regex", "string", "regex")
 	test1("((a)|(b)){2}", "ba", "ba", "a", "a", nullptr);
 	test1("((a)\\2|(b)\\3){2}", "aabb", "aabb", "bb", nullptr, "b");
 	test1("((a)\\2|(b)\\3){2}", "bbaa", "bbaa", "aa", "a", nullptr);
+	test1("^(a|ab)*$", "aabababaaaabab", "aabababaaaabab", "ab"); // matches only "aa" without $; unexpected, but every regex engine does that
 	
 	assert_eq((cstring)(REGEX("bc").search("abc")[0].start), "bc");
 	assert_eq(REGEX("f(oo)").replace("foofoobarfoo", "\\1"), "oooobaroo");

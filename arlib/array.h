@@ -121,36 +121,38 @@ public:
 	
 	template<typename T2> inline array<T2> cast() const;
 	
-	size_t find(const T& item) const
+private:
+	const T* find_inner(const T& item) const
 	{
+		if constexpr (std::is_same_v<T, char> || std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t>)
+		{
+			uint8_t* buf = (uint8_t*)this->items;
+			return (T*)memchr(buf, (uint8_t)item, this->count);
+		}
 		for (size_t n=0;n<this->count;n++)
 		{
-			if (this->items[n] == item) return n;
+			if (this->items[n] == item) return &this->items[n];
 		}
-		return -1;
+		return nullptr;
+	}
+public:
+	size_t find(const T& item) const
+	{
+		const T * found = find_inner(item);
+		if (found) return found - this->items;
+		else return -1;
 	}
 	bool contains(const T& item) const
 	{
-		return find(item) != (size_t)-1;
+		return find_inner(item) != nullptr;
 	}
-	
-	//arrayview(const arrayview<T>& other)
-	//{
-	//	clone(other);
-	//}
-	
-	//arrayview<T> operator=(const arrayview<T>& other)
-	//{
-	//	clone(other);
-	//	return *this;
-	//}
 	
 	bool operator==(arrayview<T> other) const
 	{
 		if (size() != other.size()) return false;
 		if (this->trivial_comp())
 		{
-			return memcmp(ptr(), other.ptr(), sizeof(T)*size())==0;
+			return memeq(ptr(), other.ptr(), sizeof(T)*size());
 		}
 		else
 		{
@@ -701,6 +703,58 @@ private:
 public:
 	enumerator begin() { return enumerator(items.ptr()); }
 	enumerator end() { return enumerator(items.ptr() + items.size()); }
+};
+
+
+template<typename T>
+class fifo {
+	T* items = nullptr;
+	size_t capacity = 0;
+	size_t rd = 0;
+	size_t wr = 0;
+public:
+	fifo() = default;
+	fifo(const fifo&) = delete;
+	void push(T item)
+	{
+		if (wr == capacity)
+		{
+			if (rd <= capacity/2)
+			{
+				if (capacity == 0)
+					capacity = 8;
+				else
+					capacity *= 2;
+				items = xrealloc(items, sizeof(T)*capacity);
+			}
+			for (size_t n=0;n<rd;n++)
+				items[n].~T();
+			memmove(items, items+rd, sizeof(T)*(wr-rd));
+			wr -= rd;
+			rd = 0;
+		}
+		new(&items[wr]) T(std::move(item));
+		wr++;
+	}
+	// The popped ref is valid until 
+	T& pop_ref()
+	{
+		return items[rd++];
+	}
+	T pop()
+	{
+		return std::move(pop_ref());
+	}
+	bool empty()
+	{
+		return rd == wr;
+	}
+	~fifo()
+	{
+		for (size_t n=0;n<wr;n++)
+			items[n].~T();
+		free(items);
+	}
 };
 
 

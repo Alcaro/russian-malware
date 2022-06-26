@@ -3,9 +3,9 @@
 # It can be included ahead of the main Arlib makefile, if some things need to be different between OSes.
 
 ifneq (,)
-  $(error conditionals are required; only GNU Make is supported)
+  $(error conditionals are required; use GNU Make)
 panic:
-	echo "conditionals are required; only GNU Make is supported"
+	echo "conditionals are required; use GNU Make"
 	false
 endif
 
@@ -45,6 +45,9 @@ ifneq ($(findstring clang,$(CC) $(CXX) $(LD)),)
   CC = clang
   CXX = clang++
   LD = clang++
+  # TODO: delete this once valgrind learns to read dwarf-5
+  # https://bugs.kde.org/show_bug.cgi?id=452758
+  CFLAGS += -gdwarf-4
 endif
 
 ifeq ($(OS),Windows_NT)
@@ -52,7 +55,9 @@ ifeq ($(OS),Windows_NT)
 endif
 ifeq ($(OS),)
   DUMPMACHINE := $(shell $(CXX) -dumpmachine)
-  ifneq ($(findstring mingw,$(DUMPMACHINE)),)
+  ifeq ($(DUMPMACHINE),)
+    $(error $(CXX) -dumpmachine failed, is the compiler installed?)
+  else ifneq ($(findstring mingw,$(DUMPMACHINE)),)
     OS := windows
   else ifneq ($(findstring linux,$(DUMPMACHINE)),)
     OS := linux
@@ -65,7 +70,9 @@ ifeq ($(OS),windows)
   ifeq ($(DUMPMACHINE),)
     DUMPMACHINE := $(shell $(CC) -dumpmachine)
   endif
-  ifeq ($(DUMPMACHINE),i686-w64-mingw32)
+  ifeq ($(DUMPMACHINE),)
+    $(error $(CXX) -dumpmachine failed, is the compiler installed?)
+  else ifeq ($(DUMPMACHINE),i686-w64-mingw32)
     WINBITS = 32
   else ifeq ($(DUMPMACHINE),x86_64-w64-mingw32)
     WINBITS = 64

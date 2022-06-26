@@ -38,7 +38,7 @@ string tostringhex_dbg(const arrayview<uint8_t>& item)
 #include "array.h"
 #include "os.h"
 #include "argparse.h"
-#include "runloop.h"
+#include "runloop2.h"
 
 #ifdef __unix__
 #define ESC_ERASE_LINE "\x1B[2K\r"
@@ -112,13 +112,13 @@ void _test_malloc()
 	if (UNLIKELY(n_malloc_block > 0))
 	{
 		n_malloc_block = 0; // failing usually allocates
-		if (result == err_ok) test_fail("can't malloc here");
+		test_fail("can't malloc here");
 	}
 	n_malloc++;
 }
 void _test_free() { n_free++; }
-void _test_blockmalloc() { n_malloc_block++; }
-void _test_unblockmalloc() { n_malloc_block--; }
+void test_nomalloc_begin() { n_malloc_block++; }
+void test_nomalloc_end() { n_malloc_block--; }
 
 static string fmt_stackentry(bool verbose, cstring file, int line)
 {
@@ -166,18 +166,22 @@ void _test_nothrow(int add)
 
 static void _testfail(cstrnul why)
 {
+	n_malloc_block = 0;
 	if (result == err_ok || (result==err_skip && !show_verbose))
 		puts("");
-	
-	result = err_fail;
-	puts(why);
-	fflush(stdout);
-	debug_break();
+	if (result != err_fail)
+	{
+		result = err_fail;
+		puts(why);
+		fflush(stdout);
+		debug_break();
+	}
 	test_throw(err_fail);
 }
 
 void _testfail(cstring why, cstring file, int line)
 {
+	n_malloc_block = 0;
 	_testfail(why+stack(file, line));
 }
 
@@ -195,7 +199,7 @@ void _testcmpfail(cstring name, cstring file, int line, cstring expected, cstrin
 
 void _test_skip(cstring why)
 {
-	if (result!=err_ok) return;
+	if (result != err_ok) return;
 	if (!all_tests)
 	{
 		if (show_verbose) puts("skipped: "+why);
@@ -205,23 +209,38 @@ void _test_skip(cstring why)
 
 void _test_skip_force(cstring why)
 {
-	if (result!=err_ok) return;
+	if (result != err_ok) return;
 	if (show_verbose) puts("skipped: "+why);
 	test_throw(err_skip);
 }
 
 void _test_inconclusive(cstring why)
 {
-	if (result!=err_ok) return;
+	if (result != err_ok) return;
 	puts("inconclusive: "+why);
 	test_throw(err_inconclusive);
 }
 
 void _test_expfail(cstring why)
 {
-	if (result!=err_ok) return;
+	if (result != err_ok) return;
 	puts("expected-fail: "+why);
 	test_throw(err_expfail);
+}
+
+bool test_skipped()
+{
+	return (result != err_ok);
+}
+
+bool test_rethrow()
+{
+	if (result != err_ok)
+	{
+		test_throw(result);
+		return true;
+	}
+	return false;
 }
 
 namespace {
@@ -239,6 +258,7 @@ latrec max_latencies_us[6];
 
 void _test_runloop_latency(uint64_t us)
 {
+	if (!cur_test) return; // happens when global runloop is destructed at process exit
 	max_latencies_us[0].us = us;
 	max_latencies_us[0].name = cur_test->name;
 	max_latencies_us[0].filename = cur_test->filename;
@@ -382,10 +402,10 @@ int main(int argc, char* argv[])
 	args.add("all", &all_tests);
 	args.add("twice", &run_twice);
 	args.add("filter", &filter);
-#ifndef ARLIB_GUI
 	args.parse(argv);
-#else
-	arlib_init(args, argv);
+#ifdef ARLIB_GUI
+	void arlib_init();
+	arlib_init();
 #endif
 	
 	printf(ESC_ERASE_LINE "Sorting tests...");
@@ -412,7 +432,6 @@ int main(int argc, char* argv[])
 			{
 				puts("error: dependency on nonexistent feature "+required[i]);
 				err_print(outer);
-				abort();
 			}
 		}
 	}
@@ -436,7 +455,7 @@ int main(int argc, char* argv[])
 			}
 		}
 	}
-	g_testlist = alltests; // so valgrind doesn't report leaks
+	g_testlist = alltests;
 #else
 	arlib_init(NULL, argv);
 	testlist* alltests = g_testlist;
@@ -486,8 +505,8 @@ int main(int argc, char* argv[])
 				uint64_t end_time = time_us_ne();
 				uint64_t time_us = end_time - start_time;
 				uint64_t time_lim = (all_tests ? 5000*1000 : 500*1000);
-				runloop_blocktest_recycle(runloop::global());
-				runloop::global()->assert_empty();
+				//runloop_blocktest_recycle(runloop::global());
+				//runloop::global()->assert_empty();
 				assert_eq(n_malloc_block, 0);
 				if (time_us > time_lim)
 				{
@@ -542,6 +561,14 @@ int main(int argc, char* argv[])
 			}
 		}
 #endif
+	}
+	
+	testlist* free_them = g_testlist;
+	while (free_them)
+	{
+		testlist* next = free_them->next;
+		free(free_them);
+		free_them = next;
 	}
 	
 	return 0;

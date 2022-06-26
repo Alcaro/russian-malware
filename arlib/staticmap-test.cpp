@@ -183,7 +183,7 @@ test("staticmap", "", "file")
 	m.insert(k1, bytesr(v65536).slice(0, 2000));
 	verify(m, +1);
 	m.insert(k2, bytesr(v65536).slice(0, 2000));
-	verify(m, +2);
+	verify(m, +1);
 	m.remove(k1);
 	verify(m, -1);
 	m.remove(k2);

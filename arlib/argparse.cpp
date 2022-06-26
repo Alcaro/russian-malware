@@ -1,5 +1,4 @@
 #include "argparse.h"
-#include "runloop.h"
 #include "stringconv.h"
 #include <time.h>
 
@@ -86,9 +85,6 @@ void argparse::parse_pre(const char * const * argv)
 }
 void argparse::parse(const char * const * argv)
 {
-#if defined(ARLIB_GUI) && !defined(ARLIB_GUI_GTK4) && !defined(ARLIB_TEST)
-	abort(); // should be unreachable
-#endif
 	parse_pre(argv);
 	
 	argv++;

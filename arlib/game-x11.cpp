@@ -1,11 +1,12 @@
 #if defined(ARLIB_GAME) && defined(ARLIB_GUI_X11)
 #include "game.h"
-#include "runloop.h"
+#include "runloop2.h"
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/XKBlib.h>
 #include <X11/Xatom.h>
 #include <unistd.h>
+#include <signal.h>
 
 struct window_x11_info window_x11 = {};
 
@@ -42,20 +43,22 @@ struct atoms_t {
 #undef ATOM
 } atoms;
 
+struct waiter_t : public waiter_fn<void, waiter_t> {
+	void complete() { container_of<&gameview_x11::wait>(this)->process_events(); }
+} wait;
 
-static bool process_events()
+
+void process_events()
 {
-	bool ret = false;
 	while (XPending(window_x11.display))
 	{
-		ret = true;
-		
 		XEvent ev;
 		XNextEvent(window_x11.display, &ev);
-		if (g_gameview && ev.xany.window == g_gameview->window)
-			g_gameview->process_event(&ev);
+		if (ev.xany.window == this->window)
+			this->process_event(&ev);
 	}
-	return ret;
+	
+	runloop2::await_read(ConnectionNumber(window_x11.display)).then(&wait);
 }
 
 static void global_init()
@@ -69,8 +72,6 @@ static void global_init()
 		exit(1);
 	}
 	window_x11.screen = DefaultScreen(window_x11.display);
-	
-	runloop::global()->set_fd(ConnectionNumber(window_x11.display), [](uintptr_t){ process_events(); });
 	
 	XkbSetDetectableAutoRepeat(window_x11.display, true, NULL);
 	
@@ -92,6 +93,8 @@ static uintptr_t root_parent()
 
 gameview_x11(Window window, uint32_t width, uint32_t height, cstring title) : window(window)
 {
+	signal(SIGPIPE, SIG_IGN);
+	
 	g_gameview = this;
 	display = window_x11.display;
 	
@@ -122,6 +125,8 @@ gameview_x11(Window window, uint32_t width, uint32_t height, cstring title) : wi
 	XMapWindow(window_x11.display, window);
 	
 	calc_keyboard_map();
+	
+	runloop2::await_read(ConnectionNumber(window_x11.display)).then(&wait);
 }
 
 function<void()> cb_exit = [this](){ stop(); };
@@ -324,15 +329,13 @@ void send_mouse(int x, int y, uint32_t state)
 
 
 
-// sending a frame to OpenGL makes X server reply, which makes runloop break and render next frame
-// TODO: delete once runloop rewrite is done
-/*public*/ void tmp_step(bool wait)
+/*public*/ void step(bool wait)
 {
 	got_event = false;
 	process_events(); // in case someone else (for example ctx-x11.cpp) did synchronous X calls behind our back
-	runloop::global()->step(false);
+	runloop2::step(false);
 	while (wait && !got_event)
-		runloop::global()->step(true);
+		runloop2::step(true);
 }
 
 };

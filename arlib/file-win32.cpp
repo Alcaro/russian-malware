@@ -292,7 +292,7 @@ array<string> file::listdir(cstring path)
 }
 
 
-bool file2::open(cstring filename, mode m)
+bool file2::open(cstrnul filename, mode m)
 {
 	reset();
 	if (path_corrupt(filename)) return false;
@@ -300,7 +300,7 @@ bool file2::open(cstring filename, mode m)
 	DWORD dispositions[] = { OPEN_EXISTING, OPEN_ALWAYS, OPEN_EXISTING, CREATE_ALWAYS, CREATE_NEW };
 	DWORD access = ((m&7)==m_read ? GENERIC_READ : GENERIC_READ|GENERIC_WRITE);
 	DWORD share = (m&m_exclusive) ? FILE_SHARE_READ : FILE_SHARE_ALL;
-	this->fd = CreateFile(filename.c_str(), access, share, NULL, dispositions[m&7], FILE_ATTRIBUTE_NORMAL, NULL);
+	this->fd = CreateFile(filename, access, share, NULL, dispositions[m&7], FILE_ATTRIBUTE_NORMAL, NULL);
 	return (this->fd != INVALID_HANDLE_VALUE);
 }
 

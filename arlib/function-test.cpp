@@ -42,7 +42,7 @@ test("function", "", "function")
 		function<void()> fn2 = fn;
 		assert(fn);
 		assert(fn2);
-		fn = NULL;
+		fn = nullptr;
 		assert(!fn);
 	}
 	

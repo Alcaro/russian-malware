@@ -77,13 +77,15 @@ void _teststack_push(cstring file, int line);
 void _teststack_pop();
 void _teststack_pushstr(string text);
 void _teststack_popstr();
-void _test_blockmalloc();
-void _test_unblockmalloc();
 
 void _test_skip(cstring why);
 void _test_skip_force(cstring why);
 void _test_inconclusive(cstring why);
 void _test_expfail(cstring why);
+bool test_skipped();
+
+void test_nomalloc_begin();
+void test_nomalloc_end();
 
 //undefined behavior if T is unsigned and T2 is negative
 //I'd prefer making it compare properly, but that requires way too many conditionals.
@@ -105,7 +107,9 @@ void _assert_eq(const T&  actual,   const char * actual_exp,
 {
 	if (!_test_eq(actual, expected))
 	{
+		test_nomalloc_end();
 		_testcmpfail((string)actual_exp+" == "+expected_exp, file, line, tostring_dbg(expected), tostring_dbg(actual));
+		test_nomalloc_begin();
 	}
 }
 
@@ -116,7 +120,9 @@ void _assert_ne(const T&  actual,   const char * actual_exp,
 {
 	if (!!_test_eq(actual, expected)) // a!=b implemented as !(a==b)
 	{
+		test_nomalloc_end();
 		_testcmpfail((string)actual_exp+" != "+expected_exp, file, line, tostring_dbg(expected), tostring_dbg(actual));
+		test_nomalloc_begin();
 	}
 }
 
@@ -127,7 +133,9 @@ void _assert_lt(const T&  actual,   const char * actual_exp,
 {
 	if (!_test_lt(actual, expected))
 	{
+		test_nomalloc_end();
 		_testcmpfail((string)actual_exp+" < "+expected_exp, file, line, tostring_dbg(expected), tostring_dbg(actual));
+		test_nomalloc_begin();
 	}
 }
 
@@ -138,7 +146,9 @@ void _assert_lte(const T&  actual,   const char * actual_exp,
 {
 	if (!!_test_lt(expected, actual)) // a<=b implemented as !(b<a)
 	{
+		test_nomalloc_end();
 		_testcmpfail((string)actual_exp+" <= "+expected_exp, file, line, tostring_dbg(expected), tostring_dbg(actual));
+		test_nomalloc_begin();
 	}
 }
 
@@ -149,7 +159,9 @@ void _assert_gt(const T&  actual,   const char * actual_exp,
 {
 	if (!_test_lt(expected, actual)) // a>b implemented as b<a
 	{
+		test_nomalloc_end();
 		_testcmpfail((string)actual_exp+" > "+expected_exp, file, line, tostring_dbg(expected), tostring_dbg(actual));
+		test_nomalloc_begin();
 	}
 }
 
@@ -160,7 +172,9 @@ void _assert_gte(const T&  actual,   const char * actual_exp,
 {
 	if (!!_test_lt(actual, expected)) // a>=b implemented as !(a<b)
 	{
+		test_nomalloc_end();
 		_testcmpfail((string)actual_exp+" >= "+expected_exp, file, line, tostring_dbg(expected), tostring_dbg(actual));
+		test_nomalloc_begin();
 	}
 }
 
@@ -172,8 +186,10 @@ void _assert_range(const T&  actual, const char * actual_exp,
 {
 	if (_test_lt(actual, min) || _test_lt(max, actual))
 	{
+		test_nomalloc_end();
 		_testcmpfail((string)actual_exp+" in ["+min_exp+".."+max_exp+"]", file, line,
 		             "["+tostring_dbg(min)+".."+tostring_dbg(max)+"]", tostring_dbg(actual));
+		test_nomalloc_begin();
 	}
 }
 
@@ -190,7 +206,8 @@ void _assert_range(const T&  actual, const char * actual_exp,
 	static KEEP_OBJECT _testdecl JOIN(_testdecl, __LINE__)(TESTFUNCNAME, __FILE__, __LINE__, name, needs, provides); \
 	static void TESTFUNCNAME()
 #define assert(x) do { if (!(x)) { _testfail("Failed assertion " #x, __FILE__, __LINE__); } } while(0)
-#define assert_msg(x, msg) do { if (!(x)) { _testfail((string)"Failed assertion " #x ": "+msg, __FILE__, __LINE__); } } while(0)
+// TODO: this one conflicts with test_nomalloc
+//#define assert_msg(x, msg) do { if (!(x)) { _testfail((string)"Failed assertion " #x ": "+msg, __FILE__, __LINE__); } } while(0)
 #define _assert_fn(fn,actual,expected,ret) do { \
 		fn(actual, #actual, expected, #expected, __FILE__, __LINE__); \
 	} while(0)
@@ -204,7 +221,7 @@ void _assert_range(const T&  actual, const char * actual_exp,
 		_assert_range(actual, #actual, min, #min, max, #max, __FILE__, __LINE__); \
 	} while(0)
 #define assert_unreachable() do { _testfail("assert_unreachable() wasn't unreachable", __FILE__, __LINE__); } while(0)
-#define test_nomalloc contextmanager(_test_blockmalloc(), _test_unblockmalloc())
+#define test_nomalloc contextmanager(test_nomalloc_begin(), test_nomalloc_end())
 #define testctx(x) contextmanager(_teststack_pushstr(x), _teststack_popstr())
 #define testcall(x) do { contextmanager(_teststack_push(__FILE__, __LINE__), _teststack_pop()) { x; } } while(0)
 #define test_skip(x) do { _test_skip(x); } while(0)
@@ -213,6 +230,10 @@ void _assert_range(const T&  actual, const char * actual_exp,
 #define test_inconclusive(x) do { _test_inconclusive(x); } while(0)
 #define test_expfail(x) do { _test_expfail(x); } while(0)
 #define test_nothrow contextmanager(_test_nothrow(+1), _test_nothrow(-1))
+
+// If the test has failed, throws something (unless in test_nothrow, in which case returns true).
+// If test is still successful, returns false.
+bool test_rethrow();
 
 #if defined(__clang__)
 // I am not proud of this code.
@@ -326,15 +347,20 @@ int not_quite_main(int argc, char** argv);
 #define assert_all_reached()
 #define assert_unreachable()
 #define test_nothrow
+#define test_rethrow() do{}while(0)
+#define test_skipped() true
+
+#define test_nomalloc_begin()
+#define test_nomalloc_end()
 
 #endif
 
 #ifdef ARLIB_SOCKET
-class socket; class runloop;
-//Ensures that the given socket is usable and speaks HTTP. Socket is not usable afterwards, but caller is responsible for closing it.
-void socket_test_http(socket* sock, runloop* loop);
-//Ensures the socket does not return an answer if the client tries to speak HTTP.
-void socket_test_fail(socket* sock, runloop* loop);
+//class socket; class runloop;
+////Ensures that the given socket is usable and speaks HTTP. Socket is not usable afterwards, but caller is responsible for closing it.
+//void socket_test_http(socket* sock, runloop* loop);
+////Ensures the socket does not return an answer if the client tries to speak HTTP.
+//void socket_test_fail(socket* sock, runloop* loop);
 #endif
 
 #if __has_include(<valgrind/memcheck.h>)

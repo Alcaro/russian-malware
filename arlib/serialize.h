@@ -17,6 +17,7 @@ public:
 	//  ser_hex() - takes an unsigned integer or uint8_t array. For JSON, integers are encoded as integers, not strings.
 	//  ser_compact(val, depth) - (JSON only) deindents val's N-deep children (if depth is 1, val's children are one line each).
 	//  ser_include_if(cond, val) - when serializing, emits val only if cond is true. When deserializing, acts like val.
+	//  ser_include_if_true(val) - when serializing, emits val only if it's truthy. When deserializing, acts like val.
 	template<typename T> void items(cstring name, T& item, ...);
 	
 	// If serializing:
@@ -54,6 +55,7 @@ template<typename T> ser_compact_t<const T> ser_compact(const T& c, int depth = 
 template<typename T> struct ser_include_if_t { bool cond; T& c; ser_include_if_t(bool cond, T& c) : cond(cond), c(c) {} };
 template<typename T> ser_include_if_t<T> ser_include_if(bool cond, T& c) { return ser_include_if_t(cond, c); }
 template<typename T> ser_include_if_t<const T> ser_include_if(bool cond, const T& c) { return ser_include_if_t(cond, c); }
+template<typename T> ser_include_if_t<T> ser_include_if_true(T& c) { return ser_include_if_t((bool)c, c); }
 
 template<typename T>
 static constexpr inline

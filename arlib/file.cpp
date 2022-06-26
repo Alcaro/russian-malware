@@ -126,7 +126,7 @@ again:
 	return path;
 }
 
-#ifndef ARLIB_GUI
+//#ifndef ARLIB_GUI
 file::impl* file::open_impl(cstring filename, mode m)
 {
 	return open_impl_fs(filename, m);
@@ -141,7 +141,7 @@ bool file::mkdir(cstring filename)
 {
 	return mkdir_fs(filename);
 }
-#endif
+//#endif
 
 bool file2::resize(off_t newsize, bytesr& map, bool writable)
 {
@@ -399,7 +399,7 @@ test("file::listdir", "array,string", "")
 	assert_gt(files.size(), 50);
 	assert(files.contains("arlib/string.cpp"));
 	assert(files.contains("arlib/.gitignore"));
-	assert(files.contains("arlib/gui/"));
+	assert(files.contains("arlib/deps/"));
 	assert(!files.contains("arlib/."));
 	assert(!files.contains("arlib/.."));
 }

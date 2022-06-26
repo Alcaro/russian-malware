@@ -52,7 +52,8 @@ void string::resize(size_t newlen)
 		break;
 	case 3: // big->big
 		{
-			m_data = xrealloc(m_data, bytes_for(newlen));
+			if (bytes_for(newlen) != bytes_for(m_len))
+				m_data = xrealloc(m_data, bytes_for(newlen));
 			m_data[newlen] = '\0';
 			m_len = newlen;
 		}
@@ -141,6 +142,7 @@ string string::create_usurp(char * str)
 	string ret;
 	memcpy((void*)&ret, (void*)&tmp, sizeof(string));
 	if (tmp.inlined()) free(str);
+	else ret.m_data = xrealloc(ret.m_data, bytes_for(ret.m_len));
 	return ret;
 }
 
@@ -887,7 +889,7 @@ test("strtoken", "", "string")
 	//assert(strtoken("", "", ','));
 }
 
-test("string", "array,memeq", "string")
+test("string base", "array,memeq", "string")
 {
 	{
 		const char * g = "hi";
@@ -1392,6 +1394,15 @@ test("string", "array,memeq", "string")
 		assert_eq((uintptr_t)b2.ptr(), 0);
 		assert_eq(s1.length(), 8);
 		assert_eq(s2.length(), 32);
+	}
+	
+	{
+		string a = "aaaaaaaaaaaaaaaaaaaaaaaa";
+		test_nomalloc {
+			assert(a == "aaaaaaaaaaaaaaaaaaaaaaaa");
+			a += "aaaaaaa";
+			assert(a == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+		}
 	}
 }
 

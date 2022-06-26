@@ -255,8 +255,7 @@ public:
 #endif
 
 
-// TODO: create a bytestreamw whose output size is known beforehand, so it doesn't malloc
-class bytestreamw {
+class bytestreamw_dyn {
 protected:
 	bytearray buf;
 	
@@ -300,7 +299,7 @@ public:
 	class pointer {
 		bytearray* buf;
 		size_t pos;
-		friend class bytestreamw;
+		friend class bytestreamw_dyn;
 		pointer(bytearray* buf, size_t pos) : buf(buf), pos(pos) {}
 	public:
 		void fill32l() { writeu_le32(buf->ptr()+pos, buf->size()); }
@@ -328,5 +327,82 @@ public:
 	array<uint8_t> finish()
 	{
 		return std::move(buf);
+	}
+};
+
+class bytestreamw {
+protected:
+	uint8_t* start;
+	uint8_t* at;
+	uint8_t* end;
+	
+public:
+	bytestreamw(bytesw by)
+	{
+		start = by.ptr();
+		at = by.ptr();
+		end = by.ptr() + by.size();
+	}
+	template<size_t N>
+	bytestreamw(uint8_t(&ptr)[N])
+	{
+		start = ptr;
+		at = ptr;
+		end = ptr + N;
+	}
+	forceinline void bytes(bytesr data)
+	{
+		memcpy(at, data.ptr(), data.size());
+		at += data.size();
+	}
+	forceinline void text(cstring str)
+	{
+		bytes(str.bytes());
+	}
+	forceinline void text(const char * str)
+	{
+		bytes(bytesr((uint8_t*)str, strlen(str)));
+	}
+	forceinline void strnul(cstring str)
+	{
+		bytes(str.bytes());
+		u8(0);
+	}
+	forceinline void strnul(const char * str)
+	{
+		bytes(bytesr((uint8_t*)str, strlen(str)+1));
+	}
+	template<typename... Ts>
+	forceinline void u8s(Ts... bs)
+	{
+		uint8_t raw[] = { (uint8_t)bs... };
+		bytes(raw);
+	}
+	
+	forceinline void u8(uint8_t val) { *at++ = val; }
+	forceinline void u16l(uint16_t val) { bytes(pack_le16(val)); }
+	forceinline void u16b(uint16_t val) { bytes(pack_be16(val)); }
+	forceinline void u32l(uint32_t val) { bytes(pack_le32(val)); }
+	forceinline void u32b(uint32_t val) { bytes(pack_be32(val)); }
+	forceinline void u64l(uint64_t val) { bytes(pack_le64(val)); }
+	forceinline void u64b(uint64_t val) { bytes(pack_be64(val)); }
+	
+	forceinline void f32l(float  val) { bytes(pack_lef32(val)); }
+	forceinline void f32b(float  val) { bytes(pack_bef32(val)); }
+	forceinline void f64l(double val) { bytes(pack_lef64(val)); }
+	forceinline void f64b(double val) { bytes(pack_bef64(val)); }
+	
+	forceinline size_t tell() { return at-start; }
+	forceinline size_t capacity() { return end-start; }
+	forceinline size_t remaining() { return end-at; }
+	
+	//void align8() {}
+	//void align16() { buf.resize((buf.size()+1)&~1); }
+	//void align32() { buf.resize((buf.size()+3)&~3); }
+	//void align64() { buf.resize((buf.size()+7)&~7); }
+	
+	forceinline arrayvieww<uint8_t> finish()
+	{
+		return bytesw(start, at-start);
 	}
 };

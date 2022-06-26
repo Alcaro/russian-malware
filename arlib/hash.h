@@ -25,6 +25,14 @@ static inline size_t hash(const bytesr& val)
 {
 	return hash(val.ptr(), val.size());
 }
+static inline size_t hash(const bytesw& val)
+{
+	return hash(val.ptr(), val.size());
+}
+static inline size_t hash(const bytearray& val)
+{
+	return hash(val.ptr(), val.size());
+}
 
 template<typename T>
 class hashable_pointer {

@@ -1,200 +1,166 @@
-#pragma once
-#ifdef ARLIB_SOCKET
-#include "global.h"
-#include "array.h"
 #include "socket.h"
-#include "bytepipe.h"
-#include "stringconv.h"
 #include "random.h"
 
-class HTTP : nocopy {
+class http_t {
 public:
-	HTTP(runloop* loop) : loop(loop) {}
+	struct location {
+		string scheme; // https
+		string domain; // muncher.se:443
+		string path;   // /index.html
+		
+		//If 'relative' is false, 'out' can be uninitialized. If true, must be fully valid. On failure, the location is undefined.
+		//If the base URL contains a #fragment, and the new one does not, the #fragment is preserved. This matches HTTP 3xx but not <a href>.
+		bool parse(cstring url, bool relative = false);
+		
+		bool same_origin(const location& other) const
+		{
+			// will incorrectly claim that http://example.com/ != http://example.com:80/ != http://example.com:080/
+			// I don't care; port specifications are rare, and this function just affects keep-alive
+			return scheme == other.scheme && domain == other.domain;
+		}
+		bool same_origin(cstring url) const
+		{
+			// could optimize this a bit maybe
+			location other;
+			if (!other.parse(url)) return false;
+			return this->same_origin(other);
+		}
+		void set_origin(const location& other)
+		{
+			scheme = other.scheme;
+			domain = other.domain;
+			// but leave path blank
+		}
+	};
+	
+	// Matches the application/x-www-form-urlencoded POST rules (or at least Firefox's interpretation thereof).
+	// Space becomes plus, *-._ and alphanumerics are left as is, everything else (including UTF-8) is percent escaped.
+	// I don't know which RFCs it matches - they're hard to read, and they don't clearly define whether % should be escaped.
+	static string urlencode(cstring in);
+	
+	enum {
+		e_bad_url  = -1, // couldn't parse URL
+		e_connect  = -2, // couldn't resolve domain name, or couldn't open TCP or SSL stream
+		e_broken   = -3, // server unexpectedly closed connection, or timeout
+		e_not_http = -4, // the server isn't speaking HTTP
+		e_too_big  = -5, // limit_bytes was reached
+		
+		e_timeout  = -6, // the response object was created with a http_t::timeout
+	};
+	
+	static constexpr struct timeout_t {} timeout = {};
 	
 	struct req {
 		//Every field except 'url' is optional.
 		string url;
 		
 		string method; // defaults to GET if body is empty, POST if nonempty
-		//These headers are added automatically, if not already present:
-		//Connection: keep-alive
-		//Host: <from url>
-		//Content-Length: <from body> (if method is POST)
-		//Content-Type: application/json if body starts with [ or {, and method is POST
-		//           or application/x-www-form-urlencoded, if method is POST and body is something else
-		array<string> headers; // TODO: multimap
-		array<uint8_t> body;
+		// These headers are added automatically, if not already present (case sensitive):
+		// Connection: keep-alive
+		// Host: as in url
+		// Content-Length: body.size() if method is POST
+		// Content-Type: application/json if body starts with [ or {, and method is POST
+		//            or application/x-www-form-urlencoded, if method is POST and body is something else
+		array<string> headers;
+		bytearray body;
 		
-		enum {
-			f_no_retry = 0x00000001, // default for POST and everything other than GET
-			f_retry    = 0x00000002, // default for GET
-		};
-		uint32_t flags = 0;
-		
-		// Passed unchanged in the rsp object, and used for cancel(). Otherwise not used.
-		uintptr_t id = 0;
-		
-		//If the server sends this much data (including headers/etc), or hasn't finished in the given time (including DNS lookup), fail.
-		//They're approximate; a request may succeed if the server sends slightly more than this.
-		uint64_t limit_ms = 5000;
-		size_t limit_bytes = 1048576;
-		
-		req() {}
-		req(string url) : url(url) {}
+		size_t bytes_max = 16*1024*1024; // Counts total bytes received in the HTTP response. For request_chunked(), applies to headers only.
 	};
-	
-	struct rsp {
-		req q;
+	struct rsp_base {
+		req request;
 		
-		enum {
-			e_bad_url        = -1, // couldn't parse URL
-			e_different_host = -2, // can't use Keep-Alive between these, create a new http object
-			e_connect        = -3, // couldn't open TCP/SSL stream
-			e_broken         = -4, // server unexpectedly closed connection, or timeout
-			e_not_http       = -5, // the server isn't speaking HTTP
-			e_canceled       = -6, // request was canceled; used only internally, callback is never called with this reason
-			e_timeout        = -7, // limit_ms was reached
-			e_too_big        = -8, // limit_bytes was reached
-			//may also be a normal http status code (200, 302, 404, etc)
-		};
-		int status = 0;
-		//string status_str; // useless
-		
-		array<string> headers; // TODO: switch to multimap once it exists
-		array<uint8_t> body;
-		
+		int status;
+		bool complete = false;
+		array<string> headers;
 		
 		bool success() const
 		{
-			return (status >= 200 && status <= 299);
+			return complete && status >= 200 && status <= 299;
 		}
-		operator arrayvieww<uint8_t>() const
+		operator bool() const
 		{
-			if (success()) return body;
-			else return NULL;
+			return success();
 		}
-		//operator string() { return body; } // throws ambiguity errors if enabled
 		
-		cstring header(cstring name) const
+		cstrnul header(cstring name) const
 		{
-			for (cstring head : headers)
+			for (const string& h : headers)
 			{
-				if (head.istartswith(name) && head[name.length()]==':' && head[name.length()+1]==' ')
-				{
-					return head.substr(name.length()+2, ~0);
-				}
+				if (!h.istartswith(name)) continue;
+				cstrnul tmp = h.substr_nul(name.length());
+				if (!tmp.startswith(":")) continue;
+				if (tmp.startswith(": "))
+					return tmp.substr_nul(2);
+				else
+					return tmp.substr_nul(1);
 			}
-			return "";
+			return {};
 		}
+	};
+	struct rsp : public rsp_base {
+	private:
+		friend class http_t;
+		bytearray body_raw;
+	public:
 		
-		cstring text() const { return body; }
+		rsp() = default;
+		rsp(timeout_t) { status = e_timeout; }
+		
+		// The normal ones return empty body if the request was unsuccessful, for example 404.
+		// Unsafe ones always return the body.
+		bytearray body_take() { return success() ? body_take_unsafe() : nullptr; }
+		string text_take() { return success() ? text_take_unsafe() : string(); }
+		
+		bytearray body_take_unsafe() { return std::move(body_raw); }
+		string text_take_unsafe() { return string::create_usurp(std::move(body_raw)); }
+		
+		bytesr body() const { return success() ? body_unsafe() : nullptr; }
+		cstring text() const { return success() ? text_unsafe() : cstring(); }
+		
+		bytesr body_unsafe() const { return body_raw; }
+		cstring text_unsafe() const { return body_raw; }
 	};
 	
+	function<async<autoptr<socket2>>(bool ssl, cstrnul domain, int port)> cb_mksock = socket2::create_sslmaybe;
+	
 private:
-	struct rsp_i {
-		rsp r;
-		int n_tries_left;
-		function<void(rsp)> callback;
-	};
+	socketbuf sock;
+	uint32_t sock_generation = 0; // Used to check if the socket was broken while waiting for mut2.
+	location sock_loc;
+	// Set to now upon creating the socket, or completing a request.
+	// If a request comes in while it's more than two seconds ago, keepalive is not available.
+	timestamp sock_last_use;
+	
+	co_mutex mut1; // Taken immediately, released when the socket is created.
+	co_mutex mut2; // Taken after sending the request, or before creating the socket. Released when reading is done.
+	
+	bool can_keepalive(const req& q, const location& loc);
+	bool can_pipeline(const req& q, const location& loc);
+	void send_request(const req& q, const location& loc);
+	rsp& set_error(rsp& r, int status);
+	
 public:
+	
+	async<rsp> request(req q);
+	
+	// Extra overload because of https://gcc.gnu.org/bugzilla/show_bug.cgi?id=105804;
+	//  an await-expression containing a list-initializer (for example co_await http.request({ .url="http://example.com/" }))
+	//  will double free the list-initializer, with the resulting Valgrind errors and worse.
+	// To avoid this, the req must be a local created on a previous line.
+	//  Any attempt to pass an initializer list directly will be unable to choose between the overloads, giving an error.
+	// Once that bug is fixed, all callers should be audited.
+	// https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103871 (can't co_await anything containing a std::initializer_list)
+	//  will probably be fixed alongside 105804; if not, the header line still needs to be predeclared.
+	struct bad_req { string url; string method; array<string> headers; bytearray body; size_t bytes_max = 16*1024*1024; };
+	async<rsp> request(bad_req q) = delete;
 	
 	//A custom socket creation function, if you want proxy support.
-#ifdef ARLIB_SSL
-	void wrap_socks(function<socket*(bool ssl, cstrnul domain, int port, runloop* loop)> cb) { cb_mksock = cb; }
-#else
-	void wrap_socks(function<socket*(cstrnul domain, int port, runloop* loop)> cb) { cb_mksock = cb; }
-#endif
+	void wrap_socks(function<async<autoptr<socket2>>(bool ssl, cstrnul domain, int port)> cb) { cb_mksock = cb; }
 	
-	//Multiple requests may be sent to the same object. This will make them use HTTP Keep-Alive.
-	//If the object has any outstanding requests, all must be to the same protocol-domain-port tuple, otherwise subsequent ones fail.
-	// If the object is empty, the request may go to anywhere. http://example.com/ does not count as same as http://example.com:80/
-	//Failures are reported in the callback. Results are not guaranteed to be reported in any particular order.
-	void send(req q, function<void(rsp)> callback);
-	//If the HTTP object is currently trying to send a request with this ID, it's cancelled.
-	//The callback won't be called, and unless the request has already been sent, it won't be.
-	//If multiple have that ID, at least one is canceled; it's unspecified which, or if one or multiple are removed.
-	//Returns whether the ID existed.
-	bool cancel(uintptr_t id);
+	static async<rsp> get(cstring url);
 	
-	//Cancels and discards every unfinished operation, and resets this object to its freshly constructed state.
-	void reset();
-	
-	
-	struct location {
-		string scheme;
-		string domain;
-		int port;
-		string path;
-	};
-	//If 'relative' is false, 'out' can be uninitialized. If true, must be fully valid. On failure, the output location is undefined.
-	//If the base URL has a #fragment, and the new one does not, the #fragment is preserved. This matches HTTP 3xx but not <a href>.
-	//parse_url does not know about default ports. If the returned port is -1, caller is responsible for substituting a suitable default.
-	static bool parse_url(cstring url, bool relative, location& out);
-	
-	// Matches the application/x-www-form-urlencoded POST rules (or at least Firefox's interpretation thereof).
-	// Space becomes plus, *-._ and alphanumerics are left as is, everything else (including UTF-8) is percent escaped.
-	// I don't know which RFCs it matches - they're hard to read, and they don't define whether % should be escaped.
-	static string urlencode(cstring in);
-	
-private:
-	void lesser_reset(); // Resets the HTTP object except the pending requests array. Only safe for internal use.
-	
-	void resolve(size_t id);
-	void resolve_err_v(size_t id, int err)
-	{
-		requests[id].r.status = err;
-		resolve(id);
-	}
-	bool resolve_err_f(size_t id, int err) { resolve_err_v(id, err); return false; }
-	
-	//if tosend is empty, adds requests[active_req] to tosend, then increments active_req; if not empty, does nothing
-	//also sets this->location, if not set already
-	void try_compile_req();
-	
-	void create_sock();
-	void activity();
-	
-	
-	location lasthost; // used to verify that the requests aren't sent anywhere they don't belong
-	array<rsp_i> requests;
-	size_t next_send = 0; // index to requests[] next to sock->send(), or requests.size() if all done / in tosend
-	
-	runloop* loop;
-#ifdef ARLIB_SSL
-	function<socket*(bool ssl, cstrnul domain, int port, runloop* loop)> cb_mksock = socket::create_sslmaybe;
-#else
-	function<socket*(cstrnul domain, int port, runloop* loop)> cb_mksock = socket::create;
-#endif
-	autoptr<socket> sock;
-	
-	void do_timeout();
-	DECL_TIMER(timeout, HTTP);
-	
-	size_t bytes_in_req;
-	void reset_limits();
-	
-	MAKE_DESTRUCTIBLE_FROM_CALLBACK();
-	
-	enum httpstate {
-		st_boundary, // between requests; if socket closes, make a new one
-		st_boundary_retried, // between requests; if socket closes, abort request
-		
-		st_status, // waiting for HTTP/1.1 200 OK
-		st_header, // waiting for header, or \r\n\r\n
-		st_body, // waiting for additional bytes, non-chunked
-		st_body_chunk_len, // waiting for chunk length
-		st_body_chunk, // waiting for chunk
-		st_body_chunk_term, // waiting for final \r\n in chunk
-		st_body_chunk_term_final, // waiting for final \r\n in terminating 0\r\n\r\n chunk
-	};
-	httpstate state = st_boundary;
-	string fragment;
-	size_t bytesleft;
-	
-public:
 	// helper to construct multipart/form-data, for HTTP file uploads
 	// http://www.w3.org/TR/html401/interact/forms.html#h-17.13.4.2
-	// TODO: automatically switch to application/x-www-form-urlencoded if appropriate
 	class form {
 		string boundary;
 		array<uint8_t> result;
@@ -202,9 +168,7 @@ public:
 	public:
 		form()
 		{
-			uint8_t rand[16]; // 128 bits of random ought to be enough for everyone
-			rand_secure(&rand, sizeof(rand));
-			boundary = "--ArlibFormBoundary"+tostringhex(rand); // max 70 characters allowed, not counting the two leading hyphens
+			boundary = "--ArlibFormBoundary"+tostringhex<16>(g_rand.rand64()); // max 70 characters, not counting the two leading hyphens
 		}
 		
 		void value(cstring key, cstring value)
@@ -231,11 +195,10 @@ public:
 		}
 		
 		//Counts as calling pack(), so only once.
-		void attach(HTTP::req& rq)
+		void attach(http_t::req& rq)
 		{
 			rq.body = pack();
 			rq.headers.append("Content-Type: multipart/form-data; boundary="+boundary.substr(2, ~0));
 		}
 	};
 };
-#endif

@@ -69,6 +69,14 @@ FILETIME timestamp::to_native() const
 	ret.dwHighDateTime = tmp>>32;
 	return ret;
 }
+
+timestamp timestamp::now()
+{
+	// this one has an accuracy of 10ms by default
+	FILETIME ft;
+	GetSystemTimeAsFileTime(&ft);
+	return from_native(ft);
+}
 #else
 #include <time.h>
 #include <unistd.h>

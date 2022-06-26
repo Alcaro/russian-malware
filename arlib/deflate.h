@@ -3,9 +3,6 @@
 
 class inflator {
 private:
-#ifdef DEFLATE_TEST_IMPL
-public: // so tests can access sizeof(huff_table_123)
-#endif
 	uint8_t m_state;
 	uint8_t m_block_type;
 	
@@ -29,9 +26,13 @@ public: // so tests can access sizeof(huff_table_123)
 	uint8_t * m_out_end;
 	
 	
+#ifdef DEFLATE_TEST_IMPL
+public: // so tests can access sizeof(huff_table_123)
+#endif
 	static constexpr size_t huff_table_size_286 = 1760;
 	static constexpr size_t huff_table_size_30 = 608;
 	static constexpr size_t huff_table_size_19 = 560;
+private:
 	
 	union {
 		uint16_t m_stlitblk_len;

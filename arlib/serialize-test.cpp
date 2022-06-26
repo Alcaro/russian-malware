@@ -134,7 +134,10 @@ struct ser15 {
 	template<typename T>
 	void serialize(T& s)
 	{
-		s.items("a", a, "b", ser_include_if(b, b), "c", ser_include_if(c, c), "d", d);
+		s.items("a", a,
+		        "b", ser_include_if(b, b),
+		        "c", ser_include_if_true(c),
+		        "d", d);
 	}
 };
 

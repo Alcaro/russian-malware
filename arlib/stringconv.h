@@ -141,6 +141,12 @@ bool fromstringhex(cstring s, unsigned int & out);
 bool fromstringhex(cstring s, unsigned long & out);
 bool fromstringhex(cstring s, unsigned long long & out);
 
+bool fromstringhex_ptr(const char * s, size_t len, unsigned char & out);
+bool fromstringhex_ptr(const char * s, size_t len, unsigned short & out);
+bool fromstringhex_ptr(const char * s, size_t len, unsigned int & out);
+bool fromstringhex_ptr(const char * s, size_t len, unsigned long & out);
+bool fromstringhex_ptr(const char * s, size_t len, unsigned long long & out);
+
 string tostringhex(arrayview<uint8_t> val);
 bool fromstringhex(cstring s, arrayvieww<uint8_t> val);
 bool fromstringhex(cstring s, array<uint8_t>& val);

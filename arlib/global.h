@@ -53,6 +53,7 @@
 #include <limits.h>
 #include <inttypes.h>
 #include <utility>
+#include <new>
 #ifndef ARLIB_STANDALONE
 #include <stdio.h>
 #include "function.h"
@@ -234,6 +235,18 @@ template<> struct static_assert_t<false> {};
 #define static_assert(...) static_assert_c(__VA_ARGS__, static_assert_name(__VA_ARGS__))
 #endif
 
+#if defined(__clang_major__) && __clang_major__ < 99 // TODO: remove when clang implements this
+namespace std {
+	template<typename T1, typename T2>
+	constexpr bool is_layout_compatible_v = true;
+}
+#elif defined(__GNUC__) && __GNUC__ < 12 // TODO: remove this too
+namespace std {
+	template<typename T1, typename T2>
+	constexpr bool is_layout_compatible_v = true;
+}
+#endif
+
 
 //almost C version (fails inside structs)
 //#define static_assert(expr) \
@@ -307,16 +320,16 @@ template<typename T, typename T2> forceinline T reinterpret(T2 in)
 }
 
 
-template<typename T> static T min(T a) { return a; }
-template<typename T, typename... Args> static T min(T a, Args... args)
+template<typename T> static constexpr T min(T a) { return a; }
+template<typename T, typename... Args> static constexpr T min(T a, Args... args)
 {
 	T b = min(args...);
 	if (a < b) return a;
 	else return b;
 }
 
-template<typename T> static T max(T a) { return a; }
-template<typename T, typename... Args> static T max(T a, Args... args)
+template<typename T> static constexpr T max(T a) { return a; }
+template<typename T, typename... Args> static constexpr T max(T a, Args... args)
 {
 	T b = max(args...);
 	if (a < b) return b;
@@ -379,8 +392,10 @@ public:
 	autofree() = default;
 	autofree(T* ptr) : ptr(ptr) {}
 	autofree(autofree<T>&& other) { ptr = other.ptr; other.ptr = NULL; }
+	autofree(anyptr other) { ptr = other; }
 	autofree<T>& operator=(T* ptr) { free(this->ptr); this->ptr = ptr; return *this; }
 	autofree<T>& operator=(autofree<T>&& other) { free(this->ptr); ptr = other.ptr; other.ptr = NULL; return *this; }
+	autofree<T>& operator=(anyptr other) { free(this->ptr); ptr = other; return *this; }
 	T* release() { T* ret = ptr; ptr = NULL; return ret; }
 	T* operator->() { return ptr; }
 	T& operator*() { return *ptr; }
@@ -390,6 +405,184 @@ public:
 	operator const T*() const { return ptr; }
 	explicit operator bool() const { return ptr; }
 	~autofree() { free(ptr); }
+};
+
+// Contains one or none of its given types. Keeps track of which member is active, if any.
+// Trying to examine a nonexistent object, or create something else into a nonempty variant, is a coding error;
+//  it will be caught in debug builds, but not in release.
+// void is allowed, but duplicate types are not.
+template<typename... Ts>
+class variant {
+	template<int n, typename T, typename Tf, typename... Tsi>
+	static constexpr int state_for_inner()
+	{
+		if constexpr (std::is_same_v<T, Tf>) return n;
+		else return state_for_inner<n+1, T, Tsi...>();
+	}
+	
+	template<typename T> static constexpr int state_for() { return state_for_inner<1, T, Ts...>(); }
+	
+	template<typename T> static constexpr size_t my_sizeof()
+	{
+		if constexpr (std::is_same_v<T, void>)
+			return 0;
+		else
+			return sizeof(T);
+	}
+	template<typename T> static constexpr size_t my_alignof()
+	{
+		if constexpr (std::is_same_v<T, void>)
+			return 0;
+		else
+			return alignof(T);
+	}
+	
+	char state_id = 0;
+	alignas(max(my_alignof<Ts>()...)) char buf[max(my_sizeof<Ts>()...)];
+	
+	
+	template<typename T>
+	forceinline int assert_contains()
+	{
+		constexpr int type_idx = state_for<T>();
+#ifndef ARLIB_OPT
+		if (type_idx != state_id)
+			abort();
+#endif
+		return type_idx;
+	}
+	
+	template<int n>
+	void destruct_all()
+	{
+	}
+	template<int n, typename T, typename... Tsi>
+	void destruct_all()
+	{
+		if (state_id == n+1)
+		{
+			if constexpr (!std::is_same_v<T, void>)
+				((T*)buf)->~T();
+		}
+		else
+			destruct_all<n+1, Tsi...>();
+	}
+public:
+	bool empty() { return state_id == 0; }
+	
+	template<typename T>
+	bool contains()
+	{
+		return state_id == state_for<T>();
+	}
+	
+	template<typename T>
+	T& get() { assert_contains<T>(); return *(T*)buf; }
+	
+	template<typename T>
+	T* try_get()
+	{
+		if (contains<T>())
+			return (T*)buf;
+		else
+			return nullptr;
+	}
+	
+	template<typename T, typename... Tsi>
+	void construct(Tsi&&... args)
+	{
+#ifndef ARLIB_OPT
+		if (state_id != 0)
+			abort();
+#endif
+		state_id = state_for<T>();
+		if constexpr (!std::is_same_v<T, void>)
+			new((T*)buf) T(std::forward<Tsi>(args)...);
+		else
+			static_assert(sizeof...(Tsi) == 0);
+	}
+	
+	template<typename T>
+	void destruct()
+	{
+		assert_contains<T>();
+		if constexpr (!std::is_same_v<T, void>)
+			((T*)buf)->~T();
+		state_id = 0;
+	}
+	
+	// Extracts the given contents, then deletes it from this object.
+	template<typename T>
+	T get_destruct()
+	{
+		assert_contains<T>();
+		T* obj = (T*)buf;
+		T ret = std::move(*obj);
+		if constexpr (!std::is_same_v<T, void>)
+			obj->~T();
+		state_id = 0;
+		return ret;
+	}
+	
+	// Clear out the object's contents, no matter what it is.
+	void destruct_any()
+	{
+		destruct_all<0, Ts...>();
+		state_id = 0;
+	}
+	
+	variant() {}
+	variant(const variant&) = delete;
+	variant(variant&& other)
+	{
+		state_id = other.state_id;
+		memcpy(buf, other.buf, sizeof(buf));
+		other.state_id = 0;
+	}
+	variant& operator=(const variant& other) = delete;
+	variant& operator=(variant&& other)
+	{
+		state_id = other.state_id;
+		memcpy(buf, other.buf, sizeof(buf));
+		other.state_id = 0;
+		return *this;
+	}
+	~variant()
+	{
+		destruct_all<0, Ts...>();
+	}
+};
+
+// Like the above, but does not track its content type; caller has to do that.
+template<typename... Ts>
+class variant_raw {
+	template<typename T>
+	static constexpr bool can_contain() { return (std::is_same_v<T, Ts> || ...); }
+	
+	alignas(max(alignof(Ts)...)) char buf[max(sizeof(Ts)...)];
+public:
+	template<typename T>
+	T* get_ptr() { static_assert(can_contain<T>()); return (T*)buf; }
+	template<typename T>
+	T& get() { return *get_ptr<T>(); }
+	
+	template<typename T, typename... Tsi>
+	T* construct(Tsi&&... args)
+	{
+		T* ret = get_ptr<T>();
+		new(ret) T(std::forward<Tsi>(args)...);
+		return ret;
+	}
+	template<typename T>
+	void destruct() { get_ptr<T>()->~T(); }
+	template<typename T>
+	T get_destruct()
+	{
+		T& obj = get<T>();
+		T ret = std::move(obj);
+		obj.~T();
+		return ret;
+	}
 };
 
 template<typename T>

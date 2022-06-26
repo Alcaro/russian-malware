@@ -1,14 +1,12 @@
-#pragma once
-#ifdef ARLIB_SOCKET
 #include "socket.h"
-#include "bytepipe.h"
 
-class WebSocket : nocopy {
-	runloop* loop;
-	autoptr<socket> sock;
-	bytepipe tosend; // used to avoid sending stuff before the handshake finishes, server throws Protocol Error if I try
+class websocket {
+	socketbuf sock;
+	function<async<autoptr<socket2>>(bool ssl, cstrnul domain, int port)> cb_mksock = socket2::create_sslmaybe;
 	
+public:
 	enum {
+		t_cont = 0,
 		t_text = 1,
 		t_binary = 2,
 		
@@ -17,52 +15,16 @@ class WebSocket : nocopy {
 		t_pong = 10
 	};
 	
-	array<uint8_t> msg;
+	void wrap_socks(function<async<autoptr<socket2>>(bool ssl, cstrnul domain, int port)> cb) { cb_mksock = cb; }
+	async<bool> connect(cstring target, arrayview<string> headers = nullptr);
+	operator bool() { return sock; }
 	
-	bool inHandshake;
-	bool gotFirstLine; // HTTP/1.1 101 Switching Protocols
-	//TODO: Sec-WebSocket-Accept https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_servers
+	void reset() { sock = nullptr; }
 	
-	bool break_callback;
-	
-	function<void(cstring)> cb_str;
-	function<void(arrayview<uint8_t>)> cb_bin;
-	function<void()> cb_error;
-	
-#ifdef ARLIB_SSL
-	function<socket*(bool ssl, cstrnul domain, int port, runloop* loop)> cb_mksock = socket::create_sslmaybe;
-#else
-	function<socket*(cstring domain, int port, runloop* loop)> cb_mksock = socket::create;
-#endif
-	
-	
-	void activity();
-	void send(arrayview<uint8_t> message, int type);
-	void cancel() { sock = NULL; cb_error(); }
-	
-public:
-	WebSocket(runloop* loop) : loop(loop) {}
-	void connect(cstring target, arrayview<string> headers = NULL);
-	
-	//A custom socket creation function, if you want proxy support.
-#ifdef ARLIB_SSL
-	void wrap_socks(function<socket*(bool ssl, cstrnul domain, int port, runloop* loop)> cb) { cb_mksock = cb; }
-#else
-	void wrap_socks(function<socket*(cstring domain, int port, runloop* loop)> cb) { cb_mksock = cb; }
-#endif
-	
-	void send(arrayview<uint8_t> message) { send(message, t_binary); }
-	void send(cstring message) { send(message.bytes(), t_text); }
-	
-	//It's fine to call both of those if you need to keep text/binary data apart. If you don't, both will go to the same one.
-	//Do this before connect(), or you may miss events, for example if the target is unparseable.
-	void callback(function<void(cstring           )> cb_str, function<void()> cb_error) { this->cb_str = cb_str; this->cb_error = cb_error; }
-	void callback(function<void(arrayview<uint8_t>)> cb_bin, function<void()> cb_error) { this->cb_bin = cb_bin; this->cb_error = cb_error; }
-	
-	bool isOpen() { return sock; }
-	void reset() { sock = NULL; tosend.reset(); msg.reset(); break_callback = true; }
-	
-	operator bool() { return isOpen(); }
+	// The returned bytesr is valid until next function call on this object.
+	async<bytesr> msg(int* type = nullptr);
+	void send(bytesr by, int type);
+	void send(bytesr by) { send(by, t_binary); }
+	void send(cstring text) { send(text.bytes(), t_text); }
+	async<bool> await_send() { return sock.await_send(); }
 };
-
-#endif

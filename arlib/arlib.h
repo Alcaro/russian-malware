@@ -29,9 +29,8 @@
 #include "deflate.h"
 #include "image.h"
 #include "prioqueue.h"
-#include "process.h"
 #include "regex.h"
-#include "runloop.h"
+#include "runloop2.h"
 #include "serialize.h"
 #include "staticmap.h"
 #include "terminal.h"
@@ -40,7 +39,9 @@
 #include "zip.h"
 
 #ifdef ARLIB_GUI
-#include "gui/window.h"
+void arlib_init();
+bool arlib_try_init();
+//#include "gui/window.h"
 #endif
 
 #ifdef ARLIB_GAME
@@ -56,9 +57,8 @@
 #endif
 
 #ifdef ARLIB_SOCKET
-#include "socket/socket.h"
-#include "dns.h"
+#include "socket.h"
 #include "http.h"
-#include "socks5.h"
+//#include "socks5.h"
 #include "websocket.h"
 #endif

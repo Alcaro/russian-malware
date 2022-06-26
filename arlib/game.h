@@ -39,7 +39,9 @@ virtual bool focused() = 0;
 virtual ~gameview() {}
 
 
-virtual void tmp_step(bool wait) = 0; // TODO: delet this once runloop stuff is rewritten
+// on X11, doing a synchronous call can lead to other messages being read, but not processed
+// to avoid trouble, the game object must control the runloop
+virtual void step(bool wait) = 0;
 
 
 // same as libretro.h retro_key, except values 256-383 are shifted down to 128-255 (libretro defines nothing in 128-255)
