@@ -85,7 +85,7 @@ static exepath_finder g_path;
 }
 
 cstring file::exedir() { return g_path.path; }
-cstring file::exepath() { return g_path.fullname; }
+cstrnul file::exepath() { return g_path.fullname; }
 #endif
 
 #ifdef _WIN32
@@ -107,7 +107,7 @@ oninit_static()
 }
 
 cstring file::exedir() { return cstring(bytesr((uint8_t*)g_exepath, g_exepath_dirlen)); }
-cstring file::exepath() { return g_exepath; }
+cstrnul file::exepath() { return g_exepath; }
 #endif
 
 #include "test.h"

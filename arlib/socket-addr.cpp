@@ -2,10 +2,11 @@
 #include "socket.h"
 #ifdef __unix__
 #include <arpa/inet.h>
-// musl prints at ipv4 if the address matches 0:0:0:0:0:ffff:?:?
+// musl prints as ipv4 if the address matches 0:0:0:0:0:ffff:?:?
 // glibc does the same, but also if the address matches 0:0:0:0:0:0:?:? but not 0:0:0:0:0:0:0:?
 // variable behavior is useless, let's just roll our own
 //#define USE_INET_NTOP
+// this one is, to my knowledge, well behaved
 #define USE_INET_PTON
 #endif
 #ifdef _WIN32
@@ -19,6 +20,209 @@
 #undef USE_INET_NTOP
 #undef USE_INET_PTON
 #endif
+
+cstring socket2::address::split_port(cstring host, uint16_t* port)
+{
+	if (!port)
+		return host;
+	
+	if (host.startswith("["))
+	{
+		ssize_t split = host.lastindexof("]");
+		if (split < 0)
+			return "";
+		if ((size_t)host.indexof(":") > (size_t)split)
+			return "";
+		
+		if (split != host.length()-1)
+		{
+			if (host[split+1] != ':' || !fromstring(host.substr(split+2, ~0), *port))
+				return "";
+		}
+		return host.substr(1, split);
+	}
+	
+	ssize_t split = host.indexof(":");
+	if (split < 0)
+		return host;
+	
+	if (!fromstring(host.substr(split+1, ~0), *port))
+		return "";
+	return host.substr(0, split);
+}
+
+static bool parse_ipv4_raw(const char * addr, uint8_t* out)
+{
+#ifdef USE_INET_PTON
+	return inet_pton(AF_INET, addr, out);
+#else
+	auto read_number = [](const char * & ptr, uint8_t& out) -> bool {
+		if (!isdigit(*ptr))
+			return false;
+		out = 0;
+		if (*ptr == '0')
+		{
+			ptr++;
+			return true;
+		}
+		
+		int ret = *(ptr++) - '0';
+		while (isdigit(*ptr))
+		{
+			ret = (ret*10) + *(ptr++) - '0';
+			if (ret >= 256)
+				return false;
+		}
+		out = ret;
+		return true;
+	};
+	
+	return (read_number(addr, out[0]) && *addr++ == '.' &&
+	        read_number(addr, out[1]) && *addr++ == '.' &&
+	        read_number(addr, out[2]) && *addr++ == '.' &&
+	        read_number(addr, out[3]) && *addr++ == '\0');
+#endif
+}
+
+static bool parse_ipv6_raw(const char * addr, uint8_t* out)
+{
+#ifdef USE_INET_PTON
+	return inet_pton(AF_INET6, addr, out);
+#else
+	auto read_segment_ipv6 = [](const char * start, const char * end, int max, bool allow_v4, uint8_t * out) -> int
+	{
+		if (start == end)
+			return 0;
+		int n_parts = 0;
+		
+		while (true)
+		{
+			size_t num_len = 0;
+			while (isxdigit(start[num_len]))
+				num_len++;
+			if (num_len == 0 || num_len > 4)
+				return -1;
+			
+			n_parts++;
+			if (n_parts > max)
+				return -1;
+			
+			uint16_t num;
+			fromstringhex_ptr(start, num_len, num); // known to succeed
+			out[0] = num>>8;
+			out[1] = num&255;
+			out += 2;
+			
+			start += num_len;
+			if (start == end)
+			{
+				return n_parts;
+			}
+			else if (*start == ':')
+			{
+				start++;
+				continue;
+			}
+			else if (*start == '.')
+			{
+				if (allow_v4 && n_parts+1 <= max && parse_ipv4_raw(start-num_len, out-2))
+					return n_parts+1;
+				else
+					return -1;
+			}
+			else return -1;
+		}
+	};
+	
+	const char * end = strchr(addr, '\0');
+	const char * middle = strstr(addr, "::");
+	if (!middle)
+		return (read_segment_ipv6(addr, end, 8, true, out) == 8);
+	
+	uint8_t right_bytes[16];
+	
+	int size_left = read_segment_ipv6(addr, middle, 7, false, out);
+	if (size_left < 0)
+		return false;
+	int size_right = read_segment_ipv6(middle+2, end, 7-size_left, true, right_bytes);
+	
+	if (size_right >= 0)
+	{
+		memcpy(out+16-size_right*2, right_bytes, size_right*2);
+		return true;
+	}
+	return false;
+#endif
+}
+
+bool socket2::address::parse_ipv4(cstring host, bytesw out, uint16_t* port)
+{
+	if (host.contains_nul())
+		return false;
+	return parse_ipv4_raw(socket2::address::split_port(host, port).c_str(), out.ptr());
+}
+bool socket2::address::parse_ipv6(cstring host, bytesw out, uint16_t* port)
+{
+	if (host.contains_nul())
+		return false;
+	return parse_ipv6_raw(socket2::address::split_port(host, port).c_str(), out.ptr());
+}
+
+// Per RFCs and other rules and specifications, a legal domain name matches
+//  ^(?=.{1,253}$)(xn--[a-z0-9\-]{1,59}|(?!..--)[a-z0-9\-]{1,63}\.)*([a-z]{1,63}|xn--[a-z0-9\-]{1,59})$
+// or, in plaintext:
+// - The domain is 1 to 253 chars textual (3 to 255 bytes encoded)
+// - The domain consists of zero or more dot-separated child labels, followed by the TLD label
+// - Each label consists of 1 to 63 of a-z 0-9 and dash, no other char
+// - Each label either starts with xn--, or does not start with letter-letter-dash-dash
+// - The TLD label either starts with xn--, or is strictly alphabetical
+// This function enforces the first three rules, but replaces the latter two with 'the TLD must start with a letter'.
+// If 'port' is not null, the domain may be optionally suffixed with colon and a port. If so, *port should contain a default value.
+// 'out' must be at least 256 bytes.
+cstring socket2::address::parse_domain(cstring host, uint16_t* port)
+{
+	bytesr by = host.bytes();
+	const uint8_t * start = by.ptr();
+	const uint8_t * end = start + by.size();
+	
+	const uint8_t * labelstart = start;
+	const uint8_t * it = start;
+	while (true)
+	{
+		if (it != end && (islower(*it) || isdigit(*it) || *it == '-'))
+		{
+			it++;
+			continue;
+		}
+		
+		if (it-start > 253)
+			return "";
+		
+		size_t labellen = it-labelstart;
+		if (labellen == 0 || labellen > 63)
+			return "";
+		
+		if (it == end)
+		{
+			if (isalpha(*labelstart))
+				return host;
+			return "";
+		}
+		
+		char sep = *it++;
+		if (sep == '.')
+		{
+			labelstart = it;
+		}
+		else if (sep == ':')
+		{
+			if (isalpha(*labelstart) && port && fromstring(cstring(bytesr(it, end-it)), *port))
+				return bytesr(start, it-1-start);
+			return "";
+		}
+		else return "";
+	}
+}
 
 socket2::address::address(bytesr by, uint16_t port)
 {
@@ -55,189 +259,31 @@ socket2::address::address(cstring str, uint16_t port)
 	if (str.contains_nul())
 		return;
 	
-	size_t end = str.length();
-	if (port != 0)
-	{
-		ssize_t newend = str.lastindexof(":");
-		uint16_t newport;
-		if (newend != -1 && fromstring(str.substr(newend+1, end), newport))
-		{
-			end = newend;
-			port = newport;
-			if (port == 0)
-				return;
-		}
-		// if there is a colon, but fromstring fails, fall through; bracketed ipv6 without port is legal
-	}
+	str = socket2::address::split_port(str, port ? &port : nullptr);
 	
-#ifdef USE_INET_PTON
-	char str_nul[INET6_ADDRSTRLEN+2];
-	if (end >= INET6_ADDRSTRLEN+2)
+	char str_nul[INET6_ADDRSTRLEN];
+	if (str.length() >= INET6_ADDRSTRLEN)
 		return;
-	memcpy(str_nul, str.bytes().ptr(), end);
-	str_nul[end] = '\0';
+	memcpy(str_nul, str.bytes().ptr(), str.length());
+	str_nul[str.length()] = '\0';
 	
 	sockaddr_in* sin = (sockaddr_in*)as_native();
 	memset(sin, 0, sizeof(sockaddr_in));
-	if (inet_pton(AF_INET, str_nul, &sin->sin_addr))
+	if (parse_ipv4_raw(str_nul, (uint8_t*)&sin->sin_addr))
 	{
 		sin->sin_family = AF_INET;
 		sin->sin_port = htons(port);
 		return;
 	}
 	
-	char* str_nul_v6 = str_nul;
-	if (port != 0)
-	{
-		// what is this absurd format, why did the ipv6 guys choose : and then these brackets
-		// there's a dozen better choices (I'd use +); : is the worst choice possible except / and alphanumerics
-		if (str_nul[0] != '[' || str_nul[end-1] != ']')
-			return;
-		str_nul[end-1] = '\0';
-		str_nul_v6++;
-	}
-	
 	sockaddr_in6* sin6 = (sockaddr_in6*)as_native();
 	memset(sin6, 0, sizeof(sockaddr_in6));
-	if (inet_pton(AF_INET6, str_nul_v6, &sin6->sin6_addr))
+	if (parse_ipv6_raw(str_nul, sin6->sin6_addr.s6_addr))
 	{
 		sin6->sin6_family = AF_INET6;
 		sin6->sin6_port = htons(port);
 		return;
 	}
-#else
-	memset(_space, 0, sizeof(_space));
-	
-	char str_nul[INET6_ADDRSTRLEN+2];
-	if (end >= INET6_ADDRSTRLEN+2)
-		return;
-	memcpy(str_nul, str.bytes().ptr(), end);
-	str_nul[end] = '\0';
-	
-	auto read_number_v4 = [](const char * & ptr, uint8_t& out) -> bool {
-		if (!isdigit(*ptr))
-			return false;
-		out = 0;
-		if (*ptr == '0')
-		{
-			ptr++;
-			return true;
-		}
-		
-		int ret = *(ptr++) - '0';
-		while (isdigit(*ptr))
-		{
-			ret = (ret*10) + *(ptr++) - '0';
-			if (ret >= 256)
-				return false;
-		}
-		out = ret;
-		return true;
-	};
-	
-	auto read_ipv4 = [read_number_v4](const char * ptr, uint8_t* out) -> bool {
-		return (read_number_v4(ptr, out[0]) && *ptr++ == '.' &&
-		        read_number_v4(ptr, out[1]) && *ptr++ == '.' &&
-		        read_number_v4(ptr, out[2]) && *ptr++ == '.' &&
-		        read_number_v4(ptr, out[3]) && *ptr++ == '\0');
-	};
-	
-	sockaddr_in* sin = (sockaddr_in*)as_native();
-	if (read_ipv4(str_nul, (uint8_t*)&sin->sin_addr))
-	{
-		sin->sin_family = AF_INET;
-		sin->sin_port = htons(port);
-		return;
-	}
-	memset(&sin->sin_addr, 0, sizeof(sin->sin_addr)); // in case read_ipv4 scrambled it
-	
-	char* str_nul_v6 = str_nul;
-	if (port != 0)
-	{
-		if (str_nul[0] != '[' || str_nul[end-1] != ']')
-			return;
-		str_nul[end-1] = '\0';
-		str_nul_v6++;
-		end -= 2;
-	}
-	
-	sockaddr_in6* sin6 = (sockaddr_in6*)as_native();
-	uint8_t* ipv6 = sin6->sin6_addr.s6_addr;
-	
-	auto read_segment_ipv6 = [read_ipv4](const char * start, int max, bool allow_v4, uint8_t * out) -> int
-	{
-		if (*start == '\0')
-			return 0;
-		int n_parts = 0;
-		
-		while (true)
-		{
-			size_t num_len = 0;
-			while (isxdigit(start[num_len]))
-				num_len++;
-			if (num_len == 0 || num_len > 4)
-				return -1;
-			
-			n_parts++;
-			if (n_parts > max)
-				return -1;
-			
-			uint16_t num;
-			fromstringhex_ptr(start, num_len, num); // known to succeed
-			out[0] = num>>8;
-			out[1] = num&255;
-			out += 2;
-			
-			start += num_len;
-			if (*start == '\0')
-			{
-				return n_parts;
-			}
-			else if (*start == ':')
-			{
-				start++;
-				continue;
-			}
-			else if (*start == '.')
-			{
-				if (allow_v4 && n_parts+1 <= max && read_ipv4(start-num_len, out-2))
-					return n_parts+1;
-				else
-					return -1;
-			}
-			else return -1;
-		}
-	};
-	
-	char* middle = (char*)memmem(str_nul_v6, end, "::", 2);
-	if (!middle)
-	{
-		if (read_segment_ipv6(str_nul_v6, 8, true, ipv6) == 8)
-		{
-			sin6->sin6_family = AF_INET6;
-			sin6->sin6_port = htons(port);
-		}
-		return;
-	}
-	else
-	{
-		uint8_t right_bytes[16];
-		
-		middle[0] = '\0';
-		int size_left = read_segment_ipv6(str_nul_v6, 7, false, ipv6);
-		if (size_left < 0)
-			return;
-		int size_right = read_segment_ipv6(middle+2, 7-size_left, true, right_bytes);
-		
-		if (size_right >= 0)
-		{
-			memcpy(ipv6+16-size_right*2, right_bytes, size_right*2);
-			sin6->sin6_family = AF_INET6;
-			sin6->sin6_port = htons(port);
-			return;
-		}
-	}
-#endif
 }
 
 socket2::address::operator bool()

@@ -147,11 +147,13 @@ ifeq ($(OS),windows)
   ifeq ($(shell echo ^^),^)
     HOST_SHELL := cmd
   else
-    # building non-windows binaries on a windows host is not supported (Cygwin or WSL compiling for themselves will probably work)
+    # building non-windows binaries on a windows host is not supported
     # why would you do such a thing, anyways?
     $(warning non-cmd windows detected; if SHELL $(SHELL) is something other than sh.exe, makefile should check for that instead)
     $(warning alternatively, if MSYSTEM $(MSYSTEM) is nonempty, use that)
   endif
+  # wine 7.0~repack-4 (Debian) can print stack traces on crash, but only with dwarf-4, not 5
+  CFLAGS += -gdwarf-4
 endif
 
 CFLAGS += -g
@@ -166,6 +168,8 @@ else
   #OPT=1 DEBUG=1 should prioritize optimization over debugging; OPT=1 DEBUG=1 then 'strip' should be identical to OPT=1 DEBUG=0
   #so this one is gated on OPT=0, not DEBUG=1
   CONF_CFLAGS += -DDEBUG
+  # this one is an imminent segfault 99% of the time
+  CONF_CFLAGS += -Werror=return-type
 endif
 
 ifeq ($(PROFILE),gen)
@@ -310,6 +314,8 @@ ifeq ($(ARSOCKET),1)
   #SOURCES_ARLIB += arlib/socket/*.cpp
   DEFINES += ARLIB_SOCKET
   
+  # TODO: change this when/if I reenable openssl and schannel
+  ARSOCKET_SSL ?= bearssl
   ifeq ($(OS),windows)
     CONF_LFLAGS += -lws2_32 -liphlpapi
     ifdef ARSOCKET_SSL_WINDOWS

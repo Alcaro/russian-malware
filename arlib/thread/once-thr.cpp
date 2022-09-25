@@ -105,31 +105,33 @@ test("thread runonce","","thread")
 	
 	test_nothrow {
 	
-	runonce once;
-	semaphore sem;
-	timer t;
+	struct state {
+		runonce once;
+		semaphore sem;
+		timer t;
+	} st;
 	
 	for (int thread_id=0;thread_id<4;thread_id++)
 	{
-		thread_create([&sem, &once, &t]() {
-			assert_range(t.us(), 0, US_TOLERANCE);
+		thread_create([&st]() {
+			assert_range(st.t.us(), 0, US_TOLERANCE);
 			usleep(US_DELAYSTART);
-			assert_range(t.us(), US_DELAYSTART-US_TOLERANCE_NEG, US_DELAYSTART+US_TOLERANCE);
-			once.run([](){ assert_unreachable(); });
-			assert_range(t.us(), US_INIT-US_TOLERANCE_NEG, US_INIT+US_TOLERANCE);
-			sem.release();
+			assert_range(st.t.us(), US_DELAYSTART-US_TOLERANCE_NEG, US_DELAYSTART+US_TOLERANCE);
+			st.once.run([](){ assert_unreachable(); });
+			assert_range(st.t.us(), US_INIT-US_TOLERANCE_NEG, US_INIT+US_TOLERANCE);
+			st.sem.release();
 		});
 	}
-	once.run([&t](){
-		assert_range(t.us(), 0, US_TOLERANCE);
+	st.once.run([&st](){
+		assert_range(st.t.us(), 0, US_TOLERANCE);
 		usleep(US_INIT);
-		assert_range(t.us(), US_INIT-US_TOLERANCE_NEG, US_INIT+US_TOLERANCE);
+		assert_range(st.t.us(), US_INIT-US_TOLERANCE_NEG, US_INIT+US_TOLERANCE);
 	});
-	once.run([](){ assert_unreachable(); });
+	st.once.run([](){ assert_unreachable(); });
 	
 	for (int thread_id=0;thread_id<4;thread_id++)
-		sem.wait();
+		st.sem.wait();
 	
-	assert_range(t.us(), US_INIT-US_TOLERANCE_NEG, US_INIT+US_TOLERANCE);
+	assert_range(st.t.us(), US_INIT-US_TOLERANCE_NEG, US_INIT+US_TOLERANCE);
 	}
 }

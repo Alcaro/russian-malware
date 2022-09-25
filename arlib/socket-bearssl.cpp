@@ -1,15 +1,14 @@
-#ifdef ARLIB_SOCKET
+#ifdef ARLIB_SSL_BEARSSL
 #include "socket.h"
 #include "base64.h"
 #include "file.h"
 
-#ifdef ARLIB_SSL_BEARSSL
 #include "deps/bearssl-0.6/inc/bearssl.h"
 
 namespace {
 // based on bearssl-0.3/tools/certs.c and files.c, heavily rewritten
 
-// use a static arena for allocations, to avoid memory leaks on hybrid DLL, and for performance
+// use a static arena for allocations, to avoid memory leaks on hybrid DLL
 // the anchor structs are allocated backwards, while the actual keys they point to go forwards, so they meet in the middle
 static uint8_t alloc_arena[256*1024]; // on a normal Linux, 64KB of this is used (ca-certificates.crt is 200KB); 17KB on Windows
 static size_t alloc_blobs = 0; // reserving more than I need is harmless, the OS won't allocate unused pages
@@ -123,24 +122,24 @@ public:
 	br_x509_minimal_context xc;
 	uint8_t iobuf[BR_SSL_BUFSIZE_BIDI];
 	
-	socket2_bearssl(autoptr<socket2> sock, cstrnul domain) : sock(std::move(sock))
+	socket2_bearssl(autoptr<socket2> sock, cstring domain) : sock(std::move(sock))
 	{
-		br_ssl_client_init_full(&sc, &xc, alloc_certs, alloc_certs_initial-alloc_certs);
+		br_ssl_client_init_full(&sc, &xc, alloc_certs, alloc_certs_initial - alloc_certs);
 		br_ssl_engine_set_buffer(&sc.eng, &iobuf, sizeof(iobuf), true);
-		br_ssl_client_reset(&sc, domain, false);
+		br_ssl_client_reset(&sc, domain.c_str(), false);
 		process();
 	}
 	
 	// this object has to track four different byte streams
 	
-	producer_fn<ssize_t> sendapp_p;
-	producer_fn<ssize_t> recvapp_p;
+	producer<void> sendapp_p;
+	producer<void> recvapp_p;
 	
-	struct sendrec_wt : public waiter_fn<ssize_t, sendrec_wt> {
-		void complete(ssize_t val) { container_of<&socket2_bearssl::sendrec_w>(this)->complete_sendrec(val); }
+	struct sendrec_wt : public waiter<void, sendrec_wt> {
+		void complete() { container_of<&socket2_bearssl::sendrec_w>(this)->ready_sendrec(); }
 	} sendrec_w;
-	struct recvrec_wt : public waiter_fn<ssize_t, recvrec_wt> {
-		void complete(ssize_t val) { container_of<&socket2_bearssl::recvrec_w>(this)->complete_recvrec(val); }
+	struct recvrec_wt : public waiter<void, recvrec_wt> {
+		void complete() { container_of<&socket2_bearssl::recvrec_w>(this)->ready_recvrec(); }
 	} recvrec_w;
 	
 	MAKE_DESTRUCTIBLE_FROM_CALLBACK();
@@ -153,51 +152,57 @@ public:
 		if (!sock)
 		{
 			if (sendapp_p.has_waiter())
-				RETURN_IF_CALLBACK_DESTRUCTS(sendapp_p.complete(-1));
+				RETURN_IF_CALLBACK_DESTRUCTS(sendapp_p.complete());
 			if (recvapp_p.has_waiter())
-				recvapp_p.complete(-1); // don't bother with RETURN_IF here, we're gonna return anyways
+				recvapp_p.complete(); // don't bother with RETURN_IF here, we're gonna return anyways
 			return;
 		}
-		if (!sendrec_w.is_waiting() && (st & BR_SSL_SENDREC))
-		{
-			size_t len;
-			uint8_t* out = br_ssl_engine_sendrec_buf(&sc.eng, &len);
-			bytesr by(out, len);
-			RETURN_IF_CALLBACK_DESTRUCTS(sock->send(by).then(&sendrec_w));
-		}
-		if (!recvrec_w.is_waiting() && (st & BR_SSL_RECVREC) && sock != nullptr)
-		{
-			size_t len;
-			uint8_t* out = br_ssl_engine_recvrec_buf(&sc.eng, &len);
-			bytesw by(out, len);
-			RETURN_IF_CALLBACK_DESTRUCTS(sock->recv(by).then(&recvrec_w));
-		}
+		
+		if ((st & BR_SSL_SENDREC) && !sendrec_w.is_waiting())
+			RETURN_IF_CALLBACK_DESTRUCTS(ready_sendrec());
+		if ((st & BR_SSL_RECVREC) && !recvrec_w.is_waiting() && sock != nullptr)
+			RETURN_IF_CALLBACK_DESTRUCTS(sock->can_recv().then(&recvrec_w));
+		
 		st = br_ssl_engine_current_state(&sc.eng);
-		if (sendapp_p.has_waiter() && (st & BR_SSL_SENDAPP))
-			RETURN_IF_CALLBACK_DESTRUCTS(sendapp_p.complete(0)); // don't bother keeping the pointer, just force caller to call send() again
-		if (recvapp_p.has_waiter() && (st & BR_SSL_RECVAPP))
-			recvapp_p.complete(0);
+		if ((st & BR_SSL_SENDAPP) && sendapp_p.has_waiter())
+			RETURN_IF_CALLBACK_DESTRUCTS(sendapp_p.complete());
+		if ((st & BR_SSL_RECVAPP) && recvapp_p.has_waiter())
+			recvapp_p.complete();
 	}
 	
-	void complete_recvrec(ssize_t n)
+	void ready_recvrec()
 	{
+		size_t len;
+		uint8_t* out = br_ssl_engine_recvrec_buf(&sc.eng, &len);
+		bytesw by(out, len);
+		ssize_t n = sock->recv_sync(by);
 		if (n > 0)
 			br_ssl_engine_recvrec_ack(&sc.eng, n);
 		if (n < 0)
 			sock = nullptr;
-		process();
+		if (n != 0)
+			process();
+		if (n == 0)
+			sock->can_recv().then(&recvrec_w);
 	}
-	void complete_sendrec(ssize_t n)
+	void ready_sendrec()
 	{
+		size_t len;
+		uint8_t* out = br_ssl_engine_sendrec_buf(&sc.eng, &len);
+		bytesr by(out, len);
+		ssize_t n = sock->send_sync(by);
 		if (n > 0)
 			br_ssl_engine_sendrec_ack(&sc.eng, n);
 		if (n < 0)
 			sock = nullptr;
-		process();
+		if (n != 0)
+			process();
+		if (n == 0)
+			sock->can_send().then(&sendrec_w);
 	}
 	
 	
-	async<ssize_t> recv(bytesw by) override
+	ssize_t recv_sync(bytesw by) override
 	{
 		size_t len;
 		uint8_t* out = br_ssl_engine_recvapp_buf(&sc.eng, &len);
@@ -207,16 +212,13 @@ public:
 			memcpy(by.ptr(), out, n);
 			br_ssl_engine_recvapp_ack(&sc.eng, n);
 			process();
-			recvapp_p.complete(n);
-			return &recvapp_p;
+			return n;
 		}
 		else if (!sock)
-			recvapp_p.complete(-1);
-		
-		return &recvapp_p;
+			return -1;
+		return 0;
 	}
-	
-	async<ssize_t> send(bytesr by) override
+	ssize_t send_sync(bytesr by) override
 	{
 		size_t len;
 		uint8_t* out = br_ssl_engine_sendapp_buf(&sc.eng, &len);
@@ -227,30 +229,45 @@ public:
 			br_ssl_engine_sendapp_ack(&sc.eng, n);
 			br_ssl_engine_flush(&sc.eng, false);
 			process();
-			sendapp_p.complete(n);
-			return &sendapp_p;
+			return n;
 		}
 		else if (!sock)
-			sendapp_p.complete(-1);
+			return -1;
 		
-		return &sendapp_p;
+		return 0;
 	}
-	void cancel_sendapp() {} // nothing needed
-	void cancel_recvapp() {}
+	
+	async<void> can_recv() override
+	{
+		size_t len;
+		uint8_t* out = br_ssl_engine_recvapp_buf(&sc.eng, &len);
+		if (out) return recvapp_p.complete_sync();
+		else return &recvapp_p;
+	}
+	async<void> can_send() override
+	{
+		size_t len;
+		uint8_t* out = br_ssl_engine_sendapp_buf(&sc.eng, &len);
+		if (out) return sendapp_p.complete_sync();
+		else return &sendapp_p;
+	}
 };
 }
 
-async<autoptr<socket2>> socket2::wrap_ssl(autoptr<socket2> inner, cstrnul domain)
+async<autoptr<socket2>> socket2::wrap_ssl_bearssl(autoptr<socket2> inner, cstring domain)
 {
 	if (!inner)
 		co_return nullptr;
-	autoptr<socket2> bear = new socket2_bearssl(std::move(inner), domain);
-	// sending 0 bytes does nothing, but it completes when the handshake does
-	// it's illegal for random sockets, but this specific implementation handles it correctly
-	ssize_t s = co_await bear->send(nullptr);
-	if (s < 0)
+	socket2_bearssl* bear = new socket2_bearssl(std::move(inner), domain);
+	autoptr<socket2> ret = bear;
+	co_await bear->can_send();
+	if (!bear->sock)
 		co_return nullptr;
-	co_return bear;
+	co_return ret;
 }
 #endif
-#endif
+
+//#ifdef ARLIB_SOCKET
+//#include "socket.h"
+//async<autoptr<socket2>> socket2::wrap_ssl_openssl(autoptr<socket2> inner, cstrnul domain) { co_return nullptr; }
+//#endif

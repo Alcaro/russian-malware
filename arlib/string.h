@@ -34,7 +34,7 @@ extern const uint8_t char_props[256];
 // 0x40 - digit (0-9)
 // 0x20 - letter (A-Za-z) - tolower/toupper needs 0x20 to be letter,
 // 0x10 - unused             and 0x80 is cheaper to test on some platforms, so it goes to the most common test (space)
-// 0x08 - underscore (_)    other bit assignments are arbitrary
+// 0x08 - unused            other bit assignments are arbitrary
 // 0x04 - lowercase (a-z)   also contrary to libc, these functions handle byte values only;
 // 0x02 - uppercase (A-Z)    EOF is not a valid input (EOF feels like a poor design)
 // 0x01 - hex digit (0-9A-Fa-f)
@@ -47,8 +47,6 @@ static inline bool isalnum(uint8_t c) { return char_props[c] & 0x60; }
 static inline bool isxdigit(uint8_t c) { return char_props[c] & 0x01; }
 static inline uint8_t tolower(uint8_t c) { return c|(char_props[c]&0x20); }
 static inline uint8_t toupper(uint8_t c) { return c&~(char_props[c]&0x20); }
-static inline bool isualpha(uint8_t c) { return char_props[c] & 0x28; }
-static inline bool isualnum(uint8_t c) { return char_props[c] & 0x68; }
 
 
 
@@ -152,7 +150,7 @@ private:
 	}
 	void init_from_nocopy(const char * str)
 	{
-		init_from_nocopy(arrayview<uint8_t>((uint8_t*)str, strlen(str)), true);
+		init_from_nocopy((uint8_t*)str, strlen(str), true);
 	}
 	void init_from_nocopy(const uint8_t * str, size_t len, bool has_nul = false)
 	{

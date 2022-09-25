@@ -1,5 +1,7 @@
 #if defined(ARLIB_GUI_GTK3) || defined(ARLIB_GUI_GTK4)
 #include "global.h"
+#include "string.h"
+#include "file.h"
 
 void arlib_init();
 bool arlib_try_init();
@@ -20,21 +22,14 @@ static void init_gui_shared_late()
 #ifdef ARLIB_GUI_GTK3
 void arlib_init()
 {
-	int argc = 1;
-	char * argv[] = { (char*)"arlib", nullptr };
-	char** argv_p = argv;
 	init_gui_shared_early();
-	gtk_init(&argc, &argv_p);
+	gtk_init(nullptr, nullptr);
 	init_gui_shared_late();
 }
-
 bool arlib_try_init()
 {
-	int argc = 1;
-	char * argv[] = { (char*)"arlib", nullptr };
-	char** argv_p = argv;
 	init_gui_shared_early();
-	bool ret = gtk_init_check(&argc, &argv_p);
+	bool ret = gtk_init_check(nullptr, nullptr);
 	init_gui_shared_late();
 	return ret;
 }

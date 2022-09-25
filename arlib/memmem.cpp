@@ -192,6 +192,7 @@ void* memmem_arlib(const void * haystack, size_t haystacklen, const void * needl
 #endif
 	
 #if !defined(_WIN32) && !defined(ARLIB_TEST) // for long needles, use libc; we're roughly equally fast, and code reuse means smaller
+	// except on windows, where memmem isn't a thing
 	return memmem(haystack, haystacklen, needle, needlelen);
 #endif
 	

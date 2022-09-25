@@ -9,6 +9,7 @@
 //- Tests are subordinate to the interface, implementation, and callers.
 //    The latter three should be as simple as possible; as much complexity as possible should be in the tests.
 //- As a corollary, tests may do weird things in order to exercise deeply-buried code paths of the implementation.
+//    The implementation should not add extra functions to improve testability, outside exceptional circumstances.
 //- All significant functionality should be tested.
 //- Tests shall test one thing only, and shall assume that their dependencies are correct.
 //- If a test failure in a module is actually due to a dependency, there's also a bug in dependency's tests. Fix that bug first.
@@ -20,10 +21,10 @@
 //    and injecting them usually involves adding complexity to implementation and/or interface.
 //    For example, the HTTP client tests will poke the internet.
 //Rare exceptions can be permitted, such as various ifdefs in the runloop implementations (they catch a significant amount of issues,
-//    with zero additional header complexity or release-mode bloat), or UDP sockets being untested (DNS client covers both).
+//    with only an extra function in the headers, zero release-mode bloat), or UDP sockets being untested (DNS client covers both).
 
 // Both ARLIB_TEST and ARLIB_TESTRUNNER are defined in the main program if compiling for tests.
-// In Arlib itself, only ARLIB_TESTRUNNER is defined.
+// In Arlib itself, only ARLIB_TESTRUNNER is defined, unless Arlib's own tests were requested.
 
 #undef assert
 
@@ -231,6 +232,18 @@ void _assert_range(const T&  actual, const char * actual_exp,
 #define test_expfail(x) do { _test_expfail(x); } while(0)
 #define test_nothrow contextmanager(_test_nothrow(+1), _test_nothrow(-1))
 
+template<typename T> class async;
+void _test_run_coro(async<void> inner);
+#define TESTFUNCNAME_CO JOIN(_testfunc_co, __LINE__)
+#define co_test(name, needs, provides) \
+	static async<void> TESTFUNCNAME_CO(); \
+	test(name, needs, provides) { _test_run_coro(TESTFUNCNAME_CO()); } \
+	static async<void> TESTFUNCNAME_CO()
+
+// Called from producer_coro::unhandled_exception(), and throws an exception.
+// Failing coroutine tests will leak memory. Fix the failure, and they'll go away.
+void _test_coro_exception();
+
 // If the test has failed, throws something (unless in test_nothrow, in which case returns true).
 // If test is still successful, returns false.
 bool test_rethrow();
@@ -326,15 +339,16 @@ int not_quite_main(int argc, char** argv);
 #else
 
 #define test(...) static void MAYBE_UNUSED JOIN(_testfunc_, __LINE__)()
+#define co_test(...) static async<void> MAYBE_UNUSED JOIN(_testfunc_, __LINE__)()
 #define assert(x) ((void)(x))
 #define assert_msg(x, msg) ((void)(x),(void)(msg))
-#define assert_eq(x,y) ((void)((x)==(y)))
-#define assert_ne(x,y) ((void)((x)==(y)))
-#define assert_lt(x,y) ((void)((x)<(y)))
-#define assert_lte(x,y) ((void)((x)<(y)))
-#define assert_gt(x,y) ((void)((x)<(y)))
-#define assert_gte(x,y) ((void)((x)<(y)))
-#define assert_range(x,y,z) ((void)((x)<(y)))
+#define assert_eq(x,y) ((void)!((x)==(y)))
+#define assert_ne(x,y) ((void)!((x)==(y)))
+#define assert_lt(x,y) ((void)!((x)<(y)))
+#define assert_lte(x,y) ((void)!((x)<(y)))
+#define assert_gt(x,y) ((void)!((x)<(y)))
+#define assert_gte(x,y) ((void)!((x)<(y)))
+#define assert_range(x,y,z) ((void)!((x)<(y)))
 #define test_nomalloc
 #define testctx(x)
 #define testcall(x) x
@@ -352,6 +366,8 @@ int not_quite_main(int argc, char** argv);
 
 #define test_nomalloc_begin()
 #define test_nomalloc_end()
+
+static inline void _test_coro_exception() { __builtin_trap(); }
 
 #endif
 

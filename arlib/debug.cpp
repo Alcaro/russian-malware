@@ -41,9 +41,9 @@ static bool has_debugger()
 	return (*tracer != '0');
 }
 
-bool debug_break()
+bool debug_break(const char * text)
 {
-	if (RUNNING_ON_VALGRIND) VALGRIND_PRINTF_BACKTRACE("debug trace");
+	if (RUNNING_ON_VALGRIND) VALGRIND_PRINTF_BACKTRACE("%s", text);
 	else if (has_debugger()) raise(SIGTRAP);
 	else return false;
 	return true;
@@ -101,7 +101,7 @@ void debug_log_stack(const char * text)
 #ifdef _WIN32
 #include <windows.h>
 
-bool debug_break()
+bool debug_break(const char * text)
 {
 	if (IsDebuggerPresent()) DebugBreak();
 	else return false;
@@ -162,7 +162,7 @@ void debug_log(const char * text)
 	}
 }
 
-void debug_warn(const char * text) { if (!debug_break()) debug_log(text); }
-void debug_fatal(const char * text) { if (!debug_break()) { debug_log(text); } abort(); }
-void debug_warn_stack(const char * text) { if (!debug_break()) debug_log_stack(text); }
-void debug_fatal_stack(const char * text) { if (!debug_break()) { debug_log_stack(text); } abort(); }
+void debug_warn(const char * text) { if (!debug_break(text)) debug_log(text); }
+void debug_fatal(const char * text) { if (!debug_break(text)) { debug_log(text); } abort(); }
+void debug_warn_stack(const char * text) { if (!debug_break(text)) debug_log_stack(text); }
+void debug_fatal_stack(const char * text) { if (!debug_break(text)) debug_log_stack(text); abort(); }

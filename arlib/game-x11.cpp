@@ -43,7 +43,7 @@ struct atoms_t {
 #undef ATOM
 } atoms;
 
-struct waiter_t : public waiter_fn<void, waiter_t> {
+struct waiter_t : public waiter<void, waiter_t> {
 	void complete() { container_of<&gameview_x11::wait>(this)->process_events(); }
 } wait;
 

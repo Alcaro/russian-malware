@@ -174,7 +174,7 @@ static void _testfail(cstrnul why)
 		result = err_fail;
 		puts(why);
 		fflush(stdout);
-		debug_break();
+		debug_break("test failed");
 	}
 	test_throw(err_fail);
 }
@@ -187,14 +187,7 @@ void _testfail(cstring why, cstring file, int line)
 
 void _testcmpfail(cstring name, cstring file, int line, cstring expected, cstring actual)
 {
-	//if (expected.contains("\n") || actual.contains("\n") || name.length()+expected.length()+actual.length() > 240)
-	{
-		_testfail("\nFailed assertion "+name+stack(file, line)+"\nexpected: "+expected+"\nactual:   "+actual);
-	}
-	//else
-	//{
-	//	_testfail("\nFailed assertion "+name+stack(file, line)+": expected "+expected+", got "+actual);
-	//}
+	_testfail("\nFailed assertion "+name+stack(file, line)+"\nexpected: "+expected+"\nactual:   "+actual);
 }
 
 void _test_skip(cstring why)
@@ -506,7 +499,7 @@ int main(int argc, char* argv[])
 				uint64_t time_us = end_time - start_time;
 				uint64_t time_lim = (all_tests ? 5000*1000 : 500*1000);
 				//runloop_blocktest_recycle(runloop::global());
-				//runloop::global()->assert_empty();
+				runloop2::assert_empty();
 				assert_eq(n_malloc_block, 0);
 				if (time_us > time_lim)
 				{
@@ -576,6 +569,23 @@ int main(int argc, char* argv[])
 
 #undef free
 void free_test(void* ptr) { _test_free(); free(ptr); }
+
+void _test_run_coro(async<void> inner)
+{
+	waiter<void, void> wait_co;
+	waiter<void, void> wait_time;
+	inner.then(&wait_co);
+	runloop2::await_timeout(timestamp::now()+duration::ms(10000)).then(&wait_time);
+	while (wait_co.is_waiting() && wait_time.is_waiting())
+		runloop2::step();
+	assert(wait_time.is_waiting()); // timeout means failure
+}
+
+void _test_coro_exception()
+{
+	test_rethrow();
+	assert_unreachable();
+}
 
 #ifdef ARLIB_TEST_ARLIB
 static int testnum = 0;

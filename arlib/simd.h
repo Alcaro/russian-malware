@@ -12,6 +12,18 @@
 #ifdef runtime__SSE2__
 # include <emmintrin.h>
 
+// https://godbolt.org/z/jbnsf4nEv
+// upstream report seems to be https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103897#c1 and/or #c2
+# if __GNUC__ == 12
+#  define _mm_undefined_si128 _mm_undefined_si128_alt
+static inline __attribute__((target("sse2"), always_inline)) __m128i _mm_undefined_si128_alt()
+{
+	__m128i ret;
+	__asm__ volatile("" : "=x"(ret));
+	return ret;
+}
+# endif
+
 # ifdef __i386__
 // malloc is guaranteed to have 16-byte alignment on 64bit, but only 8 on 32bit
 // I want to use the aligned instructions on 64bit, not ifdef it any further, not rewrite array<>, and not invent custom names,

@@ -152,7 +152,7 @@ bool fromstringhex(cstring s, arrayvieww<uint8_t> val);
 bool fromstringhex(cstring s, array<uint8_t>& val);
 
 
-//Same as fromstring, but can't report failure. May be easier to use.
+// Same as fromstring, but can't report failure. May be easier to use.
 template<typename T> T try_fromstring(cstring s)
 {
 	T tmp;

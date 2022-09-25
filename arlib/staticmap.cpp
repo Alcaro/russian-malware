@@ -34,7 +34,7 @@ enum {
 	sig_active  = 0x0170616d736c7261,
 	off_r_sigactive = 15, // the 0x00 is instead 0x01 while the staticmap object exists in any process
 	off_r_hm_ptr = 16, // pointer to hashmap (hashmap size can be read from its object header)
-	off_r_hm_load = 24, // entries plus tombstones, not counting slot zero
+	off_r_hm_load = 24, // number of entries plus tombstones, not counting slot zero
 	off_r_entries = 32, // number of proper entries (also hardcoded in size() in staticmap.h)
 	// followed by pointer to first freespace of size 0x20, then 0x40, etc until size 0x80000000'00000000
 	off_r_objsize = 512,

@@ -59,6 +59,6 @@ bool arlib_try_init();
 #ifdef ARLIB_SOCKET
 #include "socket.h"
 #include "http.h"
-//#include "socks5.h"
+#include "socks5.h"
 #include "websocket.h"
 #endif

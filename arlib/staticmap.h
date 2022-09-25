@@ -50,9 +50,9 @@ public:
 	// If the map isn't writable, every returned bytesw will actually be bytesr, and must be treated as such.
 	// If writable, such operations are not atomic. Memory corruption (for example UAF) can end up destroying the entire staticmap.
 	// Performance: Under normal operation, creating this object is O(1), other than an O(n) mmap of the entire file.
-	// If the object was not correctly destructed, including by power failure, will take O(n) to repair the file.
+	// If the object was not correctly destructed, for example by power failure, will take O(n) to repair the file.
 	// Other operations have same performance characteristics as a normal hashmap, but worse constant factors.
-	// You can't create two staticmap objects on the same backing file.
+	// You can't create two staticmap objects on the same backing file, neither in the same nor in two different processes.
 	staticmap() {}
 	staticmap(cstrnul fn, bool map_writable = false) { open(fn, map_writable); }
 	// If not open, any operation except open() and dtor are undefined behavior. If it is open, opening again is also UB.

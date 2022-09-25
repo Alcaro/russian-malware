@@ -93,7 +93,7 @@ public:
 	}
 
 
-bool debug_break(); // If the process is run under a debugger, this triggers a breakpoint. Returns whether it did anything.
+bool debug_break(const char * text); // If the process is run under a debugger, this triggers a breakpoint. Returns whether it did anything.
 void debug_log(const char * text); // This prints to stderr and a nearby file. The string should have a \n suffix.
 void debug_warn(const char * text); // Triggers a breakpoint if possible. If not, calls debug_log().
 void debug_fatal(const char * text); // Same as debug_warn(), then terminates the program.

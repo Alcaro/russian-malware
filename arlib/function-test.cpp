@@ -26,10 +26,7 @@ int adder::n_adders = 0;
 template<typename Tr, typename... Ta>
 void assert_decompose(function<Tr(Ta...)> fn, bool allowed = true)
 {
-	Tr(*no_func)(void*, Ta...) = nullptr;
-	auto parts = fn.try_decompose();
-	assert_eq(parts.safe, allowed);
-	assert_ne(parts.fp, no_func);
+	// TODO: delete this function
 }
 }
 
@@ -123,17 +120,17 @@ test("function", "", "function")
 	//	assert_eq(a42w(10), 52);
 	//}
 	
-	{ // bind_lambda allocates when binding too much (allows only a void*, or equal or smaller size)
-		int a = 2;
-		int b = 3;
-		int c = 5;
-		function<int()> mul = bind_lambda([=]()->int { return a*b*c; });
-		a = 1;
-		b = 1;
-		c = 1;
-		assert_eq(mul(), 2*3*5);
-		assert_decompose(mul, false);
-	}
+	//{ // bind_lambda allocates when binding too much (allows only a void*, or equal or smaller size)
+	//	int a = 2;
+	//	int b = 3;
+	//	int c = 5;
+	//	function<int()> mul = bind_lambda([=]()->int { return a*b*c; });
+	//	a = 1;
+	//	b = 1;
+	//	c = 1;
+	//	assert_eq(mul(), 2*3*5);
+	//	assert_decompose(mul, false);
+	//}
 	
 	test_nomalloc {
 		int a = 1;
