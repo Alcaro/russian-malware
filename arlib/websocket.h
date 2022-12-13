@@ -22,7 +22,7 @@ public:
 	void reset() { sock = nullptr; }
 	
 	// The returned bytesr is valid until next function call on this object.
-	// If all is true, type can be 0-15. If false, only 0-8.
+	// If all is true, type can be 0-15. If false, only 0-7.
 	async<bytesr> msg(int* type = nullptr, bool all = false);
 	void send(bytesr by, int type);
 	void send(bytesr by) { send(by, t_binary); }

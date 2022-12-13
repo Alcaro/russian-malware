@@ -138,12 +138,13 @@ public:
 #else
 	enum { st_uninit, st_busy, st_done };
 	uintptr_t m_st = st_uninit; // can be the above, or a casted pointer
+	// pthread_once() exists, but only takes a single void(*)(), no userdata; better reinvent it
 	
 public:
 	void run(function<void()> fn);
 #endif
 };
-// A simplified runonce that doesn't support the function<> class, just function pointers without userdata
+// A simplified runonce that doesn't support the function<> class, just function pointers without userdata.
 // In exchange, it's simpler.
 class runonce_simple : nomove {
 #if defined(__unix__)
@@ -167,7 +168,6 @@ public:
 #else
 	enum { st_uninit, st_busy, st_done };
 	uintptr_t m_st = st_uninit; // can be the above, or a casted pointer
-	// pthread_once() exists, but only takes a single void(*)(), no userdata; better reinvent it
 	
 public:
 	void run(funcptr fn);

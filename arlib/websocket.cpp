@@ -149,14 +149,14 @@ co_test("websocket", "tcp,ssl,bytepipe", "websocket")
 	
 	cstring hq = co_await ws.msg();
 	assert(cstring(hq).startswith("Request served by"));
-	ws.send("hello");
-	assert_eq(cstring(co_await ws.msg()), "hello");
-	ws.send("hello");
-	assert_eq(cstring(co_await ws.msg()), "hello");
-	ws.send("hello");
-	ws.send("hello");
-	assert_eq(cstring(co_await ws.msg()), "hello");
-	assert_eq(cstring(co_await ws.msg()), "hello");
+	ws.send("hello1");
+	assert_eq(cstring(co_await ws.msg()), "hello1");
+	ws.send("hello2");
+	assert_eq(cstring(co_await ws.msg()), "hello2");
+	ws.send("hello3");
+	ws.send("hello4");
+	assert_eq(cstring(co_await ws.msg()), "hello3");
+	assert_eq(cstring(co_await ws.msg()), "hello4");
 	
 	cstring msg128 = "128bytes128bytes128bytes128bytes128bytes128bytes128bytes128bytes"
 	                 "128bytes128bytes128bytes128bytes128bytes128bytes128bytes128bytes";

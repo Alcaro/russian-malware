@@ -28,9 +28,10 @@ async<autoptr<socket2>> socket2::wrap_sslmaybe(bool ssl, autoptr<socket2> sock, 
 	co_return nullptr;
 #endif
 }
+
 async<autoptr<socket2>> socket2::create_sslmaybe(bool ssl, cstring host, uint16_t port)
 {
-	// mostly same as wrap_sslmaybe, but let's copypaste until compilers inline coroutines properly
+	// mostly same as the above, but let's copypaste until compilers inline coroutines properly
 #ifndef ARLIB_SSL
 	if (ssl)
 		co_return nullptr;

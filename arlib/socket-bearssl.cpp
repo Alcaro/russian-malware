@@ -266,8 +266,3 @@ async<autoptr<socket2>> socket2::wrap_ssl_bearssl(autoptr<socket2> inner, cstrin
 	co_return ret;
 }
 #endif
-
-//#ifdef ARLIB_SOCKET
-//#include "socket.h"
-//async<autoptr<socket2>> socket2::wrap_ssl_openssl(autoptr<socket2> inner, cstrnul domain) { co_return nullptr; }
-//#endif

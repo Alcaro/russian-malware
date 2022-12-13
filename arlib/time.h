@@ -1,5 +1,6 @@
 #pragma once
 #include "global.h"
+//#include "string.h"
 #include <compare>
 #include <time.h>
 #include <type_traits>
@@ -7,6 +8,9 @@
 #ifdef _WIN32
 typedef struct _FILETIME FILETIME;
 #endif
+
+class cstring;
+class string;
 
 struct duration {
 	time_t sec;
@@ -16,6 +20,7 @@ struct duration {
 	
 	static duration ms(int ms) { return { ms/1000, ms%1000*1000000 }; }
 	int ms() { return sec*1000 + nsec/1000000; }
+	int64_t us() { return sec*1000000 + nsec/1000; }
 	
 	// Returns time since an unspecified point (can be system boot, can be Unix epoch, can be something else).
 	// May be more precise than timestamp::now(), and/or quicker to read; it's more suitable for speed tests and short timeouts.
@@ -104,8 +109,17 @@ struct timestamp {
 		__builtin_trap();
 	}
 	
+	static timestamp in_sec(time_t sec)
+	{
+		return now() + duration{sec, 0};
+	}
 	static timestamp in_ms(int ms)
 	{
 		return now() + duration::ms(ms);
 	}
+	
+	using serialize_as = string;
 };
+
+bool fromstring(cstring s, timestamp& out);
+string tostring(timestamp val);

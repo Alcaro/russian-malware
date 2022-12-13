@@ -45,7 +45,7 @@ public:
 	
 	enum {
 		e_bad_url  = -1, // couldn't parse URL
-		e_connect  = -2, // couldn't resolve domain name, or couldn't open TCP or SSL stream
+		e_connect  = -2, // couldn't resolve domain name, or couldn't open TCP or SSL stream (the request is guaranteed safe to retry)
 		e_broken   = -3, // server unexpectedly closed connection
 		e_not_http = -4, // the server isn't speaking HTTP
 		e_too_big  = -5, // limit_bytes was reached
@@ -144,7 +144,7 @@ private:
 	location sock_loc;
 	// Set to now upon creating the socket, or completing a request.
 	// If a request comes in while it's more than two seconds ago, keepalive is not available.
-	timestamp sock_last_use;
+	timestamp sock_keepalive_until;
 	
 	co_mutex mut1; // Taken immediately, released when the socket is created.
 	co_mutex mut2; // Taken after sending the request, or before creating the socket. Released when reading is done.
@@ -158,14 +158,14 @@ public:
 	
 	async<rsp> request(req q);
 	
-	// Extra overload because of https://gcc.gnu.org/bugzilla/show_bug.cgi?id=105804;
+	// Extra overload because of https://gcc.gnu.org/bugzilla/show_bug.cgi?id=98401;
 	//  an await-expression containing a list-initializer (for example co_await http.request({ .url="http://example.com/" }))
 	//  will double free the list-initializer, with the resulting Valgrind errors and worse.
 	// To avoid this, the req must be a local created on a previous line.
 	//  Any attempt to pass an initializer list directly will be unable to choose between the overloads, giving an error.
 	// Once that bug is fixed, all callers should be audited.
 	// https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103871 (can't co_await anything containing a std::initializer_list)
-	//  will probably be fixed alongside 105804; if not, the header line still needs to be predeclared, if present.
+	//  will probably be fixed alongside 98401 and 105804; if not, the header line still needs to be predeclared, if present.
 	struct bad_req { string url; string method; array<string> headers; bytearray body; size_t bytes_max = 16*1024*1024; };
 	async<rsp> request(bad_req q) = delete;
 	
@@ -180,10 +180,20 @@ public:
 		string boundary;
 		array<uint8_t> result;
 		
-	public:
-		form()
+		void set_boundary()
 		{
 			boundary = "--ArlibFormBoundary"+tostringhex<16>(g_rand.rand64()); // max 70 characters, not counting the two leading hyphens
+		}
+		
+	public:
+		form() { set_boundary(); }
+		form(std::initializer_list<sarray<cstring, 2>> items)
+		{
+			set_boundary();
+			for (auto[k,v] : items)
+			{
+				value(k, v);
+			}
 		}
 		
 		void value(cstring key, cstring value)

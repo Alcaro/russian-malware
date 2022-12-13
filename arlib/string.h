@@ -74,11 +74,7 @@ class cstring {
 	friend class string;
 	friend class cstrnul;
 	friend bool operator==(const cstring& left, const cstring& right);
-#if __GNUC__ == 7
-	template<size_t N> friend inline bool operator==(const cstring& left, const char (&right)[N]);
-#else
 	friend inline bool operator==(const cstring& left, const char * right);
-#endif
 	
 	static uint32_t max_inline() { return MAX_INLINE; }
 	
@@ -197,7 +193,7 @@ public:
 	
 	explicit operator bool() const { return length() != 0; }
 	
-	char operator[](int index) const { return ptr()[index]; }
+	forceinline uint8_t operator[](ssize_t index) const { return ptr()[index]; }
 	
 	//~0 means end of the string, ~1 is last character
 	//don't try to make -1 the last character, it breaks str.substr(x, ~0)
@@ -304,8 +300,8 @@ public:
 	std::enable_if_t<sizeof(T::match(nullptr,nullptr,nullptr))!=0, array<string>>
 	split(T regex) const { return split(regex, limit); }
 	
-	string upper() const; // Only considers ASCII, will not change ø. Will capitalize a decomposed ñ, but not a precomposed one.
-	string lower() const;
+	inline string upper() const; // Only considers ASCII, will not change ø. Will capitalize a decomposed ñ, but not a precomposed one.
+	inline string lower() const;
 	cstring trim() const; // Deletes whitespace at start and end. Does not do anything to consecutive whitespace in the middle.
 	bool contains_nul() const;
 	
@@ -540,6 +536,22 @@ public:
 	// May write garbage between out+return and out+4.
 	static size_t codepoint(uint8_t* out, uint32_t cp);
 	
+	string upper() const & { return string(*this).upper(); }
+	string upper() && // Only considers ASCII, will not change ø. Will capitalize a decomposed ñ, but not a precomposed one.
+	{
+		bytesw by = this->bytes();
+		for (size_t i=0;i<by.size();i++) by[i] = toupper(by[i]);
+		return std::move(*this);
+	}
+	
+	string lower() const & { return string(*this).lower(); }
+	string lower() &&
+	{
+		bytesw by = this->bytes();
+		for (size_t i=0;i<by.size();i++) by[i] = tolower(by[i]);
+		return std::move(*this);
+	}
+	
 	//3-way comparison. If a comes first, return value is negative; if equal, zero; if b comes first, positive.
 	//Comparison is bytewise. End goes before NUL, so the empty string comes before everything else.
 	//The return value is not guaranteed to be in [-1..1]. It's not even guaranteed to fit in anything smaller than int.
@@ -567,6 +579,9 @@ private:
 public:
 };
 cstring::c_string::operator cstrnul() const { return ptr; }
+
+inline string cstring::upper() const { return string(*this).lower(); }
+inline string cstring::lower() const { return string(*this).lower(); }
 
 // TODO: I need a potentially-owning string class
 // cstring never owns memory, string always does, new one has a flag for whether it does

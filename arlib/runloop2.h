@@ -104,7 +104,8 @@ public:
 // Arrays of waiters or producers require each object to hold a pointer to the parent (or find it in a thread local, or something).
 
 namespace runloop2 {
-	// Registering a wait is O(1), with no syscalls or malloc.
+	// Registering a wait is O(1), with no syscalls or malloc, most of the time.
+	// Syscalls and malloc may happen O(max number of concurrent waiters in the runloop's lifetime) times.
 #ifdef __unix__
 	async<void> await_fd(int fd, bool want_write);
 	async<void> await_read(int fd) { return await_fd(fd, false); }
@@ -316,18 +317,14 @@ class async : public waiter_base<T> {
 		}
 	}
 	
-	template<typename Tx = T> static
-	std::enable_if_t<std::is_same_v<Tx, void> && std::is_same_v<T, Tx>>
-	complete_s(waiter_base<T>* self_)
+	static void complete_s(waiter_base<T>* self_) requires (std::is_same_v<T, void>)
 	{
 		async* self = (async*)self_;
 		self->prod = nullptr;
 		self->complete = nullptr;
 	}
 	
-	template<typename Tx = T> static
-	std::enable_if_t<!std::is_same_v<Tx, void> && std::is_same_v<T, Tx>>
-	complete_s(waiter_base<T>* self_, empty_if_void<T> val)
+	static void complete_s(waiter_base<T>* self_, empty_if_void<T> val) requires (!std::is_same_v<T, void>)
 	{
 		async* self = (async*)self_;
 		self->prod = nullptr;
@@ -342,15 +339,13 @@ class async : public waiter_base<T> {
 	
 	class create_sync {};
 	
-	template<typename Tx = T>
-	async(std::enable_if_t<std::is_same_v<Tx, void> && std::is_same_v<T, Tx>, create_sync>) : waiter_base<T>(nullptr)
+	async(create_sync) requires std::is_same_v<T, void> : waiter_base<T>(nullptr)
 	{
 		this->prod = nullptr;
 		this->complete = nullptr;
 	}
 	
-	template<typename Tx = T>
-	async(std::enable_if_t<!std::is_same_v<Tx, void> && std::is_same_v<T, Tx>, create_sync>, empty_if_void<T> val) : waiter_base<T>(nullptr)
+	async(create_sync, empty_if_void<T> val) requires (!std::is_same_v<T, void>) : waiter_base<T>(nullptr)
 	{
 		this->prod = nullptr;
 		this->complete = nullptr;
@@ -358,6 +353,7 @@ class async : public waiter_base<T> {
 	}
 	
 public:
+	async(nullptr_t) = delete;
 	async(producer_base<T>* prod) : waiter_base<T>(&async::complete_s)
 	{
 		this->prod = prod;
@@ -449,7 +445,7 @@ class producer_coro<void> : public producer_base<void> {
 	static void cancel_s(producer_base<void>* self_)
 	{
 		producer_coro* self = (producer_coro*)self_;
-		// unlike function producer, this object is destroyed after cancellation, so self->wait is always null
+		// unlike function producer, this object is destroyed after cancellation, so self->wait is never null
 		self->wait->prod = nullptr;
 #ifndef ARLIB_OPT
 		self->wait = nullptr;
@@ -493,9 +489,7 @@ public:
 	producer() : producer_base<T>(&producer::cancel_s) {}
 	producer(const producer&) = delete;
 	
-	template<typename Tx = T>
-	std::enable_if_t<std::is_same_v<T, void> && std::is_same_v<T, Tx>>
-	complete()
+	void complete() requires (std::is_same_v<T, void>)
 	{
 		waiter_base<T>* wait = this->wait;
 		this->wait = nullptr;
@@ -507,9 +501,7 @@ public:
 		wait->complete(wait);
 	}
 	
-	template<typename Tx = T>
-	std::enable_if_t<!std::is_same_v<T, void> && std::is_same_v<T, Tx>>
-	complete(empty_if_void<T> val)
+	void complete(empty_if_void<T> val) requires (!std::is_same_v<T, void>)
 	{
 		waiter_base<T>* wait = this->wait;
 		this->wait = nullptr;
@@ -521,16 +513,12 @@ public:
 		wait->complete(wait, std::move(val));
 	}
 	
-	template<typename Tx = T>
-	static std::enable_if_t<std::is_same_v<Tx, void> && std::is_same_v<T, Tx>, async<T>>
-	complete_sync()
+	static async<T> complete_sync() requires (std::is_same_v<T, void>)
 	{
 		return async<T>(typename async<T>::create_sync());
 	}
 	
-	template<typename Tx = T>
-	static std::enable_if_t<!std::is_same_v<Tx, void> && std::is_same_v<T, Tx>, async<T>>
-	complete_sync(empty_if_void<T> val)
+	static async<T> complete_sync(empty_if_void<T> val) requires (!std::is_same_v<T, void>)
 	{
 		return async<T>(typename async<T>::create_sync(), std::move(val));
 	}
@@ -552,9 +540,7 @@ class waiter_coro : public waiter_base<T> {
 	
 	variant_raw<std::coroutine_handle<>, empty_if_void<T>> contents;
 	
-	template<typename Tx = T> static
-	std::enable_if_t<std::is_same_v<Tx, void> && std::is_same_v<T, Tx>>
-	complete_s(waiter_base<T>* self_)
+	static void complete_s(waiter_base<T>* self_) requires (std::is_same_v<T, void>)
 	{
 		waiter_coro* self = (waiter_coro*)self_;
 		self->prod = nullptr;
@@ -562,9 +548,7 @@ class waiter_coro : public waiter_base<T> {
 		coro.resume();
 	}
 	
-	template<typename Tx = T> static
-	std::enable_if_t<!std::is_same_v<Tx, void> && std::is_same_v<T, Tx>>
-	complete_s(waiter_base<T>* self_, empty_if_void<T> val)
+	static void complete_s(waiter_base<T>* self_, empty_if_void<T> val) requires (!std::is_same_v<T, void>)
 	{
 		waiter_coro* self = (waiter_coro*)self_;
 		self->prod = nullptr;
@@ -604,9 +588,7 @@ public:
 
 template<typename T, typename T2>
 class waiter : public waiter_base<T> {
-	template<typename Tx = T> static
-	std::enable_if_t<std::is_same_v<Tx, void> && std::is_same_v<T, Tx>>
-	complete_s(waiter_base<T>* self)
+	static void complete_s(waiter_base<T>* self) requires (std::is_same_v<T, void>)
 	{
 		self->prod = nullptr;
 		if constexpr (std::is_same_v<T, void> && !std::is_same_v<T2, void>)
@@ -616,9 +598,7 @@ class waiter : public waiter_base<T> {
 		}
 	}
 	
-	template<typename Tx = T> static
-	std::enable_if_t<!std::is_same_v<Tx, void> && std::is_same_v<T, Tx>>
-	complete_s(waiter_base<T>* self, empty_if_void<T> val)
+	static void complete_s(waiter_base<T>* self, empty_if_void<T> val) requires (!std::is_same_v<T, void>)
 	{
 		self->prod = nullptr;
 		if constexpr (!std::is_same_v<T, void>) // T2 can only be void with void waiter
@@ -707,7 +687,8 @@ namespace runloop2 {
 	void* get_dns();
 	
 #ifdef ARLIB_TESTRUNNER
-	void assert_empty();
+	void test_begin();
+	void test_end();
 #endif
 }
 
@@ -871,30 +852,22 @@ class multi_waiter_t {
 	}
 	
 	struct wait1_t : public waiter<R1, wait1_t> {
-		template<typename R1x = R1>
-		std::enable_if_t<std::is_same_v<R1x, void>>
-		complete()
+		void complete() requires (std::is_same_v<R1, void>)
 		{
 			container_of<&multi_waiter_t::wait1>(this)->complete();
 		}
-		template<typename R1x = R1>
-		std::enable_if_t<!std::is_same_v<R1x, void>>
-		complete(R1x val)
+		void complete(empty_if_void<R1> val) requires (!std::is_same_v<R1, void>)
 		{
 			container_of<&multi_waiter_t::wait1>(this)->complete(std::move(val));
 		}
 	} wait1;
 	
 	struct wait2_t : public waiter<R2, wait2_t> {
-		template<typename R2x = R2>
-		std::enable_if_t<std::is_same_v<R2x, void>>
-		complete()
+		void complete() requires (std::is_same_v<R2, void>)
 		{
 			container_of<&multi_waiter_t::wait2>(this)->complete();
 		}
-		template<typename R2x = R2>
-		std::enable_if_t<!std::is_same_v<R2x, void>>
-		complete(R2x val)
+		void complete(empty_if_void<R2> val) requires (!std::is_same_v<R2, void>)
 		{
 			container_of<&multi_waiter_t::wait2>(this)->complete(std::move(val));
 		}

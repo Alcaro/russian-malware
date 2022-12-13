@@ -29,6 +29,12 @@ public:
 	// TODO: figure out what to do here
 	//bool has_gui_events = false;
 #endif
+	
+#ifdef ARLIB_TESTRUNNER
+	timestamp last_iter;
+	bool test_has_runloop;
+#endif
+	
 	class fds_t {
 		struct waiter_node {
 			struct prod_t : public producer<void, prod_t> {
@@ -224,7 +230,14 @@ public:
 			dur = { 0, 0 };
 		
 		test_rethrow();
+#ifdef ARLIB_TESTRUNNER
+		test_has_runloop = true;
+		test_iter_end();
+#endif
 		ppoll(fds.wait_fd.ptr(), fds.wait_fd.size(), (struct timespec*)&dur, nullptr);
+#ifdef ARLIB_TESTRUNNER
+		test_iter_begin();
+#endif
 		
 #ifdef ARLIB_GUI_GTK3
 		if (has_gui_events)
@@ -307,9 +320,25 @@ public:
 		return dns;
 	}
 #endif
+	
 #ifdef ARLIB_TESTRUNNER
-	void assert_empty()
+	void test_iter_begin()
 	{
+		last_iter = timestamp::now();
+	}
+	void test_iter_end()
+	{
+		if (test_has_runloop)
+			_test_runloop_latency(timestamp::now() - last_iter);
+	}
+	void test_begin()
+	{
+		test_has_runloop = false;
+		test_iter_begin();
+	}
+	void test_end()
+	{
+		test_iter_end();
 #ifdef ARLIB_SOCKET
 		if (dns)
 		{
@@ -358,7 +387,8 @@ namespace runloop2 {
 	void* get_dns() { return get_loop().get_dns(); }
 #endif
 #ifdef ARLIB_TESTRUNNER
-	void assert_empty() { get_loop().assert_empty(); }
+	void test_begin() { get_loop().test_begin(); }
+	void test_end() { get_loop().test_end(); }
 #endif
 	co_waiter_void_multi co_wait_multi_inst;
 }

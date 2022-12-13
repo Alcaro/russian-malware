@@ -68,7 +68,7 @@ static uint64_t sm_hash(bytesr by)
 
 bool staticmap::open(cstrnul fn, bool map_writable)
 {
-	if (!f.open(fn, (file2::mode)(file2::m_write | file2::m_exclusive))) return false;
+	if (!f.open(fn, (file2::mode)(file2::m_readwrite | file2::m_exclusive))) return false;
 	this->map_writable = map_writable;
 	this->sector_size = f.sector_size();
 	

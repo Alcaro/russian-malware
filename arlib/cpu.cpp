@@ -1,5 +1,7 @@
 #include "global.h"
 
+#if defined(__i386__) || defined(__x86_64__)
+
 #ifdef __GNUC__
 #include <cpuid.h>
 #define cpuid __cpuid
@@ -192,3 +194,5 @@ test("cpu support", "", "")
 	test1(l7ebx, RDSEED);
 #undef test1
 }
+
+#endif

@@ -6,7 +6,7 @@
 #define _strdup strdup //and windows is being windows as usual
 
 #if defined(__clang__)
-#if __clang__ < 14
+#if __clang_major__ < 14
 #error "unsupported clang version; if you're feeling brave, you're welcome to remove this check, but no complaining if it breaks"
 #endif
 #elif defined(__GNUC__)
@@ -740,7 +740,7 @@ forceinline bool memeq(const void * a, const void * b, size_t len)
 	
 	// no point doing an SSE version, large constant sizes are rare
 #else
-#error enable the above on platforms where unaligned mem access is fast
+#warning enable the above on platforms where unaligned mem access is fast
 #endif
 	
 	return !memcmp(a, b, len);
@@ -754,7 +754,7 @@ forceinline void rep_movsb(uint8_t * & dest, const uint8_t * & src, size_t count
 {
 #if defined(__i386__) || defined(__x86_64__)
 	// rep movsb is slow for large buffers if not ERMS (intel 2013, amd 2020), and small if not FSRM (intel 2009, amd 2020)
-	// however, it always gives correct results in 'reasonable' speed, so no point adding conditionals
+	// however, it always gives correct results in "reasonable" speed, so no point adding conditionals
 	const uint8_t * rsi = src;
 	uint8_t * rdi = dest;
 	__asm__("rep movsb" : "+S"(rsi), "+D"(rdi), "+c"(count)

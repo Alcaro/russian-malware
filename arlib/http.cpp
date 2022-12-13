@@ -81,7 +81,7 @@ bool http_t::can_keepalive(const req& q, const location& loc)
 {
 	return
 		sock &&
-		timestamp::now() < sock_last_use+duration::ms(2000) &&
+		sock_keepalive_until > timestamp::now() &&
 		sock_loc.same_origin(loc) &&
 		true;
 }
@@ -188,7 +188,7 @@ async<http_t::rsp> http_t::request(req q_orig)
 			sock_generation++;
 			sock_sent = 0;
 			sock_received = 0;
-			sock_last_use = timestamp::now();
+			sock_keepalive_until = timestamp::now() + duration::ms(2000);
 			
 			if (!sock)
 				co_return set_error(r, e_connect);
@@ -284,7 +284,7 @@ async<http_t::rsp> http_t::request(req q_orig)
 	}
 	
 	r.complete = true;
-	sock_last_use = timestamp::now();
+	sock_keepalive_until = timestamp::now() + duration::ms(2000);
 	sock_received++;
 	co_return r;
 }
@@ -316,12 +316,11 @@ static void test_url_fail(cstring url, cstring url2)
 	assert(loc.parse(url));
 	assert(!loc.parse(url2, true));
 }
-//test("URL parser", "string", "http")
-test("URL parser", "", "http")
+test("URL parser", "string", "http")
 {
-	testcall(test_url("wss://gateway.discord.gg/?v=5&encoding=json",          "wss    gateway.discord.gg    /?v=5&encoding=json"));
-	testcall(test_url("wss://gateway.discord.gg?v=5&encoding=json",           "wss    gateway.discord.gg    /?v=5&encoding=json"));
-	testcall(test_url("wss://gateway.discord.gg", "?v=5&encoding=json",       "wss    gateway.discord.gg    /?v=5&encoding=json"));
+	testcall(test_url("wss://websocket.example.com/?abc=123&foo=true",          "wss    websocket.example.com    /?abc=123&foo=true"));
+	testcall(test_url("wss://websocket.example.com?abc=123&foo=true",           "wss    websocket.example.com    /?abc=123&foo=true"));
+	testcall(test_url("wss://websocket.example.com", "?abc=123&foo=true",       "wss    websocket.example.com    /?abc=123&foo=true"));
 	testcall(test_url("http://example.com/foo/bar.html?baz", "/bar/foo.html", "http    example.com    /bar/foo.html"));
 	testcall(test_url("http://example.com/foo/bar.html?baz", "foo.html",      "http    example.com    /foo/foo.html"));
 	testcall(test_url("http://example.com/foo/bar.html?baz", "?quux",         "http    example.com    /foo/bar.html?quux"));

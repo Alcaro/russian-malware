@@ -68,11 +68,12 @@ public:
 	
 	void complete()
 	{
-		runloop2::await_handle(ev).then(&wait);
-		
 		WSANETWORKEVENTS ev_out;
 		WSAEnumNetworkEvents(fd, ev, &ev_out);
 		ev_active &= ~ev_out.lNetworkEvents;
+		
+		if (ev_active != 0)
+			runloop2::await_handle(ev).then(&wait);
 		
 		if ((ev_out.lNetworkEvents & FD_READ) && prod_recv.has_waiter())
 			RETURN_IF_CALLBACK_DESTRUCTS(prod_recv.complete());
@@ -168,6 +169,7 @@ autoptr<socket2_udp> socket2_udp::create(socket2::address ip)
 	if (!ip)
 		return nullptr;
 	SOCKET fd = mksocket(ip.as_native()->sa_family, SOCK_DGRAM|SOCK_NONBLOCK|SOCK_CLOEXEC, 0);
+	// TODO: check if ioctl SIO_UDP_CONNRESET does anything useful
 	if (fd < 0)
 		return nullptr;
 	return new socket2_udp(fd, ip);

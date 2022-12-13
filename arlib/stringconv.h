@@ -34,10 +34,8 @@ inline string tostring(bool val) { return val ? "true" : "false"; }
 
 inline string tostring(const char * s) { return s; } // only exists as tostring, fromstring would be a memory leak
 
-// todo: change to template <typename T> requires sizeof((string)std::declval<T>())!=0 string tostring(const T& val) in c++20
 template<typename T>
-typename std::enable_if_t<sizeof((string)std::declval<T>()) != 0, string>
-tostring(const T& val)
+string tostring(const T& val) requires requires { (string)val; }
 {
 	return (string)val;
 }
@@ -150,6 +148,13 @@ bool fromstringhex_ptr(const char * s, size_t len, unsigned long long & out);
 string tostringhex(arrayview<uint8_t> val);
 bool fromstringhex(cstring s, arrayvieww<uint8_t> val);
 bool fromstringhex(cstring s, array<uint8_t>& val);
+
+template<typename T>
+bool fromstring(cstring s, T& val) requires requires { val = s; }
+{
+	val = s;
+	return true;
+}
 
 
 // Same as fromstring, but can't report failure. May be easier to use.

@@ -3,6 +3,7 @@
 #include "stringconv.h"
 #include "linq.h"
 #include "set.h"
+#include "time.h"
 
 //Arlib test policy:
 //- Tests are to be written alongside the implementation, to verify how comfortable that interface is.
@@ -29,7 +30,7 @@
 #undef assert
 
 #ifdef ARLIB_TESTRUNNER
-void _test_runloop_latency(uint64_t us);
+void _test_runloop_latency(duration dur);
 #endif
 
 
@@ -94,6 +95,10 @@ template<typename T, typename T2>
 bool _test_eq(const T& v, const T2& v2)
 {
 	return (v == (T)v2);
+}
+inline bool _test_eq(const char * v, const char * v2)
+{
+	return !strcmp(v, v2);
 }
 template<typename T, typename T2>
 bool _test_lt(const T& v, const T2& v2)
@@ -369,14 +374,6 @@ int not_quite_main(int argc, char** argv);
 
 static inline void _test_coro_exception() { __builtin_trap(); }
 
-#endif
-
-#ifdef ARLIB_SOCKET
-//class socket; class runloop;
-////Ensures that the given socket is usable and speaks HTTP. Socket is not usable afterwards, but caller is responsible for closing it.
-//void socket_test_http(socket* sock, runloop* loop);
-////Ensures the socket does not return an answer if the client tries to speak HTTP.
-//void socket_test_fail(socket* sock, runloop* loop);
 #endif
 
 #if __has_include(<valgrind/memcheck.h>)

@@ -13,7 +13,7 @@ static bytearray debugfile_storage;
 
 class debug_file2 {
 public:
-	enum mode { m_write, m_exclusive };
+	enum mode { m_readwrite, m_exclusive };
 	
 	using mmapw_t = bytesw;
 	
@@ -108,6 +108,7 @@ again:
 
 test("staticmap", "", "file")
 {
+	if (RUNNING_ON_VALGRIND) test_skip_force("takes eight seconds on valgrind");
 	test_skip("kinda slow");
 	
 	uint64_t hash = 5381;

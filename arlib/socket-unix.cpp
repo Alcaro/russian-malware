@@ -66,26 +66,12 @@ static void MAYBE_UNUSED setblock(int fd, bool newblock)
 class socket2_impl : public socket2 {
 public:
 	int fd;
-	
 	socket2_impl(int fd) : fd(fd) {}
-	
-	ssize_t recv_sync(bytesw by) override
-	{
-		return fixret(::recv(fd, (char*)by.ptr(), by.size(), MSG_DONTWAIT|MSG_NOSIGNAL));
-	}
-	ssize_t send_sync(bytesr by) override
-	{
-		return fixret(::send(fd, (char*)by.ptr(), by.size(), MSG_DONTWAIT|MSG_NOSIGNAL));
-	}
-	async<void> can_recv() override
-	{
-		return runloop2::await_read(fd);
-	}
-	async<void> can_send() override
-	{
-		return runloop2::await_write(fd);
-	}
-	
+	ssize_t recv_sync(bytesw by) override { return fixret(::recv(fd, (char*)by.ptr(), by.size(), MSG_DONTWAIT|MSG_NOSIGNAL)); }
+	ssize_t send_sync(bytesr by) override { return fixret(::send(fd, (char*)by.ptr(), by.size(), MSG_DONTWAIT|MSG_NOSIGNAL)); }
+	async<void> can_recv() override { return runloop2::await_read(fd); }
+	async<void> can_send() override { return runloop2::await_write(fd); }
+	int get_fd() override { return fd; }
 	~socket2_impl() { close(fd); }
 };
 }
@@ -192,13 +178,42 @@ void socketlisten::on_readable()
 
 #ifdef ARLIB_SOCKET
 // no need to copy these to the windows side
+void socketbuf::socket_failed()
+{
+	send_wait.cancel();
+	recv_wait.cancel();
+	sock = nullptr;
+	if (send_prod.has_waiter())
+		RETURN_IF_CALLBACK_DESTRUCTS(send_prod.complete(false));
+	if (recv_op != op_none)
+	{
+		op_t op = this->recv_op;
+		this->recv_op = op_none;
+		// the numeric branches yield identical machine code and should be merged
+		// (they aren't)
+		if (op == op_u8)
+			recv_prod.get<producer_t<uint8_t>>().complete(0);
+		else if (op <= op_u16l)
+			recv_prod.get<producer_t<uint16_t>>().complete(0);
+		else if (op <= op_u32l)
+			recv_prod.get<producer_t<uint32_t>>().complete(0);
+		else if (op <= op_u64l)
+			recv_prod.get<producer_t<uint64_t>>().complete(0);
+		else if (op == op_bytesr)
+			recv_prod.get<producer_t<bytesr>>().complete(nullptr);
+		else if (op == op_line)
+			recv_prod.get<producer_t<cstring>>().complete("");
+		else
+			__builtin_unreachable();
+	}
+}
 void socketbuf::recv_ready()
 {
 	ssize_t n = sock->recv_sync(recv_by.push_begin(1024));
 	if (n < 0)
-		sock = nullptr;
+		socket_failed();
 	if (!sock)
-		return recv_complete_null();
+		return;
 	size_t prev_size = recv_by.size();
 	recv_by.push_finish(n);
 	recv_complete(prev_size);
@@ -206,15 +221,13 @@ void socketbuf::recv_ready()
 void socketbuf::recv_complete(size_t prev_size)
 {
 	if (!sock)
-		return recv_complete_null();
+		return;
 	if (recv_op == op_line)
 	{
 		bytesr line = recv_by.pull_line(prev_size);
 		if (line || recv_by.size() >= recv_bytes)
 		{
-#ifndef ARLIB_OPT
 			this->recv_op = op_none;
-#endif
 			recv_prod.get<producer_t<cstring>>().complete(line);
 		}
 		else
@@ -222,17 +235,13 @@ void socketbuf::recv_complete(size_t prev_size)
 	}
 	else if (recv_op == op_bytesr_partial && recv_by.size() >= 1)
 	{
-#ifndef ARLIB_OPT
 		this->recv_op = op_none;
-#endif
 		recv_prod.get<producer_t<bytesr>>().complete(recv_by.pull(min(recv_bytes, recv_by.size())));
 	}
 	else if (recv_by.size() >= recv_bytes)
 	{
 		op_t op = this->recv_op;
-#ifndef ARLIB_OPT
 		this->recv_op = op_none;
-#endif
 		// don't bother destructing these guys, their dtor is empty anyways (other than an assert)
 		if (op == op_u8) recv_prod.get<producer_t<uint8_t>>().complete(readu_le8(recv_by.pull(1).ptr()));
 		else if (op == op_u16b) recv_prod.get<producer_t<uint16_t>>().complete(readu_be16(recv_by.pull(2).ptr()));
@@ -248,29 +257,6 @@ void socketbuf::recv_complete(size_t prev_size)
 	{
 		sock->can_recv().then(&recv_wait);
 	}
-}
-void socketbuf::recv_complete_null()
-{
-	op_t op = this->recv_op;
-#ifndef ARLIB_OPT
-	this->recv_op = op_none;
-#endif
-	// these branches yield identical machine code and should be merged
-	// (they aren't)
-	if (op == op_u8)
-		recv_prod.get<producer_t<uint8_t>>().complete(0);
-	else if (op <= op_u16l)
-		recv_prod.get<producer_t<uint16_t>>().complete(0);
-	else if (op <= op_u32l)
-		recv_prod.get<producer_t<uint32_t>>().complete(0);
-	else if (op <= op_u64l)
-		recv_prod.get<producer_t<uint64_t>>().complete(0);
-	else if (op == op_bytesr)
-		recv_prod.get<producer_t<bytesr>>().complete(nullptr);
-	else if (op == op_line)
-		recv_prod.get<producer_t<cstring>>().complete("");
-	else
-		__builtin_unreachable();
 }
 
 bytesr socketbuf::bytes_sync(size_t n)
@@ -290,7 +276,7 @@ bytesr socketbuf::bytes_sync(size_t n)
 	ssize_t amt = sock->recv_sync(by2);
 	if (amt < 0)
 	{
-		sock = nullptr;
+		socket_failed();
 		return {};
 	}
 	return by2.slice(0, amt);
@@ -298,15 +284,13 @@ bytesr socketbuf::bytes_sync(size_t n)
 
 void socketbuf::send_ready()
 {
+	if (!sock)
+		return;
 	ssize_t n = sock->send_sync(send_by.pull_begin());
 	if (n < 0)
-		sock = nullptr;
+		socket_failed();
 	if (!sock)
-	{
-		if (send_prod.has_waiter())
-			send_prod.complete(false);
 		return;
-	}
 	send_by.pull_finish(n);
 	send_prepare();
 }
@@ -326,16 +310,16 @@ void socketbuf::send(bytesr by)
 {
 	if (!sock)
 		return;
-	if (send_by.size() == 0)
+	if (LIKELY(send_by.size() == 0))
 	{
 		ssize_t n = sock->send_sync(by);
 		if (n < 0)
 		{
-			sock = nullptr;
+			socket_failed();
 			return;
 		}
 		by = by.skip(n);
-		if (!by)
+		if (LIKELY(!by))
 			return;
 	}
 	send_by.push(by);

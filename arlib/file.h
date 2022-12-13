@@ -79,7 +79,7 @@ class file2 : nocopy {
 public:
 	enum mode {
 		m_read,
-		m_write,          // If the file exists, opens it. If it doesn't, creates a new file.
+		m_readwrite,      // If the file exists, opens it. If it doesn't, creates a new file.
 		m_wr_existing,    // Fails if the file doesn't exist.
 		m_replace,        // If the file exists, it's either deleted and recreated, or truncated.
 		m_create_excl,    // Fails if the file does exist.
@@ -137,6 +137,7 @@ public:
 	size_t read(bytesw by);
 	size_t pread(off_t pos, bytesw by); // The p variants will not affect the current write pointer.
 	size_t write(bytesr by);
+	size_t write(cstring str) { return write(str.bytes()); }
 	size_t pwrite(off_t pos, bytesr by);
 	size_t writev(arrayview<iovec> iov); // No readv, hard to know sizes before reading.
 	size_t pwritev(off_t pos, arrayview<iovec> iov);
@@ -155,6 +156,7 @@ public:
 	size_t read(bytesw by) { return max(::read(fd, by.ptr(), by.size()), 0); }
 	size_t pread(off_t pos, bytesw by) { return max(::pread(fd, by.ptr(), by.size(), pos), 0); }
 	size_t write(bytesr by) { return max(::write(fd, by.ptr(), by.size()), 0); }
+	size_t write(cstring str) { return write(str.bytes()); }
 	size_t pwrite(off_t pos, bytesr by) { return max(::pwrite(fd, by.ptr(), by.size(), pos), 0); }
 	size_t writev(arrayview<iovec> iov) { return max(::writev(fd, iov.ptr(), iov.size()), 0); }
 	size_t pwritev(off_t pos, arrayview<iovec> iov) { return max(::pwritev(fd, iov.ptr(), iov.size(), pos), 0); }
@@ -466,8 +468,9 @@ public:
 	static bool mkdir(cstring path); // Returns whether that's now a directory. If it existed already, returns true; if a file, false.
 	static bool unlink(cstring filename); // Returns whether the file is now gone. If the file didn't exist, returns true.
 	static cstring dirname(cstring path){ return path.substr(0, path.lastindexof("/")+1); } // If the input path is a directory, the basename is blank.
-	static cstring basename(cstring path) { return path.substr(path.lastindexof("/")+1, ~0); }
+	static cstring basename(cstring path) { return path.substr(path.lastindexof("/")+1, ~0); } // lastindexof returns -1 if nothing found, which works
 	static cstrnul basename(cstrnul path) { return path.substr_nul(path.lastindexof("/")+1); }
+	static const char * basename(const char * path) { const char * ret = strrchr(path, '/'); if (ret) return ret+1; else return path; }
 	static string change_ext(cstring path, cstring new_ext); // new_ext should be ".bin" (can be blank)
 	
 	// Takes a byte sequence supposedly representing a relative file path from an untrusted source (for example a ZIP file).

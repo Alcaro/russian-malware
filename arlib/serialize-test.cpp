@@ -1,7 +1,8 @@
+#ifdef ARLIB_TEST
 #include "serialize.h"
+#include "time.h"
 #include "test.h"
 
-#ifdef ARLIB_TEST
 namespace {
 
 // these structs are more fine grained than they need to be to test the current ones, but it helps when implementing a new backend
@@ -355,6 +356,8 @@ test("JSON serialization", "json", "serialize")
 			});
 		assert_eq(item, "{\"num\":42,\"str\":\"test\",\"inner\":{\"a\":1,\"b\":2,\"c\":3}}");
 	}
+	
+	assert_eq(jsonserialize((timestamp){ 123,0 }), "\"123\""); // the format is tested in time.cpp, just ensure the json parts work
 }
 
 test("JSON deserialization", "json", "serialize")
@@ -577,6 +580,8 @@ test("JSON deserialization", "json", "serialize")
 				});
 		assert_eq(calls, 3);
 	}
+	
+	assert_eq(jsondeserialize<timestamp>("\"123\""), (timestamp{123,0}));
 }
 
 

@@ -49,6 +49,11 @@ static void * threadproc(void * userdata)
 
 static void thread_create_inner(function<void()>&& start, pthread_attr_t* attr)
 {
+	// pthread_create on Linux will fail with EAGAIN if something sharing CLONE_FS info (chdir, chroot, etc) is concurrently calling execve()
+	// fork() doesn't pass CLONE_FS (https://elixir.bootlin.com/linux/v6.0.1/source/kernel/fork.c#L2743),
+	//  and multithreaded processes shouldn't execve() without a fork, so it's unclear when exactly this can happen,
+	//  but it clearly happens in real-life codebases
+	// https://github.com/oneapi-src/oneTBB/pull/824#issuecomment-1277300286
 	threaddata_pthread* thdat = xmalloc(sizeof(threaddata_pthread));
 	new(&thdat->func) function<void()>(std::move(start));
 	

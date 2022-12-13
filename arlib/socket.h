@@ -21,7 +21,7 @@ public:
 		
 		address() { memset(_space, 0, sizeof(_space)); }
 		address(bytesr by, uint16_t port = 0); // Input must be 0, 4 or 16 bytes.
-		address(cstring str, uint16_t port = 0); // If port is not zero, it may be parsed from the input.
+		address(cstring str, uint16_t port = 0); // If port is not zero, the string is allowed to contain a port, which replaces the argument.
 		address(const address&) = default;
 		
 		operator bool();
@@ -56,6 +56,14 @@ public:
 	virtual ssize_t send_sync(bytesr by) = 0;
 	virtual async<void> can_recv() = 0;
 	virtual async<void> can_send() = 0;
+	
+#ifdef __unix__
+	// If positive, reading or writing this fd is equivalent to recv_sync and send_sync. Can be used for ktls, but little or nothing else.
+	// Only implemented for socket2::create(), everything else will return -1. Sockets are not allowed to.
+	virtual int get_fd() { return -1; }
+#else
+	int get_fd() { return -1; }
+#endif
 	
 	// These will accept a port from the domain name, if one is provided.
 	// create() will set errno correctly on failure (ENOENT if DNS fails to resolve), but wrap_ssl and create_ssl will not.
@@ -103,13 +111,6 @@ public:
 	static void dns_destroy(void* dns);
 };
 
-// Differences from the normal TCP sockets:
-// - UDP is a different protocol, of course.
-// - Can't be wrapped into SSL or socks5 or whatever.
-// - UDP is connectionless, so creating a socket2_udp is asynchronous.
-// - recv and send will either return error or a full packet. They will not split packets, nor return zero bytes.
-//    If you use a too small buffer, the packet will be truncated and the return value will be the real length.
-// - send is synchronous. If the socket is full, the packet is lost.
 #ifdef __unix__
 class socket2_udp {
 	int fd;
@@ -204,7 +205,9 @@ class socketbuf {
 	} recv_wait;
 	void recv_ready();
 	void recv_complete(size_t prev_size);
-	void recv_complete_null();
+	
+	MAKE_DESTRUCTIBLE_FROM_CALLBACK();
+	void socket_failed();
 	
 	template<typename T, op_t op>
 	async<T> get_async()
@@ -246,10 +249,10 @@ public:
 	
 	void reset()
 	{
+		send_wait.cancel();
 		sock = nullptr;
 		recv_by.reset(4096);
 		send_by.reset();
-		send_wait.cancel();
 #ifndef ARLIB_OPT
 		if (recv_op != op_none)
 			debug_fatal_stack("can't reset a socketbuf that someone's trying to read");
@@ -328,6 +331,7 @@ public:
 	// Completes when the object has nothing left to send.
 	// This may be immediately, or may take longer than expected if another coroutine sends something while you're waiting.
 	// Only one coroutine may await sends; concurrency here is not allowed.
+	// Returns whether the sends succeeded.
 	async<bool> await_send()
 	{
 		if (!sock)

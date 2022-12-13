@@ -65,7 +65,7 @@ uint32_t random_base_t<is_global>::rand_mod(uint32_t limit)
 	{
 		uint32_t candidate = rand32();
 		if (candidate < minvalid) continue;
-		return candidate%limit;
+		return candidate % limit;
 	}
 }
 template<bool is_global>

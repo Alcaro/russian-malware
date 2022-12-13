@@ -148,11 +148,20 @@ string string::create_usurp(char * str)
 
 string::string(array<uint8_t>&& bytes) : cstrnul(noinit())
 {
-	cstring tmp(bytes);
-	memcpy((void*)this, (void*)&tmp, sizeof(string));
-	
-	uint8_t* ptr = bytes.release().ptr();
-	if (tmp.inlined()) free(ptr);
+	if (bytes.size() <= max_inline())
+	{
+		cstring tmp = bytes;
+		memcpy((void*)this, (void*)&tmp, sizeof(string));
+		bytes.reset();
+	}
+	else
+	{
+		m_inline_len_w() = -1;
+		m_len = bytes.size();
+		m_data = xrealloc(bytes.release().ptr(), bytes_for(m_len));
+		m_data[m_len] = '\0';
+		m_nul = true;
+	}
 }
 
 size_t cstring::indexof(cstring other, size_t start) const
@@ -602,22 +611,6 @@ int string::natcompare3(cstring a, cstring b, bool case_insensitive)
 	if (ret_zero) return ret_zero;
 	if (ret_case) return ret_case;
 	return 0;
-}
-
-string cstring::upper() const
-{
-	string ret = *this;
-	bytesw by = ret.bytes();
-	for (size_t i=0;i<by.size();i++) by[i] = toupper(by[i]);
-	return ret;
-}
-
-string cstring::lower() const
-{
-	string ret = *this;
-	bytesw by = ret.bytes();
-	for (size_t i=0;i<by.size();i++) by[i] = tolower(by[i]);
-	return ret;
 }
 
 cstring cstring::trim() const
@@ -1117,10 +1110,10 @@ test("string base", "array,memeq", "string")
 		assert_eq(dst, "floating munchers");
 		assert_eq(src, dst.bytes());
 		dst = "";
-		test_nomalloc {
-			string tmp = std::move(src);
-			dst = std::move(tmp);
-		};
+		//test_nomalloc {
+		string tmp = std::move(src); // can't test_nomalloc this part, moving from a bytearray reallocates to append the nul
+		dst = std::move(tmp);
+		//};
 		assert_eq(dst, "floating munchers");
 		assert_eq(src.size(), 0);
 	}
@@ -1382,16 +1375,12 @@ test("string base", "array,memeq", "string")
 		string s2;
 		bytearray b2;
 		b2.resize(32);
-		test_nomalloc {
-			string tmp1 = std::move(b1); // will free b1; this is fine, only allocating is forbidden
-			s1 = std::move(tmp1);
-			string tmp2 = std::move(b2);
-			s2 = std::move(tmp2);
-		}
+		string tmp1 = std::move(b1);
+		s1 = std::move(tmp1);
+		string tmp2 = std::move(b2);
+		s2 = std::move(tmp2);
 		assert_eq(b1.size(), 0);
 		assert_eq(b2.size(), 0);
-		assert_eq((uintptr_t)b1.ptr(), 0);
-		assert_eq((uintptr_t)b2.ptr(), 0);
 		assert_eq(s1.length(), 8);
 		assert_eq(s2.length(), 32);
 	}
@@ -1403,6 +1392,23 @@ test("string base", "array,memeq", "string")
 			a += "aaaaaaa";
 			assert(a == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
 		}
+	}
+	
+	{
+		string a = "aaaaaaaaaaaaaaaaaaaaaaaa";
+		assert(a.upper() == "AAAAAAAAAAAAAAAAAAAAAAAA");
+		test_nomalloc {
+			assert(std::move(a).upper() == "AAAAAAAAAAAAAAAAAAAAAAAA");
+		}
+	}
+	
+	{
+		bytearray by = cstring("aaaaaaaaaaaaaaaaaaaaaaaaFAIL").bytes();
+		by.resize(24);
+		string str = std::move(by);
+		const char * str_ptr = str;
+		string str2 = str_ptr;
+		assert_eq(str2, "aaaaaaaaaaaaaaaaaaaaaaaa");
 	}
 }
 

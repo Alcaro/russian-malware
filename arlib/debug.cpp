@@ -1,4 +1,3 @@
-#define WANT_VALGRIND
 #include "os.h"
 #include "thread.h"
 #include "test.h"

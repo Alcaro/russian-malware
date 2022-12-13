@@ -157,6 +157,48 @@ time_t timegm(struct tm * t)
 }
 #endif
 
+#include "stringconv.h"
+string tostring(timestamp val)
+{
+	string ret = format(val.sec, ".", fmt_pad<9>((uint32_t)val.nsec));
+	size_t len = ret.length();
+	while (ret[len-1] == '0')
+		len--;
+	if (ret[len-1] == '.')
+		len--;
+	return ret.substr(0, len);
+}
+bool fromstring(cstring s, timestamp& out)
+{
+	out = {};
+	const char * start = (char*)s.bytes().ptr();
+	const char * end = start + s.length();
+	const char * int_end = start;
+	while (int_end < end && isdigit(*int_end))
+		int_end++;
+	if (!fromstring(s.substr(0, int_end-start), out.sec))
+		return false;
+	if (int_end != end)
+	{
+		if (*int_end != '.')
+			return false;
+		int_end++;
+		size_t n_digits = end - int_end;
+		if (n_digits == 0 || n_digits > 9)
+			return false;
+		long ret = 0;
+		for (int i=0;i<9;i++)
+		{
+			ret *= 10;
+			if (int_end == end) {}
+			else if (!isdigit(*int_end)) return false;
+			else ret += *(int_end++) - '0';
+		}
+		out.nsec = ret;
+	}
+	return true;
+}
+
 #include "test.h"
 
 test("time", "", "time")
@@ -204,4 +246,17 @@ test("muldiv64", "", "")
 	assert_eq(muldiv64(0x1000000000000000, 0x0000000000010000, 0x0000000001000000), 0x0010000000000000);
 	assert_eq(muldiv64(1000000000000000000, 10000000, 1000000000), 10000000000000000);
 	assert_eq(muldiv64(100, 100, 3), 3333);
+}
+
+test("timestamp serialization", "", "")
+{
+	assert_eq(tostring((timestamp){ 123456789,123456789 }), "123456789.123456789");
+	assert_eq(tostring((timestamp){ 123456789,123456000 }), "123456789.123456");
+	assert_eq(tostring((timestamp){ 123456789,000000000 }), "123456789");
+	assert_eq(tostring((timestamp){         0,123456000 }), "0.123456");
+	
+	//assert_eq(try_fromstring<timestamp>("123456789.123456789"), timestamp{123456789,123456789});
+	//assert_eq(try_fromstring<timestamp>("123456789.123456"   ), timestamp{123456789,123456000});
+	//assert_eq(try_fromstring<timestamp>("123456789"          ), timestamp{123456789,000000000});
+	//assert_eq(try_fromstring<timestamp>(        "0.123456"   ), timestamp{        0,123456000});
 }

@@ -59,15 +59,12 @@ template<typename T> ser_include_if_t<T> ser_include_if_true(T& c) { return ser_
 
 template<typename T>
 static constexpr inline
-std::enable_if_t<sizeof(T::serialize_as_array())!=0, bool>
-serialize_as_array(int ov_resolut1)
+bool serialize_as_array()
 {
-	return T::serialize_as_array();
-}
-template<typename T> // I can't do 'enable if serialize_as_array member does not exist'
-constexpr static inline bool serialize_as_array(float ov_resolut1) // instead, extra argument so the other is a better match
-{
-	return false;
+	if constexpr (requires { T::serialize_as_array(); })
+		return T::serialize_as_array();
+	else
+		return false;
 }
 
 
@@ -126,12 +123,9 @@ class jsonserializer {
 	friend class jsonserializer_array;
 	
 	template<typename T>
-	std::enable_if_t<!std::is_same_v<decltype(
-			std::declval<T>().serialize(std::declval<jsonserializer&>())
-		), void*>> // std::is_invocable gives goofy results with template member functions; this is weird, but it works
-	add_node(T& inner)
+	void add_node(T& inner) requires requires { inner.serialize(*this); }
 	{
-		if constexpr (serialize_as_array<T>(123))
+		if constexpr (serialize_as_array<T>())
 		{
 			w.list_enter();
 			enter_compact();
@@ -151,8 +145,7 @@ class jsonserializer {
 	}
 	
 	template<typename T>
-	std::enable_if_t<std::is_invocable_v<T, jsonserializer&>>
-	add_node(const T& inner)
+	void add_node(const T& inner) requires requires { inner(*this); }
 	{
 		w.map_enter();
 		enter_compact();
@@ -162,10 +155,12 @@ class jsonserializer {
 	}
 	
 	template<typename T>
-	std::enable_if_t<sizeof(typename T::serialize_as)!=0>
-	add_node(T& inner)
+	void add_node(T& inner) requires requires { typename T::serialize_as; }
 	{
-		add_node((typename T::serialize_as)inner);
+		if constexpr (std::is_same_v<typename T::serialize_as, string>)
+			add_node(tostring(inner));
+		else
+			add_node((typename T::serialize_as)inner);
 	}
 	
 	template<typename T, size_t size>
@@ -198,8 +193,7 @@ class jsonserializer {
 	
 	
 	template<typename T>
-	std::enable_if_t<std::is_integral_v<T>>
-	add_node_hex(T inner) { w.num(inner); }
+	void add_node_hex(T inner) requires (std::is_integral_v<T>) { w.num(inner); }
 	
 	void add_node_hex(bytesr inner) { w.str(tostringhex(inner)); }
 	void add_node_base64(bytesr inner) { w.str(base64_enc(inner)); }
@@ -335,12 +329,9 @@ class jsondeserializer {
 	friend class jsondeserializer_array;
 	
 	template<typename T>
-	std::enable_if_t<!std::is_same_v<decltype(
-			std::declval<T>().serialize(std::declval<jsondeserializer&>())
-		), void*>>
-	read_item_raw(T& out)
+	void read_item_raw(T& out) requires requires { out.serialize(*this); }
 	{
-		if constexpr (serialize_as_array<T>(123))
+		if constexpr (serialize_as_array<T>())
 		{
 			if (ev.action == jsonparser::enter_list)
 			{
@@ -364,8 +355,7 @@ class jsondeserializer {
 	}
 	
 	template<typename T>
-	std::enable_if_t<std::is_invocable_v<T, jsondeserializer&>>
-	read_item_raw(const T& out)
+	void read_item_raw(const T& out) requires requires { out(*this); }
 	{
 		if (ev.action == jsonparser::enter_map)
 		{
@@ -377,16 +367,14 @@ class jsondeserializer {
 	}
 	
 	template<typename T>
-	std::enable_if_t<std::is_invocable_v<T, cstring>>
-	read_item_raw(const T& out)
+	void read_item_raw(const T& out) requires requires { out(""); }
 	{
 		if (ev.action != jsonparser::str) { valid = false; return; }
 		out(ev.str);
 	}
 	
 	template<typename T>
-	std::enable_if_t<std::is_arithmetic_v<T>>
-	read_item_raw(T& out)
+	void read_item_raw(T& out) requires (std::is_arithmetic_v<T>)
 	{
 		if (ev.action != jsonparser::num) { valid = false; return; }
 		valid &= fromstring(ev.str, out);
@@ -406,12 +394,14 @@ class jsondeserializer {
 	}
 	
 	template<typename T>
-	std::enable_if_t<sizeof(typename T::serialize_as)!=0>
-	read_item_raw(T& inner)
+	void read_item_raw(T& inner) requires requires { typename T::serialize_as; }
 	{
 		typename T::serialize_as tmp{};
 		read_item_raw(tmp);
-		inner = std::move(tmp);
+		if constexpr (std::is_same_v<typename T::serialize_as, string>)
+			valid &= fromstring(tmp, inner);
+		else
+			inner = std::move(tmp);
 	}
 	
 	template<typename T, size_t size>
@@ -459,8 +449,7 @@ class jsondeserializer {
 	
 	
 	template<typename T>
-	std::enable_if_t<std::is_integral_v<T>>
-	read_item_hex(T& inner) { read_item_raw(inner); }
+	void read_item_hex(T& inner) requires (std::is_integral_v<T>) { read_item_raw(inner); }
 	
 	void read_item_hex(bytesw inner)
 	{
@@ -564,8 +553,7 @@ public:
 	}
 	
 	template<typename T>
-	std::enable_if_t<std::is_invocable_v<T, cstring, jsondeserializer&>>
-	each_item(const T& out)
+	void each_item(const T& out) requires requires { out("", *this); }
 	{
 		while (ev.action == jsonparser::map_key)
 		{
@@ -587,8 +575,7 @@ public:
 	}
 	
 	template<typename T>
-	std::enable_if_t<std::is_invocable_v<T, cstring, cstring>>
-	each_item(const T& out)
+	void each_item(const T& out) requires requires { out("", ""); }
 	{
 		while (ev.action == jsonparser::map_key)
 		{
@@ -659,12 +646,9 @@ class bmlserializer {
 	friend class bmlserializer_array;
 	
 	template<typename T>
-	std::enable_if_t<!std::is_same_v<decltype(
-			std::declval<T>().serialize(std::declval<bmlserializer&>())
-		), void*>>
-	item_inner(cstring name, T& inner)
+	void item_inner(cstring name, T& inner) requires requires { inner.serialize(*this); }
 	{
-		if constexpr (serialize_as_array<T>(123))
+		if constexpr (serialize_as_array<T>())
 		{
 			bmlserializer_array tmp(*this, name);
 			inner.serialize(tmp);
@@ -678,15 +662,13 @@ class bmlserializer {
 	}
 	
 	template<typename T>
-	std::enable_if_t<sizeof(tostring(std::declval<T>()))!=0>
-	item_inner(cstring name, const T& inner)
+	void item_inner(cstring name, const T& inner) requires requires { tostring(inner); requires ! requires { typename T::serialize_as; }; }
 	{
 		w.node(name, tostring(inner));
 	}
 	
 	template<typename T>
-	std::enable_if_t<sizeof(typename T::serialize_as)!=0>
-	item_inner(cstring name, T& inner)
+	void item_inner(cstring name, const T& inner) requires requires { typename T::serialize_as; }
 	{
 		item_inner(name, (typename T::serialize_as)inner);
 	}
@@ -802,22 +784,9 @@ class bmldeserializer {
 	// output: ev points to the next node; each implementation must end with finish_item() next_ev()
 	
 	template<typename T>
-	std::enable_if_t<sizeof(fromstring(string(), std::declval<T&>()))!=0>
-	read_item(T& out)
+	void read_item(T& out) requires requires { out.serialize(*this); }
 	{
-		valid &= fromstring(ev.value, out);
-		next_ev();
-		finish_item();
-		next_ev();
-	}
-	
-	template<typename T>
-	std::enable_if_t<!std::is_same_v<decltype(
-			std::declval<T>().serialize(std::declval<bmldeserializer&>())
-		), void*>>
-	read_item(T& out)
-	{
-		if constexpr (serialize_as_array<T>(123))
+		if constexpr (serialize_as_array<T>())
 		{
 			bmldeserializer_array tmp(*this);
 			out.serialize(tmp);
@@ -832,8 +801,7 @@ class bmldeserializer {
 	}
 	
 	template<typename T>
-	std::enable_if_t<std::is_invocable_v<T, bmldeserializer&>>
-	read_item(const T& out)
+	void read_item(const T& out) requires requires { out(*this); }
 	{
 		next_ev();
 		out(*this);
@@ -842,8 +810,7 @@ class bmldeserializer {
 	}
 	
 	template<typename T>
-	std::enable_if_t<std::is_invocable_v<T, bmldeserializer&, cstring>>
-	read_item(const T& out)
+	void read_item(const T& out)  requires requires { out(*this, cstring()); }
 	{
 		string name = std::move(ev.value);
 		next_ev();
@@ -862,16 +829,28 @@ class bmldeserializer {
 	}
 	
 	template<typename T>
-	std::enable_if_t<sizeof(typename T::serialize_as)!=0>
-	read_item(T& out)
+	void read_item(T& out) requires requires { typename T::serialize_as; }
 	{
 		typename T::serialize_as tmp{};
 		read_item(tmp);
-		out = std::move(tmp);
+		if constexpr (std::is_same_v<typename T::serialize_as, string>)
+			valid &= fromstring(tmp, out);
+		else
+			out = std::move(tmp);
+	}
+	
+	template<typename T>
+	void read_item(T& out) requires requires { fromstring(string(), out); requires ! requires { typename T::serialize_as; }; }
+	{
+		valid &= fromstring(ev.value, out);
+		next_ev();
+		finish_item();
+		next_ev();
 	}
 	
 	
-	template<typename T> void item_inner(const char * name, T& inner)
+	template<typename T>
+	void item_inner(const char * name, T& inner)
 	{
 		while (ev.name == name)
 		{

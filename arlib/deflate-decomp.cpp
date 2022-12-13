@@ -13,7 +13,7 @@ static uint16_t bitreverse16(uint16_t arg)
 	// this is a variant of seander's bithack, but it leaves things misaligned until the end
 	// this allows deleting some shifts, making it smaller and faster (drawback is it needs a 32bit register, but I have that)
 	// I'd submit it to seander, but as of may 2020, his address bounces. I think he graduated.
-    uint32_t tmp = arg;
+	uint32_t tmp = arg;
 	tmp = tmp | tmp<<16;
 	tmp = (tmp&(0xf0f0<<8))>>8 | (tmp&(0x0f0f<<8));
 	tmp = (tmp&(0xcccc<<4))>>4 | (tmp&(0x3333<<4));

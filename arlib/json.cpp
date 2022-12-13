@@ -612,7 +612,7 @@ static jsonparser::event test4e[]={
 };
 
 static const char * test5 =
-"{ \"foo\": \"\xC2\x80\\u0080\\ud83d\\udca9\" }\n"
+"{ \"foo\": \"\xC2\x80\\u0080\\ud83d\\udCA9\" }\n"
 ;
 
 static jsonparser::event test5e[]={
@@ -705,6 +705,7 @@ test("JSON parser", "string", "json")
 	testcall(testjson_error("\"\\u1234"));
 	testcall(testjson_error("[\f]"));
 	testcall(testjson_error("[\v]"));
+	testcall(testjson_error("\"\\U0001f4a9\""));
 	
 	//try to make it read out of bounds
 	//input length 31

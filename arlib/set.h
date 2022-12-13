@@ -456,10 +456,10 @@ public:
 		if (ret) return ret->value;
 		else return items.get_create(node(key, cr()), true).value;
 	}
-	Tvalue& operator[](const Tkey& key) // C# does this better...
-	{
-		return get(key);
-	}
+	//Tvalue& operator[](const Tkey& key) // C# does this better...
+	//{
+		//return get(key);
+	//}
 	
 	Tvalue& insert(const Tkey& key)
 	{

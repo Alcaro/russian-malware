@@ -15,7 +15,7 @@ static bool rand_secure(void* out, size_t n)
 #if defined(__linux__)
 	return getentropy(out, n) == 0; // can't fail unless kernel < 3.17 (oct 2014), bad pointer, size > 256, or strange seccomp/ptrace/etc
 #elif defined(_WIN32)
-	// documented on msdn as having no import library, but works in mingw (other than the WINAPI goof)
+	// documented on msdn as having no import library, but works in mingw
 	// msdn doesn't claim it's cryptographically secure, but everything else that talks about it treats it as such
 	// msdn also says I should use CryptGenRandom, but that requires creating a random number provider and offers no clear benefits
 	// BCryptGenRandom exists, but doesn't help until 7+, is in a rarer DLL than RtlGenRandom, and offers no clear benefits either

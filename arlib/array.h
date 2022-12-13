@@ -666,7 +666,15 @@ public:
 	const T* ptr() const { return storage; }
 	T* ptr() { return storage; }
 	//TODO: implement more missing features
+	
+	template<size_t n>
+	T get() { return storage[n]; } // used by structured binding
 };
+
+template<typename T, size_t N>
+struct std::tuple_size<sarray<T, N>> { static constexpr size_t value = N; };
+template<typename T, size_t N, size_t N2>
+struct std::tuple_element<N2, sarray<T, N>> { using type = T; };
 
 
 //A refarray acts mostly like a normal array. The difference is that it stores pointers rather than the elements themselves;

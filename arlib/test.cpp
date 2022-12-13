@@ -249,10 +249,10 @@ struct latrec {
 latrec max_latencies_us[6];
 }
 
-void _test_runloop_latency(uint64_t us)
+void _test_runloop_latency(duration dur)
 {
 	if (!cur_test) return; // happens when global runloop is destructed at process exit
-	max_latencies_us[0].us = us;
+	max_latencies_us[0].us = dur.us();
 	max_latencies_us[0].name = cur_test->name;
 	max_latencies_us[0].filename = cur_test->filename;
 	max_latencies_us[0].line = cur_test->line;
@@ -492,14 +492,14 @@ int main(int argc, char* argv[])
 			n_malloc_block = 0;
 			try {
 				uint64_t start_time = time_us_ne();
+				runloop2::test_begin();
 				cur_test->func();
+				runloop2::test_end();
 				if (pass == 1)
 					assert_eq(n_malloc, n_free);
 				uint64_t end_time = time_us_ne();
 				uint64_t time_us = end_time - start_time;
 				uint64_t time_lim = (all_tests ? 5000*1000 : 500*1000);
-				//runloop_blocktest_recycle(runloop::global());
-				runloop2::assert_empty();
 				assert_eq(n_malloc_block, 0);
 				if (time_us > time_lim)
 				{
