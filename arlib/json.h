@@ -16,6 +16,7 @@
 //enter/exit types are always paired, even in the presense of errors. However, they may be anywhere;
 // don't place any expectations on event order inside a map.
 //After the document ends, { finish } will be returned forever until the object is deleted.
+//The cstrings in the event are valid as long as the jsonparser itself.
 class jsonparser : nocopy {
 public:
 	enum {
@@ -75,64 +76,35 @@ class jsonwriter {
 	string m_data;
 	bool m_comma = false;
 	
-	bool m_indent_is_value;
-	uint8_t m_indent_block;
-	uint8_t m_indent_size;
-	int m_indent_depth;
+	bool m_indent_is_value = false;
+	uint8_t m_indent_disable = false;
+	uint8_t m_indent_size = 0;
+	uint16_t m_indent_depth = 0;
 	
-	void comma()
-	{
-		if (m_comma) m_data += ',';
-		m_comma = true;
-		
-		if (UNLIKELY(m_indent_block == 0))
-		{
-			if (m_indent_is_value)
-			{
-				m_data += ' ';
-				m_indent_is_value = false;
-			}
-			else if (m_indent_depth)
-			{
-				cstring indent_str = (&"        "[8-m_indent_size]);
-				m_data += '\n';
-				for (int i=0;i<m_indent_depth;i++)
-				{
-					m_data += indent_str;
-				}
-			}
-		}
-	}
+	void comma();
 	
 public:
-	jsonwriter() { m_indent_block = 1; m_indent_size = 0; }
+	jsonwriter() {}
 	// Max supported indentation depth is 8.
-	jsonwriter(int indent) { m_indent_block = (indent == 0); m_indent_size = indent; m_indent_depth = 0; m_indent_is_value = false; }
+	jsonwriter(int indent) { m_indent_disable = (indent == 0); m_indent_size = indent; }
 	static string strwrap(cstring s);
 	
-	void null() { comma(); m_data += "null"; }
-	void boolean(bool b) { comma(); m_data += b ? "true" : "false"; }
-	void str(cstring s) { comma(); m_data += strwrap(s); }
+	void null();
+	void boolean(bool b);
+	void str(cstring s);
 	template<typename T>
-	std::enable_if_t<std::is_arithmetic_v<T> && !std::is_same_v<T,bool>>
-	num(T n) { comma(); m_data += tostring(n); }
-	void list_enter() { comma(); m_data += "["; m_comma = false; if (m_indent_size) m_indent_depth++; }
-	void list_exit() { m_data += "]"; m_comma = true; m_indent_depth--; }
-	void map_enter() { comma(); m_data += "{"; m_comma = false; m_indent_depth++; }
-	void map_key(cstring s) { str(s); m_data += ":"; m_comma = false; if (m_indent_size) m_indent_is_value = true; }
-	void map_exit() { m_data += "}"; m_comma = true; m_indent_depth--; }
+	void num(T n) requires (std::is_arithmetic_v<T> && !std::is_same_v<T,bool>) { comma(); m_data += tostring(n); }
+	void list_enter();
+	void list_exit();
+	void map_enter();
+	void map_key(cstring s);
+	void map_exit();
 	
-	// If compress(true) has been called more times than compress(false), indentation is removed.
-	// If unindented, does nothing.
-	void compress(bool enable)
-	{
-		if (!enable)
-		{
-			m_indent_block--;
-			m_indent_is_value = false;
-		}
-		else m_indent_block++;
-	}
+	// If compress() has been called, indentation is removed. To reenable, use uncompress().
+	// Should be called only immediately after {list,map}_{enter,exit}. 
+	// Do not call compress() while compressed already. If indentation wasn't configured, does nothing.
+	void compress() { m_indent_disable = true; }
+	void uncompress() { m_indent_disable = false; m_indent_is_value = false; }
 	
 	// Can only be called once.
 	string finish() { return std::move(m_data); }

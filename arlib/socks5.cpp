@@ -2,9 +2,9 @@
 #include "socks5.h"
 #include "bytestream.h"
 
-async<autoptr<socket2>> socks5::create_inner(cstring host, uint16_t port)
+async<autoptr<socket2>> socks5::create(cstring proxy_host, uint16_t proxy_port, cstring host, uint16_t port)
 {
-	autoptr<socket2> sock = co_await socket2::create(m_host, m_port);
+	autoptr<socket2> sock = co_await socket2::create(proxy_host, proxy_port);
 	if (!sock)
 		co_return nullptr;
 	

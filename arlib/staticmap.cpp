@@ -47,9 +47,6 @@ static uint64_t sm_hash(bytesr by)
 	const uint8_t * val = by.ptr();
 	size_t n = by.size();
 	
-	if (END_LITTLE && sizeof(size_t) == 8)
-		return hash_shuffle(hash(val, n));
-	
 	uint64_t hash = 5381;
 	while (n >= sizeof(uint64_t))
 	{
@@ -63,7 +60,14 @@ static uint64_t sm_hash(bytesr by)
 		val++;
 		n--;
 	}
-	return hash_shuffle(hash);
+	
+	hash ^= hash >> 30;
+	hash *= 0xbf58476d1ce4e5b9;
+	hash ^= hash >> 27;
+	hash *= 0x94d049bb133111eb;
+	hash ^= hash >> 31;
+	
+	return hash;
 }
 
 bool staticmap::open(cstrnul fn, bool map_writable)
@@ -85,7 +89,10 @@ bool staticmap::open(cstrnul fn, bool map_writable)
 			recover();
 	}
 	else
+	{
 		f.close();
+		return false;
+	}
 	return true;
 }
 
@@ -119,8 +126,9 @@ void staticmap::recover()
 	// - hashmap contents are untrustworthy
 	// - freelist contents are untrustworthy
 	// - hashmap size/load may be off by one
+	// - freespace objects may lack their size header if the file was recently extended
 	// however, we still know that
-	// - every object is valid and contains its size
+	// - every object is valid and contains its size (except free objects if the file was recently extended)
 	// - every data object contains proper data
 	// - there are no mergeable freelist objects
 	// - the hashmap pointer is valid
@@ -201,7 +209,7 @@ void staticmap::recover()
 	f.pwrite(hashmap_pos, new_map_buf);
 	
 	if (free_this != 0)
-		free(free_this);
+		dealloc(free_this);
 }
 
 uint64_t staticmap::alloc(size_t bytes)
@@ -261,9 +269,9 @@ again:
 	}
 }
 
-void staticmap::free(uint64_t addr)
+void staticmap::dealloc(uint64_t addr)
 {
-//printf("free %lu\n", addr);
+//printf("dealloc %lu\n", addr);
 	uint64_t size = rd64(addr+off_header) & ~t_typemask;
 again:
 	uint64_t other = addr ^ size;
@@ -359,7 +367,7 @@ void staticmap::rehash_if_needed()
 		uint64_t new_pos = alloc(new_map_buf.size());
 		f.pwrite(new_pos, new_map_buf);
 		wr64(off_r_hm_ptr, new_pos, rd64(off_r_entries));
-		free(hashmap_pos);
+		dealloc(hashmap_pos);
 	}
 }
 
@@ -414,7 +422,7 @@ bytesw staticmap::insert(bytesr key, bytesr val)
 	}
 	
 	if (prev_ptr > 1)
-		free(prev_ptr);
+		dealloc(prev_ptr);
 	else
 		wr64(off_r_hm_load, rd64(off_r_hm_load)+(prev_ptr==0), rd64(off_r_entries)+1);
 	wr64(hashmap_pos, pos, hash);
@@ -433,7 +441,7 @@ void staticmap::remove(bytesr key)
 	uint64_t ptr = rd64(hashmap_pos+off_h_ptr);
 	if (ptr > 1)
 	{
-		free(ptr);
+		dealloc(ptr);
 		wr64(hashmap_pos+off_h_ptr, 1);
 		wr64(off_r_entries, rd64(off_r_entries)-1);
 	}
@@ -488,6 +496,7 @@ staticmap::iterator& staticmap::iterator::operator++()
 
 bool staticmap::iterator::operator!=(const iterator& other)
 {
+	// advance the lesser pointer, in case one points to end of file and the other to freespace before eof
 	uint8_t* a = it;
 	uint8_t* b = other.it;
 	if (it < other.it) a = next(a, b);

@@ -47,10 +47,12 @@ static forceinline __m128i load_sse2_small_highundef(const uint8_t * src, size_t
 	//  and simplifying the common case outweighs making the rare case more expensive
 	// combined test: ((4080-src)&4095) < 4080+len
 	// the obvious test: !(((src+15)^(src+len-1)) & 4096)
-	if (LIKELY(((uintptr_t(src)>>4)+1)&(4095>>4)) || ((-(uintptr_t)src)&15) < len)
+	
+	// if a m128i load from here would not cross a page boundary, or if a len-sized load would touch both pages,
+	if (LIKELY(((uintptr_t(src)>>ilog2(sizeof(__m128i)))+1)&(4095>>ilog2(sizeof(__m128i)))) || ((-(uintptr_t)src)&(sizeof(__m128i)-1)) < len)
 	{
-		__asm__("" : "+r"(src)); // make sure compiler can't prove anything about the below load
-		return _mm_loadu_si128((__m128i*)src);
+		// then just load
+		return _mm_loadu_si128((__m128i*)launder(src));
 	}
 	else
 	{

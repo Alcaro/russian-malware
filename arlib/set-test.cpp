@@ -11,6 +11,15 @@ public:
 	size_t hash() const { return 0; }
 };
 
+class custom_hash {
+public:
+	size_t id;
+	custom_hash(size_t id) : id(id) {}
+	
+	bool operator==(const custom_hash& other) const { return id == other.id; }
+	size_t hash() const { return id >> 16; }
+};
+
 test("set", "array,string", "set")
 {
 	{
@@ -229,6 +238,22 @@ test("set", "array,string", "set")
 #undef A
 #undef B
 #undef C
+	}
+	
+	{
+		set<custom_hash> a;
+		a.add(custom_hash(1));
+		a.add(custom_hash(2));
+		a.add(custom_hash(3));
+		a.remove(custom_hash(2));
+		assert(a.contains(custom_hash(1)));
+		assert(!a.contains(custom_hash(2)));
+		assert(a.contains(custom_hash(3)));
+		
+		set<custom_hash> b = a;
+		assert(b.contains(custom_hash(1)));
+		assert(!b.contains(custom_hash(2)));
+		assert(b.contains(custom_hash(3)));
 	}
 }
 

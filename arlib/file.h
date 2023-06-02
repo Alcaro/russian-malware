@@ -85,34 +85,38 @@ public:
 		m_create_excl,    // Fails if the file does exist.
 		
 		m_exclusive = 8, // OR with any other mode. Tries to claim exclusive write access, or with m_read, simply deny all writers.
-		                 // The request may be bypassable, or not honored by default, on some OSes. However, if both processes use Arlib, the second one will be stopped.
+		                 // The request may be bypassable, or not honored by default, on some OSes.
+		                 // However, if both processes use Arlib, the second one will be stopped.
 	};
 	
 	class mmapw_t;
 	class mmap_t : public arrayview<uint8_t>, nocopy {
 		friend class file2;
 		friend class mmapw_t;
-		static void map(bytesr& by, file2& src, bool writable);
-		static void unmap(bytesr& by);
+		static void map(bytesr& by, file2& src, bool writable, bool small);
+		static void unmap(bytesr& by, bool small);
 		
-		void unmap() { unmap(*this); }
+		void unmap() { unmap(*this, true); }
 		void move_from(bytesr& other) { arrayview::operator=(other); other = nullptr; }
 	public:
 		mmap_t() {}
 		mmap_t(mmap_t&& other) { move_from(other); }
 		mmap_t(mmapw_t&& other) { move_from(other); }
 		mmap_t& operator=(nullptr_t) { unmap(); return *this; }
+		mmap_t& operator=(bytesr) = delete;
 		mmap_t& operator=(mmap_t&& other) { unmap(); move_from(other); return *this; }
 		~mmap_t() { unmap(); }
 	};
 	class mmapw_t : public arrayvieww<uint8_t>, nocopy {
 		friend class file2;
-		void unmap() { mmap_t::unmap(*this); }
+		void unmap() { mmap_t::unmap(*this, false); }
 		void move_from(bytesr& other) { arrayview::operator=(other); other = nullptr; }
 	public:
 		mmapw_t() {}
+		mmapw_t(const mmapw_t&) = delete;
 		mmapw_t(mmapw_t&& other) { move_from(other); }
 		mmapw_t& operator=(nullptr_t) { unmap(); return *this; }
+		mmapw_t& operator=(bytesr) = delete;
 		mmapw_t& operator=(mmapw_t&& other) { unmap(); move_from(other); return *this; }
 		~mmapw_t() { unmap(); }
 	};
@@ -172,26 +176,40 @@ public:
 	void set_time(timestamp t) { struct timespec times[] = { { 0, UTIME_OMIT }, t.to_native() }; futimens(fd, times); }
 #endif
 	
-	// mmap objects are not tied to the file object. You can keep using the mmap, unless you need the sync_map function.
-	// mmap() will always map the file, and will update if the file is written.
-	// If you don't care about concurrent writers, and the file is small, it may be faster to read into a normal malloc.
-	// As long as the file is mapped, it can't be resized.
-	mmap_t mmap() { return mmapw(false); }
-	static mmap_t mmap(cstrnul filename) { return file2(filename).mmap(); }
+	// mmap objects are not tied to the file object. You can close the file and keep using the mmap, unless you need the sync_map function.
+	// It is undefined whether the mmap_t object updates if the underlying file does.
+	mmap_t mmap() { return mmapw(false, true); }
+	static mmap_t mmap(cstrnul filename)
+	{
+		file2 f(filename);
+		if (!f)
+			return {};
+		return f.mmap();
+	}
+	// This one is guaranteed to update when the file does. However, if the file is replaced, it will keep tracking the old one.
 	// If not writable, the compiler will let you write, but doing so will segfault at runtime.
-	mmapw_t mmapw(bool writable = true)
+	mmapw_t mmapw(bool writable = true) { return mmapw(writable, false); }
+private:
+	mmapw_t mmapw(bool writable, bool small)
 	{
 		mmapw_t ret;
-		mmap_t::map(ret, *this, writable);
+		mmap_t::map(ret, *this, writable, small);
 		return ret;
 	}
-	static mmapw_t mmapw(cstrnul filename) { return file2(filename, m_wr_existing).mmapw(); }
+public:
+	static mmapw_t mmapw(cstrnul filename)
+	{
+		file2 f(filename, m_wr_existing);
+		if (!f)
+			return {};
+		return f.mmapw();
+	}
 	
 	// Resizes the file, and its associated mmap object. Same as unmapping, resizing and remapping, but optimizes slightly better.
-	bool resize(off_t newsize, mmap_t& map) { return resize(newsize, (bytesr&)map, false); }
-	bool resize(off_t newsize, mmapw_t& map, bool writable = true) { return resize(newsize, (bytesr&)map, writable); }
+	bool resize(off_t newsize, mmap_t& map) { return resize(newsize, (bytesr&)map, false, true); }
+	bool resize(off_t newsize, mmapw_t& map, bool writable = true) { return resize(newsize, (bytesr&)map, writable, false); }
 private:
-	bool resize(off_t newsize, bytesr& map, bool writable);
+	bool resize(off_t newsize, bytesr& map, bool writable, bool small);
 public:
 	
 	// Flushes write() calls to disk. Normally done automatically after a second or so.
@@ -208,11 +226,10 @@ public:
 #else
 	void sync_map(const mmapw_t& map) { msync((void*)map.ptr(), map.size(), MS_SYNC); }
 #endif
-#undef null_fd
 	
-	// Reads the entire file in a single function call.
-	// Max size is 16MB; for anything bigger, use mmap() or a file object.
-	static bytearray readall(cstrnul filename)
+	// Reads the entire file in a single function call. Generally not recommended, better use mmap().
+	// Max size is 16MB.
+	static bytearray readall_array(cstrnul filename)
 	{
 		file2 f(filename);
 		if (!f)
@@ -227,8 +244,11 @@ public:
 		return ret;
 	}
 	
-	// Like the above, but also accepts URIs (file, http or https).
-	static async<bytearray> readall_full(cstrnul path);
+	// Will always end with a slash.
+	static cstrnul dir_home();
+	static cstrnul dir_config();
+	
+#undef null_fd
 };
 
 class file : nocopy {
@@ -266,17 +286,17 @@ public:
 	
 	class implrd : public impl {
 	public:
-		virtual size_t size() = 0;
-		bool resize(size_t newsize) { return false; }
+		virtual size_t size() override = 0;
+		bool resize(size_t newsize) override { return false; }
 		
-		virtual size_t pread(arrayvieww<uint8_t> target, size_t start) = 0;
-		bool pwrite(arrayview<uint8_t> data, size_t start = 0) { return false; }
-		bool replace(arrayview<uint8_t> data) { return false; }
+		virtual size_t pread(arrayvieww<uint8_t> target, size_t start) override = 0;
+		bool pwrite(arrayview<uint8_t> data, size_t start = 0) override { return false; }
+		bool replace(arrayview<uint8_t> data) override { return false; }
 		
-		virtual arrayview<uint8_t> mmap(size_t start, size_t len) = 0;
-		virtual void unmap(arrayview<uint8_t> data) = 0;
-		arrayvieww<uint8_t> mmapw(size_t start, size_t len) { return NULL; }
-		bool unmapw(arrayvieww<uint8_t> data) { return false; }
+		virtual arrayview<uint8_t> mmap(size_t start, size_t len) override = 0;
+		virtual void unmap(arrayview<uint8_t> data) override = 0;
+		arrayvieww<uint8_t> mmapw(size_t start, size_t len) override { return NULL; }
+		bool unmapw(arrayvieww<uint8_t> data) override { return false; }
 	};
 private:
 	impl* core;
@@ -398,7 +418,7 @@ public:
 	
 	arrayvieww<uint8_t> mmapw(size_t start, size_t len) { return core->mmapw(start, len); }
 	arrayvieww<uint8_t> mmapw() { return this->mmapw(0, this->size()); }
-	//If this succeeds, data written to the file is guaranteed to be written, assuming no other writes were made in the region.
+	//If this succeeds, data written to the buffer is guaranteed to be written to the file, assuming no other writes were made in the region.
 	//If not, file contents are undefined in that range.
 	//TODO: remove return value, replace with ->sync()
 	//if failure is detected, set a flag to fail sync()
@@ -425,8 +445,8 @@ private:
 		memimpl(arrayview<uint8_t> data) : datard(data), datawr(NULL) {}
 		memimpl(array<uint8_t>* data) : datard(*data), datawr(data) {}
 		
-		size_t size() { return datard.size(); }
-		bool resize(size_t newsize)
+		size_t size() override { return datard.size(); }
+		bool resize(size_t newsize) override
 		{
 			if (!datawr) return false;
 			datawr->resize(newsize);
@@ -434,13 +454,13 @@ private:
 			return true;
 		}
 		
-		size_t pread(arrayvieww<uint8_t> target, size_t start)
+		size_t pread(arrayvieww<uint8_t> target, size_t start) override
 		{
 			size_t nbyte = min(target.size(), datard.size()-start);
 			memcpy(target.ptr(), datard.slice(start, nbyte).ptr(), nbyte);
 			return nbyte;
 		}
-		bool pwrite(arrayview<uint8_t> newdata, size_t start = 0)
+		bool pwrite(arrayview<uint8_t> newdata, size_t start = 0) override
 		{
 			if (!datawr) return false;
 			size_t nbyte = newdata.size();
@@ -449,7 +469,7 @@ private:
 			datard = *datawr;
 			return true;
 		}
-		bool replace(arrayview<uint8_t> newdata)
+		bool replace(arrayview<uint8_t> newdata) override
 		{
 			if (!datawr) return false;
 			*datawr = newdata;
@@ -457,17 +477,18 @@ private:
 			return true;
 		}
 		
-		arrayview<uint8_t>  mmap (size_t start, size_t len) { return datard.slice(start, len); }
-		arrayvieww<uint8_t> mmapw(size_t start, size_t len) { if (!datawr) return NULL; return datawr->slice(start, len); }
-		void  unmap(arrayview<uint8_t>  data) {}
-		bool unmapw(arrayvieww<uint8_t> data) { return true; }
+		arrayview<uint8_t>  mmap (size_t start, size_t len) override { return datard.slice(start, len); }
+		arrayvieww<uint8_t> mmapw(size_t start, size_t len) override { if (!datawr) return NULL; return datawr->slice(start, len); }
+		void  unmap(arrayview<uint8_t>  data) override {}
+		bool unmapw(arrayvieww<uint8_t> data) override { return true; }
 	};
 public:
 	
 	static array<string> listdir(cstring path); // Returns all items in the given directory. All outputs are prefixed with the input.
 	static bool mkdir(cstring path); // Returns whether that's now a directory. If it existed already, returns true; if a file, false.
 	static bool unlink(cstring filename); // Returns whether the file is now gone. If the file didn't exist, returns true.
-	static cstring dirname(cstring path){ return path.substr(0, path.lastindexof("/")+1); } // If the input path is a directory, the basename is blank.
+	
+	static cstring dirname(cstring path) { return path.substr(0, path.lastindexof("/")+1); } // If the input path is a directory, the basename is blank.
 	static cstring basename(cstring path) { return path.substr(path.lastindexof("/")+1, ~0); } // lastindexof returns -1 if nothing found, which works
 	static cstrnul basename(cstrnul path) { return path.substr_nul(path.lastindexof("/")+1); }
 	static const char * basename(const char * path) { const char * ret = strrchr(path, '/'); if (ret) return ret+1; else return path; }
@@ -492,7 +513,7 @@ public:
 	//On Unix, absolute paths start with a slash.
 	//On Windows:
 	// Absolute paths start with two slashes, or letter+colon+slash.
-	// Half-absolute paths, like /foo.txt or C:foo.txt on Windows, are considered corrupt and are undefined behavior.
+	// Half-absolute paths, like /foo.txt or C:foo.txt, are considered corrupt and are undefined behavior.
 	//The path component separator is the forward slash on all operating systems, including Windows.
 	//Paths to directories end with a slash, paths to files do not. For example, /home/ and c:/windows/ are valid,
 	// but /home and c:/windows are not.

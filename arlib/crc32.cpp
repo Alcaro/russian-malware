@@ -160,6 +160,7 @@ static uint32_t crc32_pclmul(arrayview<uint8_t> data, uint32_t crc)
 	// it's called U_PRIME in some other implementations, but that doesn't help me
 	__m128i magic = _mm_set_epi64x(0x01f7011641, 0x01db710641);
 	__m128i magic2;
+	// todo: I think these two can be merged
 	magic2 = _mm_clmulepi64_si128(_mm_and_si128(state,  mask_low32), magic, 0x10);
 	magic2 = _mm_clmulepi64_si128(_mm_and_si128(magic2, mask_low32), magic, 0x00);
 	

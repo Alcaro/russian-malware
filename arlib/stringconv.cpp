@@ -71,6 +71,17 @@ size_t tostringhex_ptr(char* buf, unsigned long long val, size_t len)
 	return len;
 }
 
+size_t tostringhex_ptr(char* buf, const uint8_t * val, size_t len)
+{
+	len >>= 1;
+	for (size_t i=0;i<len;i++)
+	{
+		buf[i*2+0] = hexdigits[val[i]>>4];
+		buf[i*2+1] = hexdigits[val[i]&15];
+	}
+	return len << 1;
+}
+
 
 
 template<typename Tu> bool fromstring_int_inner(const char * in, const char * end, Tu& out)
@@ -183,7 +194,6 @@ template<typename Tu> inline bool fromstring_hex(cstring s, Tu& out)
 	return (ret && tmp == (uintptr_t)out);
 }
 
-	
 template<typename Tu> inline bool fromstring_hex(const char * s, size_t len, Tu& out)
 {
 	if constexpr (sizeof(Tu) > sizeof(uintptr_t)) return fromstring_hex_real<Tu>(s, len, out);

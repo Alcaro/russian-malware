@@ -3,6 +3,9 @@
 #include "array.h"
 #include "endian.h"
 
+// todo: delete most of this; the only supported image format should be ARGB as uint32 (aka byte order B G R A on little endian)
+// (xrgb and bargb can stay, but will be changed to 'are there pixels with A != FF' and 'are there pixels with A not in { 00, FF }')
+
 enum imagefmt {
 	// the manipulation functions are only implemented for ?rgb8888 formats, 16bit and _by are for storage only
 	

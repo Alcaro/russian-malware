@@ -72,7 +72,7 @@ public:
 };
 
 void _testfail(cstring why, cstring file, int line);
-void _testcmpfail(cstring why, cstring file, int line, cstring expected, cstring actual);
+void _testcmpfail(cstring why, cstring file, int line, cstring lhs, cstring rhs);
 void _test_nothrow(int add);
 
 void _teststack_push(cstring file, int line);
@@ -114,7 +114,7 @@ void _assert_eq(const T&  actual,   const char * actual_exp,
 	if (!_test_eq(actual, expected))
 	{
 		test_nomalloc_end();
-		_testcmpfail((string)actual_exp+" == "+expected_exp, file, line, tostring_dbg(expected), tostring_dbg(actual));
+		_testcmpfail((string)actual_exp+" == "+expected_exp, file, line, tostring_dbg(actual), tostring_dbg(expected));
 		test_nomalloc_begin();
 	}
 }
@@ -127,7 +127,7 @@ void _assert_ne(const T&  actual,   const char * actual_exp,
 	if (!!_test_eq(actual, expected)) // a!=b implemented as !(a==b)
 	{
 		test_nomalloc_end();
-		_testcmpfail((string)actual_exp+" != "+expected_exp, file, line, tostring_dbg(expected), tostring_dbg(actual));
+		_testcmpfail((string)actual_exp+" != "+expected_exp, file, line, tostring_dbg(actual), tostring_dbg(expected));
 		test_nomalloc_begin();
 	}
 }
@@ -140,7 +140,7 @@ void _assert_lt(const T&  actual,   const char * actual_exp,
 	if (!_test_lt(actual, expected))
 	{
 		test_nomalloc_end();
-		_testcmpfail((string)actual_exp+" < "+expected_exp, file, line, tostring_dbg(expected), tostring_dbg(actual));
+		_testcmpfail((string)actual_exp+" < "+expected_exp, file, line, tostring_dbg(actual), tostring_dbg(expected));
 		test_nomalloc_begin();
 	}
 }
@@ -153,7 +153,7 @@ void _assert_lte(const T&  actual,   const char * actual_exp,
 	if (!!_test_lt(expected, actual)) // a<=b implemented as !(b<a)
 	{
 		test_nomalloc_end();
-		_testcmpfail((string)actual_exp+" <= "+expected_exp, file, line, tostring_dbg(expected), tostring_dbg(actual));
+		_testcmpfail((string)actual_exp+" <= "+expected_exp, file, line, tostring_dbg(actual), tostring_dbg(expected));
 		test_nomalloc_begin();
 	}
 }
@@ -166,7 +166,7 @@ void _assert_gt(const T&  actual,   const char * actual_exp,
 	if (!_test_lt(expected, actual)) // a>b implemented as b<a
 	{
 		test_nomalloc_end();
-		_testcmpfail((string)actual_exp+" > "+expected_exp, file, line, tostring_dbg(expected), tostring_dbg(actual));
+		_testcmpfail((string)actual_exp+" > "+expected_exp, file, line, tostring_dbg(actual), tostring_dbg(expected));
 		test_nomalloc_begin();
 	}
 }
@@ -179,7 +179,7 @@ void _assert_gte(const T&  actual,   const char * actual_exp,
 	if (!!_test_lt(actual, expected)) // a>=b implemented as !(a<b)
 	{
 		test_nomalloc_end();
-		_testcmpfail((string)actual_exp+" >= "+expected_exp, file, line, tostring_dbg(expected), tostring_dbg(actual));
+		_testcmpfail((string)actual_exp+" >= "+expected_exp, file, line, tostring_dbg(actual), tostring_dbg(expected));
 		test_nomalloc_begin();
 	}
 }
@@ -340,6 +340,7 @@ static void assert_all_reached()
 
 #define main not_quite_main
 int not_quite_main(int argc, char** argv);
+int not_quite_main();
 
 #else
 

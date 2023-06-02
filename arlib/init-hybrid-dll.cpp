@@ -57,8 +57,9 @@ size_t strlen(const char * a)
 }
 
 
-HMODULE pe_get_ntdll()
+PEB* get_peb()
 {
+	// PEB is available in TEB
 	PEB* peb;
 #if defined(__i386__)
 	__asm__("mov {%%fs:(0x30),%0|%0,fs:[0x30]}" : "=r"(peb)); // *(PEB* __seg_fs*)0x30 would be a lot cleaner, but gcc rejects that in C++
@@ -71,13 +72,18 @@ HMODULE pe_get_ntdll()
 #else
 	#error "don't know what platform this is"
 #endif
-	
-	// windows maintains a list of all DLLs in the process, available via PEB (available via TEB)
+	return peb;
+}
+
+HMODULE pe_get_ntdll()
+{
+	// windows maintains a list of all DLLs in the process, available via PEB
 	// in three different orders - load order, memory order, and init order
 	// ntdll is always #2 in load order, with the exe being #1 (http://www.nynaeve.net/?p=185)
 	// (kernel32 is probably also always present, but I don't think that's guaranteed, and I don't need kernel32 anyways)
 	// only parts of the relevant structs are documented, so this is based on
 	// https://github.com/wine-mirror/wine/blob/master/include/winternl.h
+	PEB* peb = get_peb();
 	PEB_LDR_DATA* pld = peb->Ldr;
 	LDR_DATA_TABLE_ENTRY* ldte_exe = (LDR_DATA_TABLE_ENTRY*)pld->Reserved2[1];
 	LDR_DATA_TABLE_ENTRY* ldte_ntdll = (LDR_DATA_TABLE_ENTRY*)ldte_exe->Reserved1[0];
@@ -133,9 +139,13 @@ void* pe_get_proc_address(HMODULE mod, const char * name)
 
 
 struct ntdll_t {
-NTSTATUS WINAPI (*LdrLoadDll)(const WCHAR * DirPath, uint32_t Flags, const UNICODE_STRING * ModuleFileName, HMODULE* ModuleHandle);
-NTSTATUS WINAPI (*NtProtectVirtualMemory)(HANDLE process, void** addr_ptr, size_t* size_ptr, uint32_t new_prot, uint32_t* old_prot);
-IMAGE_BASE_RELOCATION* WINAPI (*LdrProcessRelocationBlock)(void* page, unsigned count, uint16_t* relocs, intptr_t delta);
+	// they're not in my mingw headers
+	//decltype(::LdrLoadDll)* LdrLoadDll;
+	//decltype(::NtProtectVirtualMemory)* NtProtectVirtualMemory;
+	//decltype(::LdrProcessRelocationBlock)* LdrProcessRelocationBlock;
+	NTSTATUS (NTAPI * LdrLoadDll)(const WCHAR * DirPath, uint32_t Flags, const UNICODE_STRING * ModuleFileName, HMODULE* ModuleHandle);
+	NTSTATUS (NTAPI * NtProtectVirtualMemory)(HANDLE process, void** addr_ptr, size_t* size_ptr, uint32_t new_prot, uint32_t* old_prot);
+	IMAGE_BASE_RELOCATION* (NTAPI * LdrProcessRelocationBlock)(void* page, unsigned count, uint16_t* relocs, intptr_t delta);
 };
 static const char ntdll_t_names[] =
 	"LdrLoadDll\0"
@@ -362,5 +372,8 @@ void arlib_hybrid_dll_init()
 	//  but pseudo relocs are disabled in Arlib (and the entire function is stubbed out in misc.cpp), so no point
 	
 	run_static_ctors();
+	
+	// in exes, the entry point's signature is
+	// extern "C" DWORD CALLBACK AddressOfEntryPoint(PEB* peb)
 }
 #endif

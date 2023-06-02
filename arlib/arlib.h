@@ -1,10 +1,11 @@
 #pragma once
 #include "global.h"
 #include "linqbase.h"
+#include "serialize2-head.h"
 
 #include "simd.h"
-#include "hash.h"
 #include "array.h"
+#include "hash.h"
 #include "string.h"
 
 #include "endian.h"
@@ -28,10 +29,12 @@
 #include "crc32.h"
 #include "deflate.h"
 #include "image.h"
+#include "inotify.h"
 #include "prioqueue.h"
 #include "regex.h"
 #include "runloop2.h"
 #include "serialize.h"
+#include "serialize2.h"
 #include "staticmap.h"
 #include "terminal.h"
 #include "test.h"
@@ -61,4 +64,5 @@ bool arlib_try_init();
 #include "http.h"
 #include "socks5.h"
 #include "websocket.h"
+#include "autoproxy.h"
 #endif

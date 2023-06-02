@@ -135,12 +135,8 @@ public:
 	producer<void> sendapp_p;
 	producer<void> recvapp_p;
 	
-	struct sendrec_wt : public waiter<void, sendrec_wt> {
-		void complete() { container_of<&socket2_bearssl::sendrec_w>(this)->ready_sendrec(); }
-	} sendrec_w;
-	struct recvrec_wt : public waiter<void, recvrec_wt> {
-		void complete() { container_of<&socket2_bearssl::recvrec_w>(this)->ready_recvrec(); }
-	} recvrec_w;
+	waiter<void> sendrec_w = make_waiter<&socket2_bearssl::sendrec_w, &socket2_bearssl::ready_sendrec>();
+	waiter<void> recvrec_w = make_waiter<&socket2_bearssl::recvrec_w, &socket2_bearssl::ready_recvrec>();
 	
 	MAKE_DESTRUCTIBLE_FROM_CALLBACK();
 	

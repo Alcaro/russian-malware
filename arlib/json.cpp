@@ -178,14 +178,14 @@ jsonparser::event jsonparser::next()
 					if (UNLIKELY(m_data+4 > m_data_end)) return do_error();
 					
 					uint32_t codepoint;
-					if (UNLIKELY(!fromstringhex(arrayview<uint8_t>(m_data, 4), codepoint))) return do_error();
+					if (UNLIKELY(!fromstringhex_ptr((char*)m_data, 4, codepoint))) return do_error();
 					m_data += 4;
 					
 					// curse utf16 forever
-					if (codepoint >= 0xD800 && codepoint <= 0xDBFF && m_data[0] == '\\' && m_data[1] == 'u')
+					if (codepoint >= 0xD800 && codepoint <= 0xDBFF && m_data+6 <= m_data_end && m_data[0] == '\\' && m_data[1] == 'u')
 					{
 						uint16_t low_sur;
-						if (UNLIKELY(!fromstringhex(arrayview<uint8_t>(m_data+2, 4), low_sur))) return do_error();
+						if (UNLIKELY(!fromstringhex_ptr((char*)m_data+2, 4, low_sur))) return do_error();
 						
 						if (low_sur >= 0xDC00 && low_sur <= 0xDFFF)
 						{
@@ -353,6 +353,79 @@ string jsonwriter::strwrap(cstring s)
 	}
 	out += arrayview<uint8_t>(previt, spe-previt);
 	return out+"\"";
+}
+
+void jsonwriter::comma()
+{
+	if (m_comma) m_data += ',';
+	m_comma = true;
+	
+	if (UNLIKELY(!m_indent_disable))
+	{
+		if (m_indent_is_value)
+		{
+			m_data += ' ';
+			m_indent_is_value = false;
+		}
+		else if (m_indent_depth)
+		{
+			cstring indent_str = (&"        "[8-m_indent_size]);
+			m_data += '\n';
+			for (int i=0;i<m_indent_depth;i++)
+			{
+				m_data += indent_str;
+			}
+		}
+	}
+}
+
+void jsonwriter::null()
+{
+	comma();
+	m_data += "null";
+}
+void jsonwriter::boolean(bool b)
+{
+	comma();
+	m_data += b ? "true" : "false";
+}
+void jsonwriter::str(cstring s)
+{
+	comma();
+	m_data += strwrap(s);
+}
+void jsonwriter::list_enter()
+{
+	comma();
+	m_data += "[";
+	m_comma = false;
+	m_indent_depth++;
+}
+void jsonwriter::list_exit()
+{
+	m_data += "]";
+	m_comma = true;
+	m_indent_depth--;
+}
+void jsonwriter::map_enter()
+{
+	comma();
+	m_data += "{";
+	m_comma = false;
+	m_indent_depth++;
+}
+void jsonwriter::map_key(cstring s)
+{
+	str(s);
+	m_data += ":";
+	m_comma = false;
+	m_indent_is_value = true;
+}
+void jsonwriter::map_exit()
+{
+	m_data += "}";
+	m_comma = true;
+	m_indent_depth--;
 }
 
 
@@ -749,6 +822,8 @@ test("JSON parser", "string", "json")
 	
 	testcall(testjson_error("123"+string::nul()));
 	testcall(testjson_error("[]"+string::nul()));
+	
+	testcall(testjson_error("{                   \"\\uDBBB\\uDB"));
 }
 
 test("JSON container", "string,array,set", "json")

@@ -4,7 +4,7 @@
 #define LINQ_BASE_INCLUDED
 
 namespace linq {
-template<typename T, typename Titer> class t_base;
+template<typename T, typename Titer1, typename Titer2> class t_base;
 template<typename T, typename Tsrc, typename Tconv> class t_select;
 template<typename T, typename Tsrc, typename Tconv> class t_select_idx;
 template<typename T, typename Tsrc, typename Tpred> class t_where;
@@ -25,9 +25,10 @@ class linqbase {
 	template<typename _>
 	class alias {
 	public:
-		typedef decltype(decltype_impl<_>().begin()) iter;
-		typedef typename std::decay_t<decltype(*decltype_impl<_>().begin())> T;
-		typedef linq::t_base<T, iter> src;
+		using iter1 = decltype(decltype_impl<_>().begin());
+		using iter2 = decltype(decltype_impl<_>().end());
+		using T = std::decay_t<decltype(*decltype_impl<_>().begin())>;
+		typedef linq::t_base<T, iter1, iter2> src;
 		typedef linq::t_linq<T, src> linq_t;
 	};
 	
@@ -75,17 +76,17 @@ public:
 //This namespace is considered private. Do not store or create any instance, other than what the linqbase functions return.
 namespace linq {
 
-template<typename T, typename Titer>
+template<typename T, typename Titer1, typename Titer2>
 class t_base : nocopy {
 public:
-	Titer b;
-	Titer e;
+	Titer1 b;
+	Titer2 e;
 	
 	t_base(t_base&& other) : b(std::move(other.b)), e(std::move(other.e)) {}
-	t_base(Titer b, Titer e) : b(b), e(e) {}
+	t_base(Titer1 b, Titer2 e) : b(b), e(e) {}
 	bool hasValue() { return b != e; }
 	void moveNext() { ++b; }
-	auto get() -> decltype(*std::declval<Titer>()) { return *b; }
+	auto get() -> decltype(*std::declval<Titer1>()) { return *b; }
 };
 
 template<typename T, typename Tsrc, typename Tconv>

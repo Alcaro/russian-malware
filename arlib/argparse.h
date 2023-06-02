@@ -64,7 +64,7 @@ private:
 		~arg_str() {}
 		bool* has_target;
 		string* target;
-		bool parse(bool has_value, cstring arg)
+		bool parse(bool has_value, cstring arg) override
 		{
 			if (has_target) *has_target = true;
 			if (has_value) *target = arg;
@@ -94,7 +94,7 @@ private:
 		~arg_file() {}
 		bool* has_target;
 		string* target;
-		bool parse(bool has_value, cstring arg)
+		bool parse(bool has_value, cstring arg) override
 		{
 			if (has_target) *has_target = true;
 			if (has_value) *target = file::sanitize_trusted_path(arg);
@@ -122,7 +122,7 @@ private:
 		
 		arg_strmany(array<string>* target) : arg_t(false, true), target(target) { this->can_use_multi = true; }
 		array<string>* target;
-		bool parse(bool has_value, cstring arg) { target->append(arg); return true; }
+		bool parse(bool has_value, cstring arg) override { target->append(arg); return true; }
 	public:
 		//none
 	};
@@ -147,7 +147,7 @@ private:
 		arg_int(bool* has_value, T* target) : arg_t<arg_int<T>>(false, true), m_has_value(has_value), m_target(target) {}
 		bool* m_has_value;
 		T* m_target;
-		bool parse(bool has_value, cstring arg) { if (m_has_value) *m_has_value = true; return fromstring(arg, *m_target); }
+		bool parse(bool has_value, cstring arg) override { if (m_has_value) *m_has_value = true; return fromstring(arg, *m_target); }
 	public:
 		//none
 	};
@@ -178,7 +178,7 @@ private:
 		
 		arg_bool(bool* target) : arg_t(true, false), target(target) {}
 		bool* target;
-		bool parse(bool has_value, cstring arg) { *target = true; return true; }
+		bool parse(bool has_value, cstring arg) override { *target = true; return true; }
 	public:
 		//none
 	};
@@ -200,7 +200,7 @@ private:
 		
 		arg_cb(bool accept_no_value, bool accept_value, Tl&& cb) : arg_t<arg_cb<Tl>>(accept_no_value, accept_value), cb(std::move(cb)) {}
 		Tl cb;
-		bool parse(bool has_value, cstring arg) { return cb(has_value, arg); }
+		bool parse(bool has_value, cstring arg) override { return cb(has_value, arg); }
 	public:
 		//none
 	};

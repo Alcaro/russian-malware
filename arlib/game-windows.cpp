@@ -57,11 +57,11 @@ gameview_windows(uint32_t width, uint32_t height, cstring windowtitle, uintptr_t
 
 bool stopped = false;
 function<void()> cb_exit = [this](){ stop(); };
-/*public*/ bool running() { return !stopped; }
-/*public*/ void stop() { stopped = true; }
-/*public*/ void exit_cb(function<void()> cb) { cb_exit = cb; }
+bool running() override { return !stopped; }
+void stop() override { stopped = true; }
+void exit_cb(function<void()> cb) override { cb_exit = cb; }
 
-/*public*/ bool focused() { return (GetForegroundWindow() == parent); }
+bool focused() override { return (GetForegroundWindow() == parent); }
 
 ~gameview_windows()
 {
@@ -146,7 +146,7 @@ void calc_keyboard_map()
 }
 #endif
 
-/*public*/ void keys_cb(function<void(int scancode, key_t k, bool down)> cb)
+void keys_cb(function<void(int scancode, key_t k, bool down)> cb) override
 {
 	cb_keys = cb;
 }
@@ -155,7 +155,7 @@ void calc_keyboard_map()
 
 function<void(int x, int y, uint8_t buttons)> cb_mouse;
 
-/*public*/ void mouse_cb(function<void(int x, int y, uint8_t buttons)> cb)
+void mouse_cb(function<void(int x, int y, uint8_t buttons)> cb) override
 {
 	cb_mouse = cb;
 	SetWindowLongPtr(child, GWLP_USERDATA, (LONG_PTR)this); // can't do this in constructor, child is only set by opengl/ctx-windows.cpp
@@ -209,7 +209,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 
 
-/*public*/ void step(bool wait) { runloop2::step(wait); }
+void step(bool wait) override { runloop2::step(wait); }
 
 };
 

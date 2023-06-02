@@ -26,22 +26,22 @@ namespace {
 		
 		file_unix(int fd) : fd(fd) {}
 		
-		size_t size()
+		size_t size() override
 		{
 			return lseek(fd, 0, SEEK_END);
 		}
-		bool resize(size_t newsize)
+		bool resize(size_t newsize) override
 		{
 			return (ftruncate(this->fd, newsize) == 0);
 		}
 		
-		size_t pread(arrayvieww<uint8_t> target, size_t start)
+		size_t pread(arrayvieww<uint8_t> target, size_t start) override
 		{
 			size_t ret = ::pread(fd, target.ptr(), target.size(), start);
 			if (ret<0) return 0;
 			else return ret;
 		}
-		bool pwrite(arrayview<uint8_t> data, size_t start)
+		bool pwrite(arrayview<uint8_t> data, size_t start) override
 		{
 			size_t ret = ::pwrite(fd, data.ptr(), data.size(), start);
 			if (ret<0) return 0;
@@ -58,15 +58,15 @@ namespace {
 			return arrayvieww<uint8_t>((uint8_t*)data+offset, len);
 		}
 		
-		arrayview<uint8_t> mmap(size_t start, size_t len) { return mmap(false, start, len); }
-		void unmap(arrayview<uint8_t> data)
+		arrayview<uint8_t> mmap(size_t start, size_t len) override { return mmap(false, start, len); }
+		void unmap(arrayview<uint8_t> data) override
 		{
 			size_t offset = (uintptr_t)data.ptr() % pagesize;
 			munmap((char*)data.ptr()-offset, data.size()+offset);
 		}
 		
-		arrayvieww<uint8_t> mmapw(size_t start, size_t len) { return mmap(true, start, len); }
-		bool unmapw(arrayvieww<uint8_t> data)
+		arrayvieww<uint8_t> mmapw(size_t start, size_t len) override { return mmap(true, start, len); }
+		bool unmapw(arrayvieww<uint8_t> data) override
 		{
 			unmap(data);
 			// manpage documents no errors for the case where file writing fails, gotta assume it never does
@@ -214,21 +214,41 @@ bool file2::open(cstrnul filename, mode m)
 	return (fd >= 0);
 }
 
-void file2::mmap_t::map(bytesr& by, file2& src, bool writable)
+#define SMALL_MAP 16384
+void file2::mmap_t::map(bytesr& by, file2& src, bool writable, bool small)
 {
 	by = nullptr;
 	
 	size_t size = src.size();
 	if (!size) return;
 	
-	uint8_t * data = (uint8_t*)::mmap(NULL, size, PROT_READ | (writable * PROT_WRITE), MAP_SHARED, src.fd, 0);
-	if (data == MAP_FAILED) return;
+	uint8_t * data;
+	if (small && size < SMALL_MAP)
+	{
+		data = xmalloc(size);
+		if (src.read(bytesw(data, size)) != size)
+		{
+			free(data);
+			return;
+		}
+	}
+	else
+	{
+		data = (uint8_t*)::mmap(NULL, size, PROT_READ | (writable * PROT_WRITE), MAP_SHARED, src.fd, 0);
+		if (data == MAP_FAILED)
+			return;
+	}
 	
 	by = { data, size };
 }
-void file2::mmap_t::unmap(bytesr& by)
+void file2::mmap_t::unmap(bytesr& by, bool small)
 {
-	if (by.size())
+	size_t size = by.size();
+	if (size == 0)
+		{}
+	else if (small && size < SMALL_MAP)
+		free((uint8_t*)by.ptr());
+	else
 		munmap((uint8_t*)by.ptr(), by.size());
 	by = nullptr;
 }

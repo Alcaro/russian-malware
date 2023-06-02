@@ -13,7 +13,7 @@
 //    For negative lookahead, the returned regex match object will always contain a null for that slot.
 //- No Unicode, only bytes. \s matches only ASCII space and some control characters; \u1234 does not exist.
 //    Byte values 128-255 are considered non-space, non-alphanumeric; \D \S \W will match them.
-//    You can put literal UTF-8 strings in your regex, or for complex cases, match UTF-8 byte values using \x or \\x.
+//    You can put literal UTF-8 strings in your regex, or for complex cases, match UTF-8 byte values using \x.
 //- I don't support the full C++ regex grammar, nor ECMAScript. The following are absent:
 //  - Named capture groups; (?<name>foo) (I don't know how to represent that return value in C++)
 //  - Named backreferences; \k<name> (compile-time string comparison is painful)

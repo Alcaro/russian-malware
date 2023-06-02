@@ -58,18 +58,23 @@ ifeq ($(OS)-$(WINBITS)-$(ARXPSUPPORT),windows-64-32)
 endif
 
 CCXXFLAGS = -Wall -Wmissing-declarations -Wimplicit-fallthrough -Wvla -pipe
-CONF_LFLAGS += -pipe
+CXXFLAGS = -Wsuggest-override
+# this one is an imminent segfault 99% of the time
+CCXXFLAGS += -Werror=return-type
 #to silence for (size_t unused : range(42)) - delete this once gcc stops complaining
 CCXXFLAGS += -Wno-unused-variable
 ifeq ($(CC_FAMILY),gcc)
   # Clang doesn't support those
   CCXXFLAGS += -Walloca -Wno-unused-but-set-variable
 endif
+CONF_LFLAGS += -pipe
 #doesn't seem to do anything
 #CFLAGS += -Wmissing-prototypes
 ifeq ($(EXCEPTIONS),1)
   DEFINES += ARLIB_EXCEPTIONS
-  OPTFLAGS_CXX += -fno-enforce-eh-specs
+  ifeq ($(CC_FAMILY),gcc)
+    OPTFLAGS_CXX += -fno-enforce-eh-specs
+  endif
   ifeq ($(OS),windows)
     # these eat a few hundred kilobytes, but better embedded than DLL
     CONF_LFLAGS += -static-libgcc -static-libstdc++
@@ -155,9 +160,11 @@ ifeq ($(OS),windows)
     $(warning non-cmd windows detected; if SHELL $(SHELL) is something other than sh.exe, makefile should check for that instead)
     $(warning alternatively, if MSYSTEM $(MSYSTEM) is nonempty, use that)
   endif
-  # wine 7.0~repack-4 (Debian) can print stack traces on crash, but only with dwarf-4, not 5
-  CFLAGS += -gdwarf-4
 endif
+# wine 7.0~repack-4 (Debian) can print stack traces on crash, but only with dwarf-4, not 5
+# addr2line on Ubuntu 22.04 doesn't like dw5 either
+# valgrind is also occasionally outdated
+CONF_CFLAGS += -gdwarf-4
 
 CFLAGS += -g
 ifneq ($(OPT),0)
@@ -171,8 +178,6 @@ else
   #OPT=1 DEBUG=1 should prioritize optimization over debugging; OPT=1 DEBUG=1 then 'strip' should be identical to OPT=1 DEBUG=0
   #so this one is gated on OPT=0, not DEBUG=1
   CONF_CFLAGS += -DDEBUG
-  # this one is an imminent segfault 99% of the time
-  CONF_CFLAGS += -Werror=return-type
 endif
 
 ifeq ($(PROFILE),gen)
@@ -319,7 +324,6 @@ ifeq ($(ARSOCKET),1)
   
   # TODO: change this when/if I reenable schannel
   ifeq ($(OS),windows)
-    ARSOCKET_SSL ?= bearssl
     CONF_LFLAGS += -lws2_32 -liphlpapi
     ifdef ARSOCKET_SSL_WINDOWS
       ARSOCKET_SSL := $(ARSOCKET_SSL_WINDOWS)
@@ -333,13 +337,13 @@ ifeq ($(ARSOCKET),1)
   else
     DEFINES += ARLIB_SSL
   endif
-  ifneq ($(findstring schannel,$(ARSOCKET_SSL)),)
-    DEFINES += ARLIB_SSL_SCHANNEL
-    CONF_LFLAGS += -lsecur32
-  endif
   ifneq ($(findstring openssl,$(ARSOCKET_SSL)),)
     DEFINES += ARLIB_SSL_OPENSSL
     CONF_LFLAGS += -lssl -lcrypto
+  endif
+  ifneq ($(findstring schannel,$(ARSOCKET_SSL)),)
+    DEFINES += ARLIB_SSL_SCHANNEL
+    CONF_LFLAGS += -lsecur32
   endif
   ifneq ($(findstring bearssl,$(ARSOCKET_SSL)),)
     DEFINES += ARLIB_SSL_BEARSSL
@@ -356,7 +360,7 @@ ifeq ($(ARSOCKET),1)
 	  @echo Signature: 8a477f597d28d172789f06886806bc55 > arlib/deps/bearssl-0.6/build-$(OS)$(WINBITS)/CACHEDIR.TAG
 	  $(MAKE) -C arlib/deps/bearssl-0.6/ lib CFLAGS='$(OPTFLAGS) -fpic' BUILD=build-$(OS)$(WINBITS) OBJDIR=build-$(OS)$(WINBITS) CC=$(CC) MKDIR=mkdir
   endif
-  ifneq ($(filter-out schannel openssl bearssl,$(ARSOCKET_SSL)),)
+  ifneq ($(filter-out openssl schannel bearssl,$(ARSOCKET_SSL)),)
     $(error unknown SSL backend)
   endif
 endif
@@ -410,6 +414,7 @@ TRUE_CFLAGS := -std=c99 $(CCXXFLAGS) $(CONF_CFLAGS) $(CFLAGS)
 # - Single-implementation interfaces (public functions and nothing else in header, member variables hidden)
 #     useful for anything with multiple implementations, but where the active one is a #ifdef, for example gameview and the gui widgets
 #     the $class proposal https://wg21.link/P0707 would most likely permit this, as well as most or all of the reflection I want
+#     0707 has, as far as I can determine, been superseded by https://wg21.link/P2237
 # - Demote or, and, bitand, etc from keyword to predefined macro (or even better, banish them to <ciso646>)
 # - std::embed http://open-std.org/JTC1/SC22/WG21/docs/papers/2018/p1040r0.html
 # - Allow int x(int y=0); int x(int y=0) { return y*2; } (only if default value is identical on both ends, of course)

@@ -3,17 +3,19 @@
 
 // Returns a*b/c, but gives the correct answer if a*b doesn't fit in uint64_t.
 // (May give wrong answer if a*b/c doesn't fit, or if b*c > UINT64_MAX.)
-inline uint64_t muldiv64(uint64_t a, uint64_t b, uint64_t c)
+inline uint64_t muldiv64(uint64_t a, const uint64_t b, uint64_t c)
 {
 #ifdef __x86_64__
-	uint64_t out;
-	uint64_t clobber;
-	__asm__("imul %2\nidiv %3" : "=a"(out), "=d"(clobber) : "r"(b), "r"(c), "a"(a), "d"(0));
-	return out;
-#else
+	if (__builtin_constant_p(b))
+	{
+		uint64_t out;
+		uint64_t clobber;
+		__asm__("{imul %3,%2,%%rax\nidiv %4|imul rax,%2,%3\nidiv %4}" : "=&a"(out), "=d"(clobber) : "r"(a), "i"(b), "r"(c), "d"(0));
+		return out;
+	}
+#endif
 	// doing it in __int128 would be easier, but that ends up calling __udivti3 which is a waste of time.
 	return (a/c*b) + (a%c*b/c);
-#endif
 }
 
 #ifdef _WIN32
@@ -24,27 +26,35 @@ oninit_static()
 	QueryPerformanceFrequency(&timer_freq);
 }
 
-uint64_t time_us_ne()
+// force expand div by constant to mul+shift, gcc won't do that automatically on -Os
+inline uint64_t div10(uint64_t val)
+{
+	return ((unsigned __int128)val*0xCCCCCCCCCCCCCCCD)>>64>>3;
+}
+inline uint64_t div10000(uint64_t val)
+{
+	return ((unsigned __int128)val*0x346DC5D63886594B)>>64>>11;
+}
+
+uint64_t timer::get_counter()
 {
 	LARGE_INTEGER timer_now;
 	QueryPerformanceCounter(&timer_now);
-	return muldiv64(timer_now.QuadPart, 1000000, timer_freq.QuadPart);
+	return timer_now.QuadPart;
 }
-uint64_t time_ms_ne()
+uint64_t timer::to_us(uint64_t count)
 {
-	return time_us_ne() / 1000;
+	if (LIKELY(timer_freq.QuadPart == 10000000))
+		return div10(count);
+	else
+		return muldiv64(count, 1000000, timer_freq.QuadPart);
 }
-
-uint64_t time_us()
+uint64_t timer::to_ms(uint64_t count)
 {
-	// this one has an accuracy of 10ms by default
-	ULARGE_INTEGER time;
-	GetSystemTimeAsFileTime((LPFILETIME)&time);
-	return time.QuadPart/10 - 11644473600000000ULL; // epoch is jan 1 1601, we want unix time (and windows loves multiples of 100ns)
-}
-uint64_t time_ms()
-{
-	return time_us() / 1000;
+	if (LIKELY(timer_freq.QuadPart == 10000000))
+		return div10000(count);
+	else
+		return muldiv64(count, 1000, timer_freq.QuadPart);
 }
 
 #define WINDOWS_TICK 10000000
@@ -76,48 +86,6 @@ timestamp timestamp::now()
 	FILETIME ft;
 	GetSystemTimeAsFileTime(&ft);
 	return from_native(ft);
-}
-#else
-#include <time.h>
-#include <unistd.h>
-
-//these functions calculate n/1000 and n/1000000, respectively
-//-O2 optimizes this automatically, but I want -Os on most of the program, only speed-optimizing the hottest spots
-//this is one of said hotspots; the size penalty is tiny (4 bytes, 8 for both), and it's about twice as fast
-//attribute optimize -O2 makes no difference
-static inline uint32_t div1000(uint32_t n)
-{
-	return 274877907*(uint64_t)n >> 38;
-}
-static inline uint32_t div1mil(uint32_t n)
-{
-	return 1125899907*(uint64_t)n >> 50;
-}
-
-uint64_t time_us()
-{
-	struct timespec tp;
-	clock_gettime(CLOCK_REALTIME, &tp);
-	return (uint64_t)tp.tv_sec*(uint64_t)1000000 + div1000(tp.tv_nsec);
-}
-uint64_t time_ms()
-{
-	struct timespec tp;
-	clock_gettime(CLOCK_REALTIME, &tp);
-	return (uint64_t)tp.tv_sec*(uint64_t)1000 + div1mil(tp.tv_nsec);
-}
-
-uint64_t time_us_ne()
-{
-	struct timespec tp;
-	clock_gettime(CLOCK_MONOTONIC, &tp); // CLOCK_MONOTONIC_RAW makes more sense per docs, but just about everything recommends MONOTONIC
-	return (uint64_t)tp.tv_sec*(uint64_t)1000000 + div1000(tp.tv_nsec); // even vdso - it implements MONOTONIC, but not M_RAW
-}
-uint64_t time_ms_ne()
-{
-	struct timespec tp;
-	clock_gettime(CLOCK_MONOTONIC, &tp);
-	return (uint64_t)tp.tv_sec*(uint64_t)1000 + div1mil(tp.tv_nsec);
 }
 #endif
 
@@ -200,44 +168,19 @@ bool fromstring(cstring s, timestamp& out)
 }
 
 #include "test.h"
+#ifdef __unix__
+#include <unistd.h>
+#endif
 
 test("time", "", "time")
 {
-	uint64_t time_u_ft = (uint64_t)time(NULL)*1000000;
-	uint64_t time_u_fm = time_ms()*1000;
-	uint64_t time_u_fu = time_us();
-	assert_range(time_u_fm, time_u_ft-1100000, time_u_ft+1100000);
-	assert_range(time_u_fu, time_u_fm-1100,    time_u_fm+1500);
-	
-	uint64_t time_une_fm = time_ms_ne()*1000;
-	uint64_t time_une_fu = time_us_ne();
-	assert_range(time_une_fu, time_une_fm-1100, time_une_fm+1500);
-	
+	timer t;
 #ifdef _WIN32
 	Sleep(50);
 #else
 	usleep(50000);
 #endif
-	
-	uint64_t time2_u_ft = (uint64_t)time(NULL)*1000000;
-	uint64_t time2_u_fm = time_ms()*1000;
-	uint64_t time2_u_fu = time_us();
-	assert_range(time2_u_fm, time2_u_ft-1100000, time2_u_ft+1100000);
-	assert_range(time2_u_fu, time2_u_fm-1100,    time2_u_fm+1500);
-	
-	uint64_t time2_une_fm = time_ms_ne()*1000;
-	uint64_t time2_une_fu = time_us_ne();
-	assert_range(time2_une_fu, time2_une_fm-1100, time2_une_fm+1500);
-	
-#ifndef _WIN32
-	assert_range(time2_u_fm-time_u_fm, 40000, 60000);
-	assert_range(time2_u_fu-time_u_fu, 40000, 60000);
-#else
-	assert_range(time2_u_fm-time_u_fm, 40000, 70000); // Windows time is low resolution by default
-	assert_range(time2_u_fu-time_u_fu, 40000, 70000);
-#endif
-	assert_range(time2_une_fm-time_une_fm, 40000, 60000);
-	assert_range(time2_une_fu-time_une_fu, 40000, 60000);
+	assert_range(t.us(), 40000, 60000);
 }
 
 test("muldiv64", "", "")
@@ -255,8 +198,9 @@ test("timestamp serialization", "", "")
 	assert_eq(tostring((timestamp){ 123456789,000000000 }), "123456789");
 	assert_eq(tostring((timestamp){         0,123456000 }), "0.123456");
 	
-	//assert_eq(try_fromstring<timestamp>("123456789.123456789"), timestamp{123456789,123456789});
-	//assert_eq(try_fromstring<timestamp>("123456789.123456"   ), timestamp{123456789,123456000});
-	//assert_eq(try_fromstring<timestamp>("123456789"          ), timestamp{123456789,000000000});
-	//assert_eq(try_fromstring<timestamp>(        "0.123456"   ), timestamp{        0,123456000});
+	// todo: make these less ugly
+	assert_eq(try_fromstring<timestamp>("123456789.123456789"), (timestamp{123456789,123456789}));
+	assert_eq(try_fromstring<timestamp>("123456789.123456"   ), (timestamp{123456789,123456000}));
+	assert_eq(try_fromstring<timestamp>("123456789"          ), (timestamp{123456789,000000000}));
+	assert_eq(try_fromstring<timestamp>(        "0.123456"   ), (timestamp{        0,123456000}));
 }

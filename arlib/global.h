@@ -7,6 +7,18 @@
 
 #if defined(__clang__)
 #if __clang_major__ < 14
+/*
+$ echo '#include <coroutine>' | clang++-13 -xc++ -
+In file included from <stdin>:1:
+/usr/bin/../lib/gcc/x86_64-linux-gnu/11/../../../../include/c++/11/coroutine:334:2: error: "the coroutine header requires -fcoroutines"
+#error "the coroutine header requires -fcoroutines"
+ ^
+1 error generated.
+$ echo '#include <coroutine>' | clang++-13 -xc++ - -fcoroutines
+clang: error: unknown argument: '-fcoroutines'
+*/
+// silencing the #error with a -D__cpp_impl_coroutine returns a bunch of
+// error: std::experimental::coroutine_traits type was not found; include <experimental/coroutine> before defining a coroutine
 #error "unsupported clang version; if you're feeling brave, you're welcome to remove this check, but no complaining if it breaks"
 #endif
 #elif defined(__GNUC__)
@@ -25,7 +37,7 @@
 #define __STDC_FORMAT_MACROS 1
 #define __STDC_CONSTANT_MACROS 1 // why are they so many?
 #endif
-#define _USE_MATH_DEFINES // needed for M_PI on windows
+#define _USE_MATH_DEFINES // needed for M_PI on mingw
 
 #ifdef _WIN32
 #  ifndef _WIN32_WINNT
@@ -96,17 +108,22 @@ void srand(unsigned) __attribute__((deprecated("g_rand doesn't need this")));
 // in case something is technically undefined behavior, but works as long as compiler can't prove anything
 template<typename T> T launder(T v)
 {
-	__asm__("" : "+r"(v));
+	__asm__("" : "+g"(v));
 	return v;
 }
 
 // Returns whatever is currently in that register. The value can be passed around, but any math or deref is undefined behavior.
-template<typename T> T uninitialized()
+template<typename T> T nondeterministic()
 {
+#if __has_builtin(__builtin_nondeterministic_value)
+	T out;
+	return __builtin_nondeterministic_value(out);
+#else
 	T out;
 	// optimizes better with volatile - without it, calling twice will insert empty asm once and copy result
-	__asm__ volatile("" : "=r"(out));
+	__asm__ volatile("" : "=g"(out));
 	return out;
+#endif
 }
 
 typedef void(*funcptr)();
@@ -160,11 +177,9 @@ defer_holder<T> dtor(T&& f)
 
 using std::nullptr_t;
 
-//some magic stolen from http://blogs.msdn.com/b/the1/archive/2004/05/07/128242.aspx
-//C++ can be so messy sometimes...
-template<typename T, size_t N> char(&ARRAY_SIZE_CORE(T(&)[N]))[N];
-template<typename T> typename std::enable_if<sizeof(T)==0, T&>::type ARRAY_SIZE_CORE(T&); // size-zero arrays are a special case
-#define ARRAY_SIZE(x) (sizeof(ARRAY_SIZE_CORE(x)))
+// used to be a macro, hence the caps name (and it still behaves kinda macro-like)
+template<typename T, size_t N> constexpr size_t ARRAY_SIZE(T(&)[N]) { return N; }
+template<typename T>           constexpr size_t ARRAY_SIZE(T(&)[0]) { return 0; } // needs an extra overload for some reason
 
 //just to make C++ an even bigger mess. based on https://github.com/swansontec/map-macro with some changes:
 //- namespaced all child macros, renamed main one
@@ -201,9 +216,9 @@ template<typename T> typename std::enable_if<sizeof(T)==0, T&>::type ARRAY_SIZE_
 //#define STRING(x) const char * x##_string = #x;
 //PPFOREACH(STRING, foo, bar, baz)
 //limited to 365 entries, but that's enough.
-#define PPFOREACH(f, ...)        PPFE_EVAL(PPFE_MAP1(f,       __VA_ARGS__, ()()(), ()()(), ()()(), 0))
+#define PPFOREACH(f, ...)        __VA_OPT__(PPFE_EVAL(PPFE_MAP1(f,       __VA_ARGS__, ()()(), ()()(), ()()(), 0)))
 // Same as the above, but the given macro takes two arguments, of which the first is 'arg' here.
-#define PPFOREACH_A(f, arg, ...) PPFE_EVAL(PPFE_MAP1A(f, arg, __VA_ARGS__, ()()(), ()()(), ()()(), 0))
+#define PPFOREACH_A(f, arg, ...) __VA_OPT__(PPFE_EVAL(PPFE_MAP1A(f, arg, __VA_ARGS__, ()()(), ()()(), ()()(), 0)))
 
 
 
@@ -248,33 +263,19 @@ template<> struct static_assert_t<false> {};
 #define static_assert(...) static_assert_c(__VA_ARGS__, static_assert_name(__VA_ARGS__))
 #endif
 
-#if defined(__clang_major__) && __clang_major__ < 99 // TODO: remove when clang implements this
-namespace std {
-	template<typename T1, typename T2>
-	constexpr bool is_layout_compatible_v = true;
-}
-#elif defined(__GNUC__) && __GNUC__ < 12 // TODO: remove this too
-namespace std {
-	template<typename T1, typename T2>
-	constexpr bool is_layout_compatible_v = true;
-}
-#endif
-
-
 //almost C version (fails inside structs)
 //#define static_assert(expr) \
 //	typedef char JOIN(static_assertion_, __COUNTER__)[(expr)?1:-1]
 
 
-
-#ifdef __GNUC__
-#define ALIGN(n) __attribute__((aligned(n)))
+// TODO: remove with clang's real version once https://github.com/llvm/llvm-project/issues/48204 resolves
+// TODO: remove when all offending compilers are dropped for other reasons
+#if (defined(__clang_major__) && __clang_major__ < 99) || (!defined(__clang_major__) && defined(__GNUC__) && __GNUC__ < 12)
+namespace std {
+	template<typename T1, typename T2>
+	inline constexpr bool is_layout_compatible_v = true;
+}
 #endif
-#ifdef _MSC_VER
-#define ALIGN(n) __declspec(align(n))
-#endif
-
-
 
 
 #ifdef __cplusplus
@@ -380,6 +381,8 @@ protected:
 
 // For use in, for example, std::conditional. All usage of this class should be annotated with [[no_unique_address]].
 struct empty_class {};
+
+struct end_iterator {};
 
 #ifndef ARLIB_STANDALONE
 template<typename T>
@@ -632,20 +635,6 @@ public:
 	bool exists() const { return inner; }
 	bool unique() const { return inner->count == 1; }
 	~refcount() { if (inner && --inner->count == 0) delete inner; }
-};
-
-template<typename T>
-class iterwrap {
-	T b;
-	T e;
-	
-public:
-	iterwrap(T b, T e) : b(b), e(e) {}
-	template<typename T2> iterwrap(T2& c) : b(c.begin()), e(c.end()) {}
-	template<typename T2> iterwrap(const T2& c) : b(c.begin()), e(c.end()) {}
-	
-	T begin() { return b; }
-	T end() { return e; }
 };
 
 

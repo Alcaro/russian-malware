@@ -85,8 +85,6 @@ class mutexlocker : nomove {
 public:
 	mutexlocker(mutex* m) { this->m =  m; this->m->lock(); }
 	mutexlocker(mutex& m) { this->m = &m; this->m->lock(); }
-	//void unlock() { if (this->m) this->m->unlock(); this->m = NULL; }
-	//~mutexlocker() { unlock(); }
 	~mutexlocker() { m->unlock(); }
 };
 #define synchronized(mutex) using(mutexlocker LOCK(mutex))
@@ -235,6 +233,12 @@ public:
 	void unlock() { }
 };
 class mutex_rec : public mutex {};
+class mutexlocker : nomove {
+	mutexlocker() = delete;
+public:
+	mutexlocker(mutex* m) {}
+	mutexlocker(mutex& m) {}
+};
 class semaphore : nomove {
 public:
 	void release() {}

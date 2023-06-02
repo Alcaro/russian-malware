@@ -4,6 +4,7 @@
 #include "simd.h"
 #include "stringconv.h"
 #include "os.h"
+#include "test.h"
 #include <new>
 
 // trigger a warning if it doesn't stay disabled
@@ -42,27 +43,76 @@ void* xcalloc_inner(size_t size, size_t count)
 	return ret;
 }
 
+// Loads len bytes from the pointer, native endian. The high part is zero. load_small<uint64_t>("\x11\x22\x33", 3) is 0x112233 or 0x332211.
+// Equivalent to T ret = 0; memcpy(&ret, ptr, len);, but faster.
+// T must be an unsigned builtin integer type, and len must be <= sizeof(T).
+template<typename T>
+T load_small(const uint8_t * ptr, size_t len)
+{
+#if !defined(ARLIB_OPT)
+	if (RUNNING_ON_VALGRIND)
+	{
+		// like memmem.cpp load_sse2_small_highundef, Valgrind does not like the below one
+		T ret = 0;
+		memcpy(&ret, ptr, len);
+		return ret;
+	}
+#endif
+	if (len == 0)
+		return 0;
+	
+	if (uintptr_t(ptr) & sizeof(T))
+	{
+		// if the sizeof(T) bit is set, then extending the read upwards could potentially hit the next page
+		// but extending downwards is safe, so do that
+		T ret;
+		memcpy(&ret, ptr-sizeof(T)+len, sizeof(T));
+#if END_LITTLE
+		ret >>= (sizeof(T)-len)*8;
+#else
+		ret &= ~(((T)-2) << (len*8-1)); // extra -1 on shift, and -2 on lhs, to avoid trouble if len == sizeof
+#endif
+		return ret;
+	}
+	else
+	{
+		// if the sizeof(T) bit is not set, then extending downwards could hit previous page, but extending upwards is safe
+		// (in both cases, alignment is required)
+		T ret;
+		memcpy(&ret, ptr, sizeof(T));
+#if END_LITTLE
+		ret &= ~(((T)-2) << (len*8-1));
+#else
+		ret >>= (sizeof(T)-len)*8;
+#endif
+		return ret;
+	}
+}
 
 size_t hash(const uint8_t * val, size_t n)
 {
-	// update staticmap.cpp if changing this
+	if (n < sizeof(size_t))
+		return load_small<size_t>(val, n);
 	
 	size_t hash = 5381;
-	while (n >= sizeof(size_t))
+	while (n > sizeof(size_t))
 	{
 		size_t tmp;
-		memcpy(&tmp, val, sizeof(size_t));        // extra >>7 because otherwise bottom byte of output would
-		hash = (hash^(hash>>7)^tmp) * 2546270801; //  only be affected by every 8th byte of input
-		val += sizeof(size_t);                    // the number is just a random prime between 2^31 and 2^32
+		memcpy(&tmp, val, sizeof(size_t));
+		if constexpr (sizeof(size_t) == 8)
+			hash = (hash^(hash>>45)^tmp) * 2546270801; // extra >>45 because otherwise bottom byte of output would
+		else                                           //  only be affected by every 8th byte of input
+			hash = (hash^(hash>>21)^tmp) * 2546270801; // the number is just a random prime between 2^31 and 2^32
+		val += sizeof(size_t);
 		n -= sizeof(size_t);
 	}
-	while (n)
-	{
-		hash = (hash ^ *val) * 31; // 31 is a quite common multiplier, don't know why
-		val++;
-		n--;
-	}
-	return hash;
+	
+	// do a final size_t load overlapping with the previous bytes (or not overlapping, if size is a multiple of 8)
+	val -= (sizeof(size_t)-n);
+	size_t tmp;
+	memcpy(&tmp, val, sizeof(size_t));
+	
+	return hash + tmp;
 }
 
 
@@ -156,8 +206,6 @@ int asprintf(char ** strp, const char * fmt, ...)
 }
 */
 #endif
-
-#include "test.h"
 
 test("bitround", "", "")
 {
@@ -273,3 +321,101 @@ test("endian", "", "")
 	c.b = 0x0100;
 	assert_eq(c.a[0], END_BIG);
 }
+
+test("array_size", "", "")
+{
+	int a[5];
+	static_assert(ARRAY_SIZE(a) == 5);
+	int b[0];
+	static_assert(ARRAY_SIZE(b) == 0);
+}
+
+#ifdef __unix__
+#include <sys/mman.h>
+#include <unistd.h>
+#endif
+
+test("load_small", "", "")
+{
+#ifdef __unix__
+	size_t pagesize = sysconf(_SC_PAGESIZE);
+	uint8_t * pages = (uint8_t*)mmap(nullptr, pagesize*3, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+	mprotect(pages, pagesize, PROT_NONE);
+	mprotect(pages+pagesize*2, pagesize, PROT_NONE);
+#else
+	size_t pagesize = 64; // just pick something random
+	uint8_t * pages = xmalloc(pagesize*3);
+#endif
+	
+	memset(pages+pagesize, 0xA5, pagesize);
+	
+	assert_eq(load_small<uint32_t>(pages+pagesize/2, 0), 0);
+	
+	auto test2 = [&](uint8_t* ptr, const char * bytes, size_t len) {
+		uint32_t expect;
+		memcpy(&expect, bytes, sizeof(uint32_t));
+		if (END_BIG)
+			expect >>= (sizeof(uint32_t)-len)*8;
+		memcpy(ptr, bytes, len);
+		assert_eq(load_small<uint32_t>(ptr, len), expect);
+	};
+	auto test1 = [&](const char * bytes, size_t len) {
+		test2(pages+pagesize, bytes, len);
+		test2(pages+pagesize*2-len, bytes, len);
+	};
+	
+	test1("\x11\x00\x00\x00", 1);
+	test1("\x11\x22\x00\x00", 2);
+	test1("\x11\x22\x33\x00", 3);
+	test1("\xC1\x22\x33\x89", 4);
+	test1("\x40\x22\x33\x08", 4);
+	
+#ifdef __unix__
+	munmap(pages, pagesize*3);
+#else
+	free(pages);
+#endif
+}
+
+#if 0
+static void bench(const uint8_t * buf, int len)
+{
+	benchmark b;
+	while (b)
+	{
+		b.launder(hash(bytesr(buf, b.launder(len))));
+	}
+	printf("size %d - %f/s - %fGB/s\n", len, b.per_second(), b.per_second()*len/1024/1024/1024);
+}
+
+test("hash", "", "crc32")
+{
+	assert(!RUNNING_ON_VALGRIND);
+	
+	uint8_t buf[65536];
+	uint32_t k = ~0;
+	for (size_t i : range(65536))
+	{
+		k = (-(k&1) & 0xEDB88320) ^ (k>>1);
+		buf[i] = k;
+	}
+	
+	bench(buf, 65536);
+	bench(buf, 1024);
+	bench(buf, 256);
+	bench(buf, 64);
+	bench(buf, 32);
+	bench(buf, 31);
+	bench(buf, 24);
+	bench(buf, 16);
+	bench(buf, 8);
+	bench(buf, 7);
+	bench(buf, 6);
+	bench(buf, 5);
+	bench(buf, 4);
+	bench(buf, 3);
+	bench(buf, 2);
+	bench(buf, 1);
+	bench(buf, 0);
+}
+#endif

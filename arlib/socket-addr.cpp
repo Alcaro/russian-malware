@@ -34,7 +34,7 @@ cstring socket2::address::split_port(cstring host, uint16_t* port)
 		if ((size_t)host.indexof(":") > (size_t)split)
 			return "";
 		
-		if (split != host.length()-1)
+		if ((size_t)split != (size_t)host.length()-1)
 		{
 			if (host[split+1] != ':' || !fromstring(host.substr(split+2, ~0), *port))
 				return "";
@@ -252,18 +252,18 @@ socket2::address::address(bytesr by, uint16_t port)
 	}
 	__builtin_trap();
 }
-socket2::address::address(cstring str, uint16_t port)
+bool socket2::address::parse(cstring str, uint16_t port)
 {
 	as_native()->sa_family = AF_UNSPEC;
 	
 	if (str.contains_nul())
-		return;
+		return false;
 	
 	str = socket2::address::split_port(str, port ? &port : nullptr);
 	
 	char str_nul[INET6_ADDRSTRLEN];
 	if (str.length() >= INET6_ADDRSTRLEN)
-		return;
+		return false;
 	memcpy(str_nul, str.bytes().ptr(), str.length());
 	str_nul[str.length()] = '\0';
 	
@@ -273,7 +273,7 @@ socket2::address::address(cstring str, uint16_t port)
 	{
 		sin->sin_family = AF_INET;
 		sin->sin_port = htons(port);
-		return;
+		return true;
 	}
 	
 	sockaddr_in6* sin6 = (sockaddr_in6*)as_native();
@@ -282,17 +282,19 @@ socket2::address::address(cstring str, uint16_t port)
 	{
 		sin6->sin6_family = AF_INET6;
 		sin6->sin6_port = htons(port);
-		return;
+		return true;
 	}
+	
+	return false;
 }
 
-socket2::address::operator bool()
+socket2::address::operator bool() const
 {
 	sockaddr* sa = as_native();
 	return (sa->sa_family != PF_UNSPEC);
 }
 
-bytesr socket2::address::as_bytes()
+bytesr socket2::address::as_bytes() const
 {
 	sockaddr* sa = as_native();
 	if (sa->sa_family == AF_UNSPEC)
@@ -313,7 +315,7 @@ bytesr socket2::address::as_bytes()
 }
 
 #ifdef USE_INET_NTOP
-string socket2::address::as_str()
+string socket2::address::as_str() const
 {
 	char ret[INET6_ADDRSTRLEN];
 	sockaddr* sa = as_native();
@@ -334,7 +336,7 @@ string socket2::address::as_str()
 	__builtin_trap();
 }
 #else
-string socket2::address::as_str()
+string socket2::address::as_str() const
 {
 	sockaddr* sa = as_native();
 	if (sa->sa_family == AF_UNSPEC)
@@ -403,7 +405,7 @@ string socket2::address::as_str()
 #endif
 
 
-uint16_t socket2::address::port()
+uint16_t socket2::address::port() const
 {
 	sockaddr* sa = as_native();
 	if (sa->sa_family == AF_INET)
@@ -434,17 +436,65 @@ void socket2::address::set_port(uint16_t port)
 	}
 }
 
+bool socket2::netmask::parse(cstring str)
+{
+	this->family = 0;
+	static_assert(AF_UNSPEC == 0);
+	
+	ssize_t idx = str.indexof("/");
+	socket2::address addr;
+	if (!addr.parse((idx >= 0 ? str.substr(0, idx) : str), 0))
+		return false;
+	
+	struct sockaddr * addr_sa = addr.as_native();
+	
+	uint8_t bits = (addr_sa->sa_family == AF_INET ? 32 : 128);
+	if (idx >= 0)
+	{
+		uint8_t bits_new;
+		if (!fromstring(str.substr(idx+1, ~0), bits_new))
+			return false;
+		if (bits_new > bits)
+			return false;
+		bits = bits_new;
+	}
+	
+	this->family = addr_sa->sa_family;
+	this->bits = bits;
+	memcpy(this->addr, addr.as_bytes().ptr(), addr.as_bytes().size());
+	return true;
+}
+bool socket2::netmask::matches(const socket2::address& addr) const
+{
+	if (addr.as_native()->sa_family != this->family)
+		return false;
+	const uint8_t * match = addr.as_bytes().ptr();
+	if (memcmp(this->addr, match, this->bits/8) != 0)
+		return false;
+	if (this->bits & 7)
+	{
+		size_t byte = this->bits/8;
+		if ((this->addr[byte] ^ match[byte]) >> (8 - (this->bits & 7)))
+			return false;
+	}
+	return true;
+}
+
 #include "test.h"
-static void test1(cstrnul in, uint16_t port_in, cstrnul expect, uint16_t port_expect)
+static void test1(cstring in, uint16_t port_in, cstring expect, uint16_t port_expect)
 {
 	socket2::address addr { in, port_in };
 	assert_eq(addr.as_str(), expect);
 	if (expect)
 		assert_eq(addr.port(), port_expect);
 }
-static void test1(cstrnul in, cstrnul expect)
+static void test1(cstring in, cstring expect)
 {
 	test1(in, 0, expect, 0);
+}
+static bool match(cstring mask, cstring addr)
+{
+	return socket2::netmask(mask).matches(socket2::address(addr));
 }
 test("socket address", "", "sockaddr")
 {
@@ -532,5 +582,22 @@ test("socket address", "", "sockaddr")
 	testcall(test1("127.0.0.1:0000000000000000000000000000000000000012345", 80, "127.0.0.1", 12345));
 	testcall(test1("[127.0.0.1]", 80, "", -1));
 	testcall(test1("1:2:3:4:5:6:7:8:0", 80, "", -1));
+	
+	assert(match("127.0.0.1", "127.0.0.1"));
+	assert(match("127.0.0.1/8", "127.0.0.1"));
+	assert(match("127.0.0.1/8", "127.128.0.1"));
+	assert(!match("127.0.0.1/8", "128.0.0.1"));
+	assert(!match("127.0.0.1/8", "128.0.0.1"));
+	assert(match("127.0.0.1/9", "127.0.0.1"));
+	assert(!match("127.0.0.1/9", "127.128.0.1"));
+	assert(match("127.0.0.1/9", "127.64.0.1"));
+	
+	assert(!match("::/0", "0.0.0.0"));
+	assert(!match("0.0.0.0/0", "::"));
+	
+	assert(match("::1", "::1"));
+	assert(!match("::1", "::2"));
+	assert(!match("::1/127", "::2"));
+	assert(match("::1/126", "::2"));
 }
 #endif

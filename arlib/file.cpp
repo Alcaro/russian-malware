@@ -76,7 +76,7 @@ string file::sanitize_rel_path(string path)
 {
 	// this one currently leaves consecutive slashes alone
 	// this means sanitized filename inequality does not mean they point to different files,
-	//  but case insensitive FS means that already so no harm done
+	//  but symlinks and case insensitive filesystem means that already so no harm done
 again:
 	uint8_t * start = path.bytes().ptr();
 	uint8_t * end = start + path.length();
@@ -143,11 +143,11 @@ bool file::mkdir(cstring filename)
 }
 //#endif
 
-bool file2::resize(off_t newsize, bytesr& map, bool writable)
+bool file2::resize(off_t newsize, bytesr& map, bool writable, bool small)
 {
-	mmap_t::unmap(map);
+	mmap_t::unmap(map, small);
 	if (!resize(newsize)) return false;
-	mmap_t::map(map, *this, writable);
+	mmap_t::map(map, *this, writable, small);
 	return (map.size() != 0);
 }
 

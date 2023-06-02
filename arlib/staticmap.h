@@ -38,7 +38,7 @@ class staticmap : nocopy {
 	// Returns an object of the exact given size; must be a power of two, and at least 32.
 	// Caller is responsible for writing the object header.
 	uint64_t alloc(size_t bytes);
-	void free(uint64_t addr); // Address must be the object header.
+	void dealloc(uint64_t addr); // Address must be the object header.
 	
 	// Returns a pointer into the hashmap. If rd64(ret+off_h_ptr) is 0 or 1, object not found; can be inserted there.
 	uint64_t hashmap_locate(uint64_t hash, bytesr key);
@@ -59,10 +59,12 @@ public:
 	bool open(cstrnul fn, bool map_writable = false);
 	
 	size_t size() { return rd64(32); } // rd64(off_r_entries)
-	bytesw get_or_empty(bytesr key, bool* found = nullptr); // If nonnull, found allows telling empty value apart from nonexistent.
+	bytesw get_or_empty(bytesr key, bool* found = nullptr); // found allows telling empty value apart from nonexistent, if nonnull.
 	bytesw insert(bytesr key, bytesr val); // If key already exists, it will be atomically replaced.
 	void remove(bytesr key); // If key doesn't exist, it's a noop.
-	void reset(); // The point of a staticmap is to be persistent; this one is mostly for testing and debugging.
+	void reset(); // Deletes all data. The point of a staticmap is to be persistent; this one is mostly for testing and debugging.
+	
+	operator bool() { return f; }
 	
 	// Flushes all data to disk.
 	// Also ensures that if the process terminates before the next write operation, recreating the object after reboot will be quick.

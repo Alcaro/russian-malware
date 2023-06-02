@@ -583,6 +583,7 @@ test("float precision", "", "")
 {
 	// linking with -Ofast or -ffast-math on x86 throws in crtfastmath.o,
 	// which contains a constructor that sets MXCSR flush to zero and denormals are zero flags
+	// (gcc 13 stops that with -shared, but still does for exes)
 #if defined(__i386__) || defined(__x86_64__)
 	if (RUNNING_ON_VALGRIND)
 		test_skip_force("Valgrind doesn't emulate the MXCSR register");
@@ -630,6 +631,7 @@ test("string conversion - string to float", "", "string")
 	
 	testfromfloat("+1", 0.0f, false); // no + prefix allowed
 	testfromfloat(" 42", 0.0f, false);
+	testfromfloat("42 ", 0.0f, false);
 	testfromfloat("0x123", 0.0f, false);
 	testfromfloat("+0x123", 0.0f, false);
 	testfromfloat("-0x123", 0.0f, false);
@@ -647,13 +649,15 @@ test("string conversion - string to float", "", "string")
 	testfromfloat(".", 0.0f, false);
 	testfromfloat("1.e+1", 0.0f, false);
 	testfromfloat(".1e+1", 0.0f, false);
+	testfromfloat("e+1", 0.0f, false);
+	testfromfloat(".e1", 0.0f, false);
 	testfromfloat("1.2.3", 0.0f, false);
 	testfromfloat("0e99999999999999999999n", 0.0f, false);
 	testfromfloat("", 0.0f, false);
 	testfromfloat("2,5", 0.0f, false); // this is not the decimal separator, has never been and will never be
 	testfromfloat("42"+string::nul(), 0.0f, false);
 	
-	testfromdouble("1e-999", 0);
+	testfromdouble("1e-999", 0.0);
 	testfromdouble("-1e-999", -0.0);
 	
 	testfromdouble("0e99999999999999999999", 0.0);
@@ -681,17 +685,17 @@ test("string conversion - string to float", "", "string")
 	// 0.0000000000967498303694469541369471698999404907226562500000000000 <- float closest to the above double
 	testfromfloat("9.67498269e-11", 9.67498269e-11f);
 	static_assert(9.67498269e-11f != (float)9.67498269e-11);
-	testfromfloat("1.199999988079071",     // 1.1999999880790710000000000000 <- input
-	                  1.199999988079071f); // 1.1999999284744262695312500000 <- float closest to the input
-	static_assert(1.199999988079071f !=    // 1.1999999880790710449218750000 <- double closest to the input
-	       (float)1.199999988079071);      // 1.2000000476837158203125000000 <- float closest to the above double
-	testfromfloat("1591091017e+10",     // 15910910170000000000.0 <- input
-	                  1591091017e+10f); // 15910910719755812864.0 <- float closest to the input
-	static_assert(1591091017e+10f !=    // 15910910169999998976.0 <- double closest to the input
-	       (float)1591091017e+10);      // 15910909620244185088.0 <- float closest to the above double
+	testfromfloat("1.199999988079071",  // 1.1999999880790710000000000000 <- input
+	               1.199999988079071f); // 1.1999999284744262695312500000 <- float closest to the input
+	static_assert(1.199999988079071f != // 1.1999999880790710449218750000 <- double closest to the input
+	       (float)1.199999988079071);   // 1.2000000476837158203125000000 <- float closest to the above double
+	testfromfloat("1591091017e+10",  // 15910910170000000000.0 <- input
+	               1591091017e+10f); // 15910910719755812864.0 <- float closest to the input
+	static_assert(1591091017e+10f != // 15910910169999998976.0 <- double closest to the input
+	       (float)1591091017e+10);   // 15910909620244185088.0 <- float closest to the above double
 	// which also have the property that both significand and 10**abs(exponent) are exactly representable as double,
 	//  so the correct double can be calculated with two integer to double conversions and a multiplication or division,
-	//  but correct float would yield double rounding
+	//  but correct float can't
 	
 	testfromfloat("340282346638528859811704183484516925440", 340282346638528859811704183484516925440.0f); // max possible float; a few higher values round down to that,
 	testfromfloat("340282356779733661637539395458142568448", HUGE_VALF, false); // but anything too big should be rejected
@@ -705,7 +709,6 @@ test("string conversion - string to float", "", "string")
 	testfromfloat("1e+18446744073709551616", HUGE_VALF, false);
 	testfromfloat("340282366920938463463374607431768211456", HUGE_VALF, false); // 2**128 - infinity
 	
-	// also add the lowest two float subnormals, their midpoint, and a tiny sliver off from their midpoint
 	// highest double
 	testfromdouble("1797693134862315708145274237317043567980705675258449965989174768031572607800285387605895586327668781715"
 	               "4045895351438246423432132688946418276846754670353751698604991057655128207624549009038932894407586850845"
@@ -1021,7 +1024,7 @@ test("string conversion - string to float", "", "string")
 	testfromfloat("0.0000000000000000000000000000000000000000000021019476964872256063855943749348741969203929128147736576"
 	              "35602425834686624028790902229957282543182373046875", 3e-45f); // halfway between the above, round to even
 	testfromfloat("0.0000000000000000000000000000000000000000000007006492321624085354618647916449580656401309709382578858"
-	              "78534141944895541342930300743319094181060791015625", 0); // half of smallest subnormal float = zero
+	              "78534141944895541342930300743319094181060791015625", 0.0f); // half of smallest subnormal float = zero
 	testfromfloat("0.0000000000000000000000000000000000000000000021019476964872256063855943749348741969203929128147736576"
 	              "3560242583468662402879090222995728254318237304687499999999999999999999999999999999999999999999999999999",
 	              1e-45f); // the above two plus or minus a tiny sliver

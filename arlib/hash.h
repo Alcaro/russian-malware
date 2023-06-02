@@ -7,12 +7,15 @@
 //Don't rely on them for any security-related purpose either.
 
 template<typename T>
-typename std::enable_if_t<std::is_integral_v<T>, size_t> hash(T val)
+auto hash(T val) requires (std::is_integral_v<T>)
 {
-	return val;
+	if constexpr (sizeof(T) == 8)
+		return (uint64_t)val;
+	else
+		return (uint32_t)val;
 }
 template<typename T>
-typename std::enable_if_t<std::is_class_v<T>, size_t> hash(const T& val)
+auto hash(const T& val) requires requires { val.hash(); }
 {
 	return val.hash();
 }
@@ -34,22 +37,11 @@ static inline size_t hash(const bytearray& val)
 	return hash(val.ptr(), val.size());
 }
 
-template<typename T>
-class hashable_pointer {
-	T* ptr;
+class pointer_hasher {
+	pointer_hasher() = delete;
 public:
-	hashable_pointer() = default;
-	hashable_pointer(T* ptr) : ptr(ptr) {}
-	T* operator->() { return ptr; }
-	T& operator*() { return *ptr; }
-	const T* operator->() const { return ptr; }
-	const T& operator*() const { return *ptr; }
-	operator T*() { return ptr; }
-	operator const T*() const { return ptr; }
-	explicit operator bool() const { return ptr; }
-	size_t hash() const { return (uintptr_t)ptr; }
-	bool operator==(const hashable_pointer& other) const { return ptr == other.ptr; }
-	bool operator==(T* other) const { return ptr == other; }
+	template<typename T>
+	static size_t hash(T* ptr) { return (uintptr_t)ptr; }
 };
 
 
@@ -64,8 +56,16 @@ template<typename T, typename... Tnext> static inline size_t hashall(T first, Tn
 }
 
 
-//these two are reversible, but I have no usecase for a reverser so I didn't implement one
+//these are reversible, but I have no usecase for a reverser so I didn't implement one
 inline uint32_t hash_shuffle(uint32_t val)
+{
+	return __builtin_bswap32(val * 1086221891); // just a random prime
+}
+inline uint64_t hash_shuffle(uint64_t val)
+{
+	return __builtin_bswap64(val * 8040991081842494123);
+}
+inline uint32_t hash_shuffle_strong(uint32_t val)
 {
 	//https://code.google.com/p/smhasher/wiki/MurmurHash3
 	val ^= val >> 16;
@@ -75,11 +75,9 @@ inline uint32_t hash_shuffle(uint32_t val)
 	val ^= val >> 16;
 	return val;
 }
-
-inline uint64_t hash_shuffle(uint64_t val)
+inline uint64_t hash_shuffle_strong(uint64_t val)
 {
 	//http://zimbry.blogspot.se/2011/09/better-bit-mixing-improving-on.html Mix13
-	// update staticmap.cpp if changing this
 	val ^= val >> 30;
 	val *= 0xbf58476d1ce4e5b9;
 	val ^= val >> 27;

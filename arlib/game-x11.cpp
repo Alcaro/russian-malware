@@ -43,9 +43,7 @@ struct atoms_t {
 #undef ATOM
 } atoms;
 
-struct waiter_t : public waiter<void, waiter_t> {
-	void complete() { container_of<&gameview_x11::wait>(this)->process_events(); }
-} wait;
+waiter<void> wait = make_waiter<&gameview_x11::wait, &gameview_x11::process_events>();
 
 
 void process_events()
@@ -58,7 +56,8 @@ void process_events()
 			this->process_event(&ev);
 	}
 	
-	runloop2::await_read(ConnectionNumber(window_x11.display)).then(&wait);
+	if (!wait.is_waiting())
+		runloop2::await_read(ConnectionNumber(window_x11.display)).then(&wait);
 }
 
 static void global_init()
@@ -130,11 +129,11 @@ gameview_x11(Window window, uint32_t width, uint32_t height, cstring title) : wi
 }
 
 function<void()> cb_exit = [this](){ stop(); };
-/*public*/ bool running() { return !stopped; }
-/*public*/ void stop() { stopped = true; }
-/*public*/ void exit_cb(function<void()> cb) { cb_exit = cb; }
+/*public*/ bool running() override { return !stopped; }
+/*public*/ void stop() override { stopped = true; }
+/*public*/ void exit_cb(function<void()> cb) override { cb_exit = cb; }
 
-/*public*/ bool focused() { return focus; }
+/*public*/ bool focused() override { return focus; }
 
 void process_event(XEvent* ev)
 {
@@ -277,7 +276,7 @@ void calc_keyboard_map()
 
 function<void(int scancode, key_t k, bool down)> cb_keys;
 
-/*public*/ void keys_cb(function<void(int scancode, key_t k, bool down)> cb)
+/*public*/ void keys_cb(function<void(int scancode, key_t k, bool down)> cb) override
 {
 	cb_keys = cb;
 	memset(current_scans, 0, sizeof(current_scans));
@@ -314,7 +313,7 @@ void set_all_keys()
 
 function<void(int x, int y, uint8_t buttons)> cb_mouse;
 
-/*public*/ void mouse_cb(function<void(int x, int y, uint8_t buttons)> cb)
+/*public*/ void mouse_cb(function<void(int x, int y, uint8_t buttons)> cb) override
 {
 	cb_mouse = cb;
 }
@@ -329,7 +328,7 @@ void send_mouse(int x, int y, uint32_t state)
 
 
 
-/*public*/ void step(bool wait)
+/*public*/ void step(bool wait) override
 {
 	got_event = false;
 	process_events(); // in case someone else (for example ctx-x11.cpp) did synchronous X calls behind our back

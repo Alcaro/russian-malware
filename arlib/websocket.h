@@ -2,7 +2,7 @@
 
 class websocket {
 	socketbuf sock;
-	function<async<autoptr<socket2>>(bool ssl, cstrnul domain, uint16_t port)> cb_mksock = socket2::create_sslmaybe;
+	mksocket_t cb_mksock = socket2::create_sslmaybe;
 	
 public:
 	enum {
@@ -15,7 +15,7 @@ public:
 		t_pong = 10
 	};
 	
-	void wrap_socks(function<async<autoptr<socket2>>(bool ssl, cstrnul domain, uint16_t port)> cb) { cb_mksock = cb; }
+	void wrap_socks(mksocket_t cb) { cb_mksock = cb; }
 	async<bool> connect(cstring target, arrayview<string> headers = nullptr);
 	operator bool() { return sock; }
 	

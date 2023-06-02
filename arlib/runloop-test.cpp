@@ -8,9 +8,7 @@ static int test_state = 0;
 class inner_awaitable_t {
 	// ideally, this would be producer<float, &inner_awaitable_t::prod, &inner_awaitable_t::cancel> prod,
 	// but c++ doesn't accept that kind of self/forward references
-	struct prod_t : public producer<float, prod_t> {
-		void cancel() { container_of<&inner_awaitable_t::prod>(this)->cancel(); }
-	} prod;
+	producer<float> prod = make_producer<&inner_awaitable_t::prod, &inner_awaitable_t::cancel>();
 	
 public:
 	async<float> start_async()
@@ -109,12 +107,8 @@ static cancellable_coro coro_call_fn()
 }
 
 class fn_caller {
-	struct wait_t : public waiter<int, wait_t> {
-		void complete(int val) { container_of<&fn_caller::wait>(this)->complete1(val); }
-	} wait;
-	struct wait2_t : public waiter<float, wait2_t> {
-		void complete(float val) { container_of<&fn_caller::wait2>(this)->complete2(val); }
-	} wait2;
+	waiter<int> wait = make_waiter<&fn_caller::wait, &fn_caller::complete1>();
+	waiter<float> wait2 = make_waiter<&fn_caller::wait2, &fn_caller::complete2>();
 	int state = 0;
 public:
 	void call_coro()
@@ -297,7 +291,8 @@ test("runloop coroutines", "", "runloop")
 	assert_eq(test_state++, 9);
 	
 	{
-		struct waiter_t : public waiter<int, waiter_t> {
+		struct waiter_t {
+			waiter<int> wait = make_waiter<&waiter_t::wait, &waiter_t::complete>();
 			int val = -1;
 			void complete(int val)
 			{
@@ -307,15 +302,16 @@ test("runloop coroutines", "", "runloop")
 			}
 		};
 		waiter_t wait;
-		coro_sync().then(&wait);
+		coro_sync().then(&wait.wait);
 		assert_eq(wait.val, 42);
-		wait.cancel();
-		wait.cancel();
+		wait.wait.cancel();
+		wait.wait.cancel();
 	}
 	
 	for (int i=0;i<5;i++) // run it a few times, to ensure inner_awaitable's state is correctly reset
 	{
-		struct waiter_t : public waiter<int, waiter_t> {
+		struct waiter_t {
+			waiter<int> wait = make_waiter<&waiter_t::wait, &waiter_t::complete>();
 			int val = -1;
 			void complete(int val)
 			{
@@ -326,10 +322,10 @@ test("runloop coroutines", "", "runloop")
 		};
 		test_state = 7;
 		waiter_t wait;
-		coro_async().then(&wait);
+		coro_async().then(&wait.wait);
 		assert_eq(wait.val, -1);
-		wait.cancel();
-		wait.cancel();
+		wait.wait.cancel();
+		wait.wait.cancel();
 	}
 }
 
@@ -337,14 +333,14 @@ test("runloop coroutines", "", "runloop")
 co_test("runloop timeouts", "", "runloop")
 {
 	timestamp t1 = timestamp::now();
-	co_await runloop2::await_timeout(timestamp::in_ms(10));
+	co_await runloop2::in_ms(10);
 	timestamp t2 = timestamp::now();
 	assert_range((t2-t1).ms(), 10, 100);
 	
-	co_await runloop2::await_timeout(timestamp::in_ms(-1000));
-	co_await runloop2::await_timeout(timestamp::in_ms(-1000));
-	co_await runloop2::await_timeout(timestamp::in_ms(-1000));
-	co_await runloop2::await_timeout(timestamp::in_ms(-1000));
+	co_await runloop2::in_ms(-1000);
+	co_await runloop2::in_ms(-1000);
+	co_await runloop2::in_ms(-1000);
+	co_await runloop2::in_ms(-1000);
 	timestamp t3 = timestamp::now();
 	assert_range((t3-t2).ms(), 0, 100);
 }
@@ -357,15 +353,14 @@ static async<void> mut_test(co_mutex& mut, int& state, int a, int b, int c)
 		auto lock = co_await mut;
 		assert(mut.locked());
 		assert_eq(++state, b);
-		co_await runloop2::await_timeout(timestamp::in_ms(0));
+		co_await runloop2::in_ms(0);
 	}
 	assert_eq(++state, c);
 }
 
 static void my_cancel(async<void> event)
 {
-	struct noop_waiter_t : public waiter<void, noop_waiter_t> { void complete() { __builtin_trap(); } };
-	noop_waiter_t wait;
+	waiter<void> wait = make_waiter<[](){ assert_unreachable(); }>();
 	event.then(&wait);
 	wait.cancel();
 	wait.cancel();
@@ -441,22 +436,18 @@ test("runloop dispatch", "", "")
 	// (doesn't matter which one is activated, as long as the other is not)
 	// this doesn't really test anything on windows, since WaitForMultipleObjects only returns a single ready object
 	struct my_pair {
-		struct waiter1 : public waiter<void, waiter1> {
-			void complete()
-			{
-				my_pair* self = container_of<&my_pair::wait1>(this);
-				assert(self->wait2.is_waiting());
-				self->wait2.cancel();
-			}
-		} wait1;
-		struct waiter2 : public waiter<void, waiter2> {
-			void complete()
-			{
-				my_pair* self = container_of<&my_pair::wait2>(this);
-				assert(self->wait1.is_waiting());
-				self->wait1.cancel();
-			}
-		} wait2;
+		waiter<void> wait1 = make_waiter<&my_pair::wait1, &my_pair::complete1>();
+		void complete1()
+		{
+			assert(wait2.is_waiting());
+			wait2.cancel();
+		}
+		waiter<void> wait2 = make_waiter<&my_pair::wait1, &my_pair::complete1>();
+		void complete2()
+		{
+			assert(wait1.is_waiting());
+			wait1.cancel();
+		}
 	};
 	my_pair waiters;
 	
@@ -487,7 +478,7 @@ co_test("runloop multi_waiter", "", "")
 	{
 		producer<int> wait1;
 		async<int> async1 = &wait1;
-		assert((co_await multi_waiter(std::move(async1), runloop2::await_timeout(timestamp::in_ms(1)))).contains<void>());
+		assert((co_await multi_waiter(std::move(async1), runloop2::in_ms(1))).contains<void>());
 	}
 	{
 		producer<int> wait1;

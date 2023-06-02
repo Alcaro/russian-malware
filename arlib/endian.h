@@ -25,7 +25,7 @@
     defined(_M_PPC)
 # define END_BIG 1
 # define END_LITTLE 0
-#elif (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_PDP_ENDIAN__)
+#elif defined(__BYTE_ORDER__)
 # error "too weird platform, not supported"
 #else
 # error "unknown platform, can't determine endianness"
@@ -39,7 +39,7 @@
 #endif
 
 #if defined(__GNUC__)
-//GCC detects the pattern and optimizes it, but MSVC doesn't, so I need the intrinsics. No reason not to use both.
+//GCC detects the pattern and optimizes it, but MSVC only does for uint16/32, so I need at least one intrinsic. No reason to not use all.
 #define end_swap16 __builtin_bswap16
 #define end_swap32 __builtin_bswap32
 #define end_swap64 __builtin_bswap64

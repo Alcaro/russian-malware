@@ -154,14 +154,14 @@ namespace {
 			SetFilePointerEx(this->handle, lipos, NULL, FILE_BEGIN);
 		}
 		
-		size_t size()
+		size_t size() override
 		{
 			LARGE_INTEGER size;
 			GetFileSizeEx(this->handle, &size);
 			return size.QuadPart;
 		}
 		
-		size_t pread(arrayvieww<uint8_t> target, size_t start)
+		size_t pread(arrayvieww<uint8_t> target, size_t start) override
 		{
 			seek(start);
 			DWORD actual;
@@ -169,13 +169,13 @@ namespace {
 			return actual;
 		}
 		
-		bool resize(size_t newsize)
+		bool resize(size_t newsize) override
 		{
 			seek(newsize);
 			return (SetEndOfFile(this->handle));
 		}
 		
-		bool pwrite(arrayview<uint8_t> data, size_t start)
+		bool pwrite(arrayview<uint8_t> data, size_t start) override
 		{
 			seek(start);
 			DWORD actual;
@@ -218,15 +218,15 @@ namespace {
 			else return arrayvieww<uint8_t>(NULL, 0);
 		}
 		
-		arrayview<uint8_t> mmap(size_t start, size_t len) { return mmap(false, start, len); }
-		void unmap(arrayview<uint8_t> data)
+		arrayview<uint8_t> mmap(size_t start, size_t len) override { return mmap(false, start, len); }
+		void unmap(arrayview<uint8_t> data) override
 		{
 			//docs say this should be identical to a MapViewOfFile return value, but it works fine with the low bits garbled
 			UnmapViewOfFile(data.ptr());
 		}
 		
-		arrayvieww<uint8_t> mmapw(size_t start, size_t len) { return mmap(true, start, len); }
-		bool unmapw(arrayvieww<uint8_t> data) { unmap(data); return true; }
+		arrayvieww<uint8_t> mmapw(size_t start, size_t len) override { return mmap(true, start, len); }
+		bool unmapw(arrayvieww<uint8_t> data) override { unmap(data); return true; }
 		
 		~file_fs() { CloseHandle(handle); }
 	};
@@ -441,7 +441,7 @@ void file2::set_time(timestamp t)
 	SetFileTime(fd, nullptr, nullptr, &ft);
 }
 
-void file2::mmap_t::map(bytesr& by, file2& src, bool writable)
+void file2::mmap_t::map(bytesr& by, file2& src, bool writable, bool small)
 {
 	by = nullptr;
 	
@@ -456,7 +456,7 @@ void file2::mmap_t::map(bytesr& by, file2& src, bool writable)
 	
 	by = { ptr, len };
 }
-void file2::mmap_t::unmap(bytesr& by)
+void file2::mmap_t::unmap(bytesr& by, bool small)
 {
 	if (by.size())
 		UnmapViewOfFile(by.ptr());

@@ -75,7 +75,8 @@ inline size_t tostring_ptr(char* buf, unsigned int val,  size_t len) { return to
 inline size_t tostring_ptr(char* buf,   signed long val, size_t len) { return tostring_ptr(buf, (signed long long)val, len); }
 inline size_t tostring_ptr(char* buf, unsigned long val, size_t len) { return tostring_ptr(buf, (unsigned long long)val, len); }
 
-size_t tostringhex_ptr(char* buf, unsigned long long val, size_t len); // no overloads here
+size_t tostringhex_ptr(char* buf, unsigned long long val, size_t len); // no integer-size overloads here
+size_t tostringhex_ptr(char* buf, const uint8_t * val, size_t len);
 
 inline size_t tostring_ptr(char* buf, const char * val, size_t len) { memcpy(buf, val, len); return len; }
 inline size_t tostring_ptr(char* buf, cstring val, size_t len) { memcpy(buf, val.bytes().ptr(), len); return len; }

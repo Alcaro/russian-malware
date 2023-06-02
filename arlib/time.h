@@ -13,8 +13,8 @@ class cstring;
 class string;
 
 struct duration {
-	time_t sec;
-	long nsec; // to match timestamp
+	time_t sec = 0;
+	long nsec = 0; // to match timestamp
 	
 	std::strong_ordering operator<=>(const duration& other) const = default;
 	

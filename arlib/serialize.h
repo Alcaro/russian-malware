@@ -33,8 +33,9 @@ public:
 };
 #endif
 
-#define SERIALIZE_CORE(member) STR(member), member, // this extra comma is troublesome, but ppforeach is kinda limited
-#define SERIALIZE(...) template<typename Ts> void serialize(Ts& s) { s.items(PPFOREACH(SERIALIZE_CORE, __VA_ARGS__) nullptr); }
+#define SERIALIZE_LOOP(member) , STR(member), member
+#define SERIALIZE(first, ...) \
+	template<typename Ts> void serialize(Ts& s) { s.items(STR(first), first PPFOREACH(SERIALIZE_LOOP, __VA_ARGS__)); }
 
 template<typename T> struct ser_array_t { T& c; ser_array_t(T& c) : c(c) {} };
 template<typename T> ser_array_t<T> ser_array(T& c) { return ser_array_t(c); }
@@ -86,7 +87,7 @@ class jsonserializer {
 	{
 		if (delay_compact != INT_MAX)
 		{
-			if (delay_compact == 0) w.compress(true);
+			if (delay_compact == 0) w.compress();
 			delay_compact--;
 		}
 	}
@@ -95,7 +96,7 @@ class jsonserializer {
 		if (delay_compact != INT_MAX)
 		{
 			delay_compact++;
-			if (delay_compact == 0) w.compress(false);
+			if (delay_compact == 0) w.uncompress();
 		}
 	}
 	
@@ -200,7 +201,6 @@ class jsonserializer {
 	
 	
 	void items_inner() {}
-	void items_inner(nullptr_t) {}
 	
 	template<typename Ti, typename... Ts>
 	void items_inner(const char * name, Ti& inner, Ts&&... args)
@@ -238,9 +238,9 @@ public:
 	
 	template<typename... Args> void item_compact(int newmax, Args&&... args)
 	{
-		w.compress(true);
+		w.compress();
 		item(std::forward<Args>(args)...);
-		w.compress(false);
+		w.uncompress();
 	}
 	
 	template<typename... Ts>
@@ -492,7 +492,6 @@ class jsondeserializer {
 	}
 	
 	void items_inner() {}
-	void items_inner(nullptr_t) {}
 	
 	template<typename Ti, typename... Ts>
 	void items_inner(const char * name, Ti& inner, Ts&&... args)
@@ -681,7 +680,6 @@ class bmlserializer {
 	
 	
 	void items_inner() {}
-	void items_inner(nullptr_t) {}
 	
 	template<typename Ti, typename... Ts>
 	void items_inner(const char * name, Ti& inner, Ts&&... args)
@@ -860,7 +858,6 @@ class bmldeserializer {
 	}
 	
 	void items_inner() {}
-	void items_inner(nullptr_t) {}
 	
 	template<typename Ti, typename... Ts>
 	void items_inner(const char * name, Ti& inner, Ts&&... args)

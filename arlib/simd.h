@@ -64,7 +64,7 @@ void debugd32(const char * prefix, const __m128i& vals); void debugd64(const cha
 void debugu32(const char * prefix, const __m128i& vals); void debugu64(const char * prefix, const __m128i& vals); 
 void debugx32(const char * prefix, const __m128i& vals); void debugx64(const char * prefix, const __m128i& vals); 
 
-void debugf32(const __m128& vals);  void debugf32(const char * prefix, const __m128& vals);
+void debugf32(const __m128& vals); void debugf32(const char * prefix, const __m128& vals);
 void debugf64(const __m128d& vals); void debugf64(const char * prefix, const __m128d& vals); 
 void debugc8(const __m128i& vals); void debugc8(const char * prefix, const __m128i& vals);
 #endif

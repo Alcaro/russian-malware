@@ -156,18 +156,18 @@ public:
 	
 	
 	
-	void makeCurrent(bool make)
+	void makeCurrent(bool make) override
 	{
 		if (make) glx.MakeCurrent(window_x11.display, win, ctx);
 		else glx.MakeCurrent(window_x11.display, None, NULL);
 	}
 	
-	funcptr getProcAddress(const char * proc)
+	funcptr getProcAddress(const char * proc) override
 	{
 		return (funcptr)glx.GetProcAddress((GLubyte*)proc);
 	}
 	
-	void swapInterval(int interval)
+	void swapInterval(int interval) override
 	{
 		//EXT isn't supported on my glx client/server
 		//MESA isn't in my headers
@@ -175,12 +175,12 @@ public:
 		glx.SwapIntervalSGI(interval);
 	}
 	
-	void swapBuffers()
+	void swapBuffers() override
 	{
 		glx.SwapBuffers(window_x11.display, win);
 	}
 	
-	void destroy()
+	void destroy() override
 	{
 		glx.MakeCurrent(window_x11.display, None, NULL);
 		glx.DestroyContext(window_x11.display, ctx);
