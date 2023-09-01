@@ -232,16 +232,6 @@ namespace {
 	};
 }
 
-static bool path_corrupt(cstring path)
-{
-	if (path.contains_nul()) return true;
-	if (!path) return true;
-	if (path[0] == '/') return true; // TODO: this fails on network shares (\\?\, \\.\, and \??\ should be considered corrupt)
-	if (path[1] == ':' && path[2] != '/') return true;
-	if (path.contains("\\")) return true;
-	return false;
-}
-
 #define FILE_SHARE_ALL (FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE)
 file::impl* file::open_impl_fs(cstring filename, mode m)
 {
@@ -295,12 +285,12 @@ array<string> file::listdir(cstring path)
 bool file2::open(cstrnul filename, mode m)
 {
 	reset();
-	if (path_corrupt(filename)) return false;
+	if (file::path_corrupt(filename)) return false;
 	
 	DWORD dispositions[] = { OPEN_EXISTING, OPEN_ALWAYS, OPEN_EXISTING, CREATE_ALWAYS, CREATE_NEW };
 	DWORD access = ((m&7)==m_read ? GENERIC_READ : GENERIC_READ|GENERIC_WRITE);
 	DWORD share = (m&m_exclusive) ? FILE_SHARE_READ : FILE_SHARE_ALL;
-	this->fd = CreateFile(filename, access, share, NULL, dispositions[m&7], FILE_ATTRIBUTE_NORMAL, NULL);
+	this->fd = CreateFileW(smelly_string(filename), access, share, NULL, dispositions[m&7], FILE_ATTRIBUTE_NORMAL, NULL);
 	return (this->fd != INVALID_HANDLE_VALUE);
 }
 
@@ -463,4 +453,44 @@ void file2::mmap_t::unmap(bytesr& by, bool small)
 	by = nullptr;
 }
 
+
+directory::directory(cstrnul path)
+{
+	if (file::path_corrupt(path))
+		return;
+	this->path = path;
+	iter_next(true);
+}
+bool directory::dent_is_dir()
+{
+	return find.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
+}
+void directory::iter_next(bool initial)
+{
+	if (initial)
+	{
+		fd = FindFirstFileA(path+"/*", &find);
+	}
+	else
+	{
+	again:
+		if (!FindNextFileA(fd, &find))
+		{
+			close_me();
+			fd = INVALID_HANDLE_VALUE;
+			return;
+		}
+	}
+	const char * name = find.cFileName;
+	if (fd != INVALID_HANDLE_VALUE && name[0] == '.' && (name[1] == '\0' || (name[1] == '.' && name[2] == '\0')))
+		goto again;
+}
+file2 directory::open_file_inner(const char * path, file2::mode m)
+{
+	return file2(this->path+"/"+path, m);
+}
+directory directory::open_dir_inner(const char * path)
+{
+	return directory(this->path+"/"+path);
+}
 #endif

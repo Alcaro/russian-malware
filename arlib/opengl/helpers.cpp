@@ -43,6 +43,78 @@ bool aropengl::hasExtension(const char * ext)
 	}
 }
 
+//Checks if needle is one of the 'separator'-separated words in the haystack. The needle may not contain 'separator' or be empty.
+//For example, haystack "GL_EXT_FOO GL_EXT_BAR GL_EXT_QUUX" (with space as separator) contains needles
+// 'GL_EXT_FOO', 'GL_EXT_BAR' and 'GL_EXT_QUUX', but not 'GL_EXT_QUU'.
+bool strtoken(const char * haystack, const char * needle, char separator)
+{
+	//token lists are annoyingly complex to parse
+	//I suspect 'people using fixed-size buffers, then extension list grows and app explodes'
+	// isn't the only reason GL_EXTENSIONS string was deprecated from OpenGL
+	size_t nlen = strlen(needle);
+	
+	while (true)
+	{
+		const char * found = strstr(haystack, needle);
+		if (!found) break;
+		
+		if ((found==haystack || found[-1]==separator) && // ensure the match is the start of a word
+				(found[nlen]==separator || found[nlen]=='\0')) // ensure the match is the end of a word
+		{
+			return true;
+		}
+		
+		haystack = strchr(found, separator); // try again, could've found GL_foobar_limited when looking for GL_foobar
+		if (!haystack) return false;
+	}
+	return false;
+}
+
+test("strtoken", "", "string")
+{
+	assert(strtoken("aa", "aa", ' '));
+	assert(!strtoken("aa", "a", ' '));
+	assert(!strtoken("aa", "aaa", ' '));
+	assert(strtoken("aa aa aa aa", "aa", ' '));
+	assert(!strtoken("aa aa aa aa", "a", ' '));
+	assert(!strtoken("aa aa aa aa", "aaa", ' '));
+	assert(!strtoken("12345", "1234", ' '));
+	assert(!strtoken("12345", "2345", ' '));
+	assert(!strtoken("12345", "234", ' '));
+	assert(strtoken("1234 123456 2345 123456 0123456 012345 12345 12345", "12345", ' '));
+	assert(strtoken("a b b", "a", ' '));
+	assert(strtoken("b a b", "a", ' '));
+	assert(strtoken("b b a", "a", ' '));
+	
+	//blank needle not allowed
+	//assert(!strtoken("a b c", "", ' '));
+	//assert(strtoken(" a b c", "", ' '));
+	//assert(strtoken("a  b c", "", ' '));
+	//assert(strtoken("a b c ", "", ' '));
+	//assert(strtoken("", "", ' '));
+	
+	assert(strtoken("aa", "aa", ','));
+	assert(!strtoken("aa", "a", ','));
+	assert(!strtoken("aa", "aaa", ','));
+	assert(strtoken("aa,aa,aa,aa", "aa", ','));
+	assert(!strtoken("aa,aa,aa,aa", "a", ','));
+	assert(!strtoken("aa,aa,aa,aa", "aaa", ','));
+	assert(!strtoken("12345", "1234", ','));
+	assert(!strtoken("12345", "2345", ','));
+	assert(!strtoken("12345", "234", ','));
+	assert(strtoken("1234,123456,2345,123456,0123456,012345,12345,12345", "12345", ','));
+	assert(strtoken("a,b,b", "a", ','));
+	assert(strtoken("b,a,b", "a", ','));
+	assert(strtoken("b,b,a", "a", ','));
+	
+	//assert(!strtoken("a,b,c", "", ','));
+	//assert(strtoken(",a,b,c", "", ','));
+	//assert(strtoken("a,,b,c", "", ','));
+	//assert(strtoken("a,b,c,", "", ','));
+	//assert(strtoken("", "", ','));
+}
+
+
 
 
 static void APIENTRY debug_cb(GLenum source, GLenum type, GLuint id, GLenum severity,

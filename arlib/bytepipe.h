@@ -36,6 +36,7 @@ public:
 	bytesw pull(size_t nbytes) { bytesw ret = pull_begin(nbytes); if (!ret) return ret; pull_finish(nbytes); return ret.slice(0, nbytes); }
 	// Returns one or more bytes. Usually more; O(1) calls will empty the bytepipe.
 	bytesw pull_any() { bytesw ret = pull_begin(); pull_finish(ret.size()); return ret; }
+	bytesw pull_all() { return pull(size()); }
 	
 	template<typename... Ts> void push_text(Ts... args)
 	{

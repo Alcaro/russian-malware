@@ -9,6 +9,16 @@
 #define DLLEXPORT extern "C" __attribute__((__visibility__("default")))
 #endif
 
+#ifdef __i386__
+// needs some extra shenanigans to kill the stdcall @12 suffix
+#define DLLEXPORT_STDCALL(ret, name, args) \
+	__asm__(".section .drectve; .ascii \" -export:" #name "\"; .text"); \
+	extern "C" ret __stdcall name args __asm__("_" #name); \
+	extern "C" ret __stdcall name args
+#else
+#define DLLEXPORT_STDCALL(ret, name, args) DLLEXPORT ret __stdcall name args
+#endif
+
 class dylib : nocopy {
 	void* handle = NULL;
 	

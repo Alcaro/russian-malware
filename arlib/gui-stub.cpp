@@ -10,8 +10,10 @@ bool arlib_try_init();
 
 static void init_gui_shared_early()
 {
-	gtk_disable_setlocale(); // go away, you're a library like any other and have no right to mess with libc config
-	// locale plus libraries is a terrible combination, it uglifies debug printfs and breaks everything that didn't reinvent strtod/sprintf
+	// gtk does not want to be an optional library; it wants to be the foundation that everything else is built on
+	// but I want to use it as a library, and my want is stronger, and this piece makes it slightly less intrusive
+	gtk_disable_setlocale();
+	// C locale is terribly designed anyways, it uglifies debug printfs and breaks everything that didn't reinvent strtod/sprintf
 	// for more details, see https://github.com/mpv-player/mpv/commit/1e70e82baa9193f6f027338b0fab0f5078971fbe
 }
 

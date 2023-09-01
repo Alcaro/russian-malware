@@ -94,6 +94,7 @@ public:
 	void str(cstring s);
 	template<typename T>
 	void num(T n) requires (std::is_arithmetic_v<T> && !std::is_same_v<T,bool>) { comma(); m_data += tostring(n); }
+	void num_unsafe(cstring n) { comma(); m_data += n; } // The string must be a valid output from an appropriate tostring function.
 	void list_enter();
 	void list_exit();
 	void map_enter();
@@ -112,61 +113,56 @@ public:
 
 
 
-class JSON : nocopy {
-	friend class JSONw;
+class JSONw : nocopy {
 	
-	int m_action;
-	string m_str;
-	double m_num = 0;
-	array<JSON> m_chld_list;
-	map<string,JSON> m_chld_map;
+	variant_idx<void, void, void, void, string, string, array<JSONw>, void, map<string,JSONw>, void, void, void, void> content;
+	
+	template<int idx, typename... Ts> void set_to(Ts... args)
+	{
+		content.destruct_any();
+		content.construct<idx>(args...);
+	}
 	
 	void construct(jsonparser& p, jsonparser::event& ev, bool* ok, size_t maxdepth);
 	template<bool sort> void serialize(jsonwriter& w) const;
 	
-	static JSON c_null;
-	
-	const JSON& get_from_list(size_t idx) const
-	{
-		if (idx >= m_chld_list.size()) return c_null;
-		return m_chld_list[idx];
-	}
-	JSON& get_from_list(size_t idx)
-	{
-		if (idx >= m_chld_list.size()) return c_null;
-		return m_chld_list[idx];
-	}
+	static JSONw c_null;
+	static map<string,JSONw> c_null_map;
 	
 public:
-	JSON() : m_action(jsonparser::jnull) {}
-	explicit JSON(string s) { parse(s); }
+	JSONw() { content.construct<jsonparser::unset>(); }
+	explicit JSONw(string s) { parse(s); }
 	
 	bool parse(string s);
 	string serialize(int indent = 0) const;
 	string serialize_sorted(int indent = 0) const;
 	
-	int type() const { return m_action; }
+	int type() const { return content.type(); }
 	
-	double num() const { return m_num; } // This struct handles double only. If you need int64, use serialize.h.
-	const string& str() const { return m_str; }
-	arrayview<JSON> list() const { return m_chld_list; }
-	const map<string,JSON>& assoc() const { return m_chld_map; }
-	//pointless overloads to allow for (JSON& item : json.list()) without an extra const
-	arrayvieww<JSON> list() { return m_chld_list; }
-	map<string,JSON>& assoc() { return m_chld_map; } // the name 'map' is taken, have to use something else
+	template<typename T = double>
+	T num() const { return content.contains<jsonparser::num>() ? try_fromstring<T>(content.get<jsonparser::num>()) : (T)0; }
+	cstrnul str() const { return content.contains<jsonparser::str>() ? (cstrnul)content.get<jsonparser::str>() : (cstrnul)""; }
+	arrayview<JSONw> list() const
+	{
+		return content.contains<jsonparser::enter_list>() ? (arrayview<JSONw>)content.get<jsonparser::enter_list>() : nullptr;
+	}
+	const map<string,JSONw>& assoc() const // the name 'map' is taken, have to use something else
+	{
+		return content.contains<jsonparser::enter_map>() ? content.get<jsonparser::enter_map>() : c_null_map;
+	}
 	
 	bool boolean() const
 	{
-		switch (m_action)
+		switch (content.type())
 		{
 		case jsonparser::unset: return false;
 		case jsonparser::jtrue: return true;
 		case jsonparser::jfalse: return false;
 		case jsonparser::jnull: return false;
-		case jsonparser::str: return m_str;
-		case jsonparser::num: return m_num;
-		case jsonparser::enter_list: return m_chld_list.size();
-		case jsonparser::enter_map: return m_chld_map.size();
+		case jsonparser::str: return content.get<jsonparser::str>();
+		case jsonparser::num: return try_fromstring<double>(content.get<jsonparser::num>());
+		case jsonparser::enter_list: return content.contains<jsonparser::enter_list>() && content.get<jsonparser::enter_list>().size();
+		case jsonparser::enter_map: return content.contains<jsonparser::enter_map>() && content.get<jsonparser::enter_map>().size();
 		case jsonparser::error: return false;
 		default: abort(); // unreachable
 		}
@@ -174,8 +170,8 @@ public:
 	
 	operator bool() const { return boolean(); }
 	operator double() const { return num(); }
-	operator const string&() const { return str(); }
-	operator cstring() const { return str(); }
+	//operator const string&() const { return str(); }
+	operator cstrnul() const { return str(); }
 	
 	bool operator==(double right) const { return num()==right; }
 	bool operator==(const char * right) const { return str()==right; }
@@ -194,66 +190,69 @@ public:
 	ALLINTS(JSONOPS)
 #undef JSONOPS
 	
-	const JSON& operator[](int n) const { return get_from_list(n); }
-	const JSON& operator[](size_t n) const { return get_from_list(n); }
-	const JSON& operator[](const char * s) const { return assoc().get_or(s, c_null); }
-	const JSON& operator[](cstring s) const { return assoc().get_or(s, c_null); }
+	const JSONw& operator[](int idx) const { return operator[]((size_t)idx); }
+	const JSONw& operator[](size_t idx) const
+	{
+		const array<JSONw>* list = content.try_get<jsonparser::enter_list>();
+		if (list && idx < list->size())
+			return list[0][idx];
+		else
+			return c_null;
+	}
+	const JSONw& operator[](const char * s) const { return assoc().get_or(s, c_null); }
+	const JSONw& operator[](cstring s) const { return assoc().get_or(s, c_null); }
 	
-	JSON& operator[](int n) { return get_from_list(n); }
-	JSON& operator[](size_t n) { return get_from_list(n); }
-	JSON& operator[](const char * s) { return assoc().get_or(s, c_null); }
-	JSON& operator[](cstring s) { return assoc().get_or(s, c_null); }
-	
-	const JSON& operator[](const JSON& right) const
+	const JSONw& operator[](const JSONw& right) const
 	{
 		if (right.type() == jsonparser::str) return assoc().get_or(right.str(), c_null);
 		else return list()[right.num()];
 	}
-	JSON& operator[](const JSON& right)
+	
+	array<JSONw>& list()
 	{
-		if (right.type() == jsonparser::str) return assoc().get_or(right.str(), c_null);
-		else return list()[right.num()];
+		if (!content.contains<jsonparser::enter_list>())
+			set_to<jsonparser::enter_list>();
+		return content.get<jsonparser::enter_list>();
 	}
-};
-
-class JSONw : public JSON {
-public:
-	double& num() { m_action = jsonparser::num; return m_num; }
-	string& str() { m_action = jsonparser::str; return m_str; }
-	array<JSON>& list() { m_action = jsonparser::enter_list; return m_chld_list; }
-	map<string,JSON>& assoc() { m_action = jsonparser::enter_map; return m_chld_map; }
+	map<string,JSONw>& assoc()
+	{
+		if (!content.contains<jsonparser::enter_map>())
+			set_to<jsonparser::enter_map>();
+		return content.get<jsonparser::enter_map>();
+	}
 	
-	operator double() { return num(); }
-	operator string&() { return str(); }
-	operator cstring() { return str(); }
+	//operator double() { return num(); }
+	//operator string&() { return str(); }
+	//operator cstring() { return str(); }
 	
-	JSONw& operator=(nullptr_t) { m_action = jsonparser::jnull; return *this; }
-	JSONw& operator=(bool b) { m_action = b ? jsonparser::jtrue : jsonparser::jfalse; return *this; }
-	JSONw& operator=(double n) { m_action = jsonparser::num; m_num = n; return *this; }
-	JSONw& operator=(cstring s) { m_action = jsonparser::str; m_str = s; return *this; }
-	JSONw& operator=(string s) { m_action = jsonparser::str; m_str = std::move(s); return *this; }
-	JSONw& operator=(const char * s) { m_action = jsonparser::str; m_str = s; return *this; }
+	JSONw& operator=(nullptr_t) { set_to<jsonparser::jnull>(); return *this; }
+	JSONw& operator=(bool b) { if (b) set_to<jsonparser::jtrue>(); else set_to<jsonparser::jfalse>(); return *this; }
+	JSONw& operator=(double n) { set_to<jsonparser::num>(tostring(n)); return *this; }
+	JSONw& operator=(cstring s) { set_to<jsonparser::str>(s); return *this; }
+	JSONw& operator=(string s) { set_to<jsonparser::str>(std::move(s)); return *this; }
+	JSONw& operator=(const char * s) { set_to<jsonparser::str>(s); return *this; }
 	
 #define JSONOPS(T) \
-		JSONw& operator=(T n) { return operator=((double)n); }
+		JSONw& operator=(T n) { set_to<jsonparser::num>(tostring(n)); return *this; }
 	ALLINTS(JSONOPS)
 #undef JSONOPS
 	
-	//these technically aren't JSONw, but they have same binary representation so close enough
-	JSONw& operator[](int n) { return operator[]((size_t)n); }
-	JSONw& operator[](size_t n)
+	JSONw& operator[](int idx) { return operator[]((size_t)idx); }
+	JSONw& operator[](size_t idx)
 	{
-		m_action = jsonparser::enter_list;
-		if (n == m_chld_list.size()) return *(JSONw*)&m_chld_list.append();
-		if (n < m_chld_list.size()) return *(JSONw*)&(list()[n]);
+		array<JSONw>& children = list();
+		if (idx == children.size()) return *(JSONw*)&children.append();
+		if (idx < children.size()) return *(JSONw*)&(children[idx]);
 		abort();
 	}
 	JSONw& operator[](const char * s) { return *(JSONw*)&(assoc().get_create(s)); }
 	JSONw& operator[](cstring s) { return *(JSONw*)&(assoc().get_create(s)); }
 	
-	JSONw& operator[](const JSON& right)
+	JSONw& operator[](const JSONw& right)
 	{
 		if (right.type() == jsonparser::str) return *(JSONw*)&(assoc().get_create(right.str()));
 		else return *(JSONw*)&(list()[right.num()]);
 	}
 };
+
+using JSON = const JSONw;

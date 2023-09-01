@@ -143,6 +143,20 @@ bool file::mkdir(cstring filename)
 }
 //#endif
 
+cstring file2::line_reader::line()
+{
+	while (true)
+	{
+		bytesr ret = by.pull_line();
+		if (ret) return ret;
+		bytesw buf = by.push_begin(512);
+		size_t n = f->read(buf);
+		if (!n)
+			return by.pull_all();
+		by.push_finish(n);
+	}
+}
+
 bool file2::resize(off_t newsize, bytesr& map, bool writable, bool small)
 {
 	mmap_t::unmap(map, small);
@@ -236,8 +250,8 @@ test("file reading", "array", "file")
 	assert(file::dirname(READONLY_FILE).endswith("/"));
 	
 #ifdef _WIN32
-	char prev_dir[MAX_PATH];
-	assert(GetCurrentDirectory(MAX_PATH, prev_dir));
+	wchar_t prev_dir[MAX_PATH];
+	assert(GetCurrentDirectoryW(MAX_PATH, prev_dir));
 	assert(SetCurrentDirectory("C:/Windows/"));
 	assert(f.open("notepad.exe"));
 	assert(f.open("C:/Windows/notepad.exe"));
@@ -245,21 +259,17 @@ test("file reading", "array", "file")
 	assert(!f.open("C:notepad.exe"));
 	assert(!f.open("/Windows/notepad.exe"));
 	assert(!f.open("C:\\Windows\\notepad.exe"));
-	assert(SetCurrentDirectory(prev_dir));
+	assert(SetCurrentDirectoryW(prev_dir));
 #endif
+	
+	assert_eq(cstring(file2::readall_array("test/smörgåsräka☃🤔.txt")), "smörgåsräka☃🤔\n");
 }
 
 test("file writing", "array", "file")
 {
 	file f;
 	
-	assert(!f.open(READONLY_FILE, file::m_wr_existing)); // keep this first, to ensure it doesn't shred anything if we're run as admin
-	assert(!f.open(READONLY_FILE, file::m_write));
-	assert(!f.open(READONLY_FILE, file::m_replace));
-	assert(!f.open(READONLY_FILE, file::m_create_excl));
-	
-	assert( file::unlink(WRITABLE_FILE));
-	assert(!file::unlink(READONLY_FILE));
+	assert(file::unlink(WRITABLE_FILE));
 	
 	assert(!f.open(WRITABLE_FILE));
 	
@@ -313,6 +323,12 @@ test("file writing", "array", "file")
 	f.close();
 	assert(file::unlink(WRITABLE_FILE));
 	assert(file::unlink(WRITABLE_FILE)); // ensure it properly deals with unlinking a nonexistent file
+	
+	assert(!f.open(READONLY_FILE, file::m_wr_existing)); // keep this first, to ensure it doesn't shred anything if we're run as admin
+	assert(!f.open(READONLY_FILE, file::m_write));
+	assert(!f.open(READONLY_FILE, file::m_replace));
+	assert(!f.open(READONLY_FILE, file::m_create_excl));
+	assert(!file::unlink(READONLY_FILE));
 }
 
 test("in-memory files", "array", "file")
@@ -437,7 +453,7 @@ test("file::sanitize_rel_path", "array,string", "")
 	testcall(path_safe("arlib/"));
 	testcall(path_safe("arlib/deps/"));
 	testcall(path_safe("arlib/string.h"));
-	testcall(path_safe("smörgåsräka.txt"));
+	testcall(path_safe("smörgåsräka☃🤔.txt"));
 	testcall(path_safe("arlib/.gitignore"));
 	testcall(path_safe("arlib/extensionless."));
 	testcall(path_safe("foo bar.txt"));

@@ -93,8 +93,8 @@ void srand(unsigned) __attribute__((deprecated("g_rand doesn't need this")));
 #endif
 
 #ifdef STDOUT_ERROR
-#define puts(x) cant_use_stdout_without_a_console
-#define printf(x, ...) cant_use_stdout_without_a_console
+#define puts(x) cant_use_stdout_without_a_terminal
+#define printf(x, ...) cant_use_stdout_without_a_terminal
 #endif
 
 #ifdef _MSC_VER
@@ -108,7 +108,11 @@ void srand(unsigned) __attribute__((deprecated("g_rand doesn't need this")));
 // in case something is technically undefined behavior, but works as long as compiler can't prove anything
 template<typename T> T launder(T v)
 {
+#ifdef __clang__
+	__asm__ volatile("" :: "g"(v) : "memory");
+#else
 	__asm__("" : "+g"(v));
+#endif
 	return v;
 }
 
@@ -451,14 +455,14 @@ class variant {
 	template<typename T> static constexpr size_t my_alignof()
 	{
 		if constexpr (std::is_same_v<T, void>)
-			return 0;
+			return 1;
 		else
 			return alignof(T);
 	}
 	template<typename T> static constexpr size_t my_padded_sizeof()
 	{
 		if constexpr (std::is_same_v<T, void>)
-			return 0;
+			return 1;
 		else
 			return alignof(T)+sizeof(T);
 	}
@@ -485,7 +489,7 @@ class variant {
 	template<int n, typename T, typename... Tsi>
 	void destruct_all()
 	{
-		if (state_id() == n+1)
+		if (state_id() == n)
 		{
 			if constexpr (!std::is_same_v<T, void>)
 				buf_for<T>()->~T();
@@ -494,7 +498,7 @@ class variant {
 			destruct_all<n+1, Tsi...>();
 	}
 public:
-	bool empty() { return state_id() == 0; }
+	bool empty() { return state_id() == -1; }
 	
 	template<typename T>
 	bool contains()
@@ -518,7 +522,7 @@ public:
 	void construct(Tsi&&... args)
 	{
 #ifndef ARLIB_OPT
-		if (state_id() != 0)
+		if (state_id() != -1)
 			abort();
 #endif
 		state_id() = state_for<T>();
@@ -534,7 +538,7 @@ public:
 		assert_contains<T>();
 		if constexpr (!std::is_same_v<T, void>)
 			buf_for<T>()->~T();
-		state_id() = 0;
+		state_id() = -1;
 	}
 	
 	// Extracts the given contents, then deletes it from this object.
@@ -546,7 +550,7 @@ public:
 		T ret = std::move(*obj);
 		if constexpr (!std::is_same_v<T, void>)
 			obj->~T();
-		state_id() = 0;
+		state_id() = -1;
 		return ret;
 	}
 	
@@ -554,24 +558,181 @@ public:
 	void destruct_any()
 	{
 		destruct_all<0, Ts...>();
-		state_id() = 0;
+		state_id() = -1;
 	}
 	
-	variant() { state_id() = 0; }
+	variant() { state_id() = -1; }
 	variant(const variant&) = delete;
 	variant(variant&& other)
 	{
 		memcpy(buf, other.buf, sizeof(buf));
-		other.state_id() = 0;
+		other.state_id() = -1;
 	}
 	variant& operator=(const variant& other) = delete;
 	variant& operator=(variant&& other)
 	{
 		memcpy(buf, other.buf, sizeof(buf));
-		other.state_id() = 0;
+		other.state_id() = -1;
 		return *this;
 	}
 	~variant()
+	{
+		destruct_all<0, Ts...>();
+	}
+};
+
+// Alternate version of the above that uses indices, not types, as identifiers. As such, duplicates are legal.
+template<typename... Ts>
+class variant_idx {
+	template<char idx, typename T, typename... Tsi>
+	struct type_for_impl {
+		using type = typename type_for_impl<idx-1, Tsi...>::type;
+	};
+	template<typename T, typename... Tsi>
+	struct type_for_impl<0, T, Tsi...> {
+		using type = T;
+	};
+	template<char idx> using type_for = typename type_for_impl<idx, Ts...>::type;
+	
+	template<typename T> static constexpr size_t my_alignof()
+	{
+		if constexpr (std::is_same_v<T, void>)
+			return 1;
+		else
+			return alignof(T);
+	}
+	template<typename T> static constexpr size_t my_padded_sizeof()
+	{
+		if constexpr (std::is_same_v<T, void>)
+			return 1;
+		else
+			return alignof(T)+sizeof(T);
+	}
+	
+	alignas(max(my_alignof<Ts>()...)) char buf[max(my_padded_sizeof<Ts>()...)];
+	char& state_id() { return buf[0]; }
+	char state_id() const { return buf[0]; }
+	template<typename T> T* buf_for() { return (T*)(buf+alignof(T)); }
+	template<typename T> const T* buf_for() const { return (T*)(buf+alignof(T)); }
+	template<char idx> type_for<idx>* buf_for_idx() { return buf_for<type_for<idx>>();; }
+	template<char idx> const type_for<idx>* buf_for_idx() const { return buf_for<type_for<idx>>();; }
+	
+	
+	template<char idx>
+	forceinline void assert_contains() const
+	{
+#ifndef ARLIB_OPT
+		if (idx != state_id())
+			abort();
+#endif
+	}
+	
+	template<int n>
+	void destruct_all()
+	{
+	}
+	template<int n, typename T, typename... Tsi>
+	void destruct_all()
+	{
+		if (state_id() == n)
+		{
+			if constexpr (!std::is_same_v<T, void>)
+				buf_for<T>()->~T();
+		}
+		else
+			destruct_all<n+1, Tsi...>();
+	}
+public:
+	int type() const { return state_id(); }
+	bool empty() const { return state_id() == -1; }
+	
+	template<char idx>
+	bool contains() const
+	{
+		return state_id() == idx;
+	}
+	
+	template<char idx>
+	type_for<idx>& get() { assert_contains<idx>(); return *buf_for_idx<idx>(); }
+	
+	template<char idx>
+	const type_for<idx>& get() const { assert_contains<idx>(); return *buf_for_idx<idx>(); }
+	
+	template<char idx>
+	type_for<idx>* try_get()
+	{
+		if (contains<idx>())
+			return buf_for_idx<idx>();
+		else
+			return nullptr;
+	}
+	
+	template<char idx>
+	const type_for<idx>* try_get() const
+	{
+		if (contains<idx>())
+			return buf_for_idx<idx>();
+		else
+			return nullptr;
+	}
+	
+	template<char idx, typename... Tsi>
+	void construct(Tsi&&... args)
+	{
+#ifndef ARLIB_OPT
+		if (state_id() != -1)
+			abort();
+#endif
+		state_id() = idx;
+		if constexpr (!std::is_same_v<type_for<idx>, void>)
+			new(buf_for_idx<idx>()) type_for<idx>(std::forward<Tsi>(args)...);
+		else
+			static_assert(sizeof...(Tsi) == 0);
+	}
+	
+	template<char idx>
+	void destruct()
+	{
+		assert_contains<idx>();
+		if constexpr (!std::is_same_v<type_for<idx>, void>)
+			buf_for_idx<idx>()->~type_for<idx>();
+		state_id() = -1;
+	}
+	
+	// Extracts the given contents, then deletes it from this object.
+	template<char idx>
+	type_for<idx> get_destruct()
+	{
+		assert_contains<idx>();
+		type_for<idx>* obj = buf_for_idx<idx>();
+		type_for<idx> ret = std::move(*obj);
+		obj->~type_for<idx>();
+		state_id() = -1;
+		return ret;
+	}
+	
+	// Clear out the object's contents, no matter what it is.
+	void destruct_any()
+	{
+		destruct_all<0, Ts...>();
+		state_id() = -1;
+	}
+	
+	variant_idx() { state_id() = -1; }
+	variant_idx(const variant_idx&) = delete;
+	variant_idx(variant_idx&& other)
+	{
+		memcpy(buf, other.buf, sizeof(buf));
+		other.state_id() = -1;
+	}
+	variant_idx& operator=(const variant_idx& other) = delete;
+	variant_idx& operator=(variant_idx&& other)
+	{
+		memcpy(buf, other.buf, sizeof(buf));
+		other.state_id() = -1;
+		return *this;
+	}
+	~variant_idx()
 	{
 		destruct_all<0, Ts...>();
 	}
@@ -988,6 +1149,10 @@ template<typename Tc, typename Ti> Tc* container_of(Ti* ptr, Ti Tc:: * memb)
 	fake_object = launder(fake_object); // especially across an asm (both gcc and clang will optimize out the fake pointer)
 	size_t offset = (uintptr_t)&(fake_object->*memb) - (uintptr_t)fake_object;
 	return (Tc*)((uint8_t*)ptr - offset);
+}
+template<typename Tc, typename Ti> const Tc* container_of(const Ti* ptr, Ti Tc:: * memb)
+{
+	return container_of<Tc, Ti>((Ti*)ptr, memb);
 }
 template<auto memb, typename Ti> auto container_of(Ti* ptr) { return container_of(ptr, memb); }
 

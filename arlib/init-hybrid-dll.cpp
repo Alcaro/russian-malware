@@ -4,6 +4,7 @@
 #include <windows.h>
 #include <winternl.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "simd.h"
 #include "thread/atomic.h"
@@ -57,7 +58,7 @@ size_t strlen(const char * a)
 }
 
 
-PEB* get_peb()
+PEB* pe_get_peb()
 {
 	// PEB is available in TEB
 	PEB* peb;
@@ -83,7 +84,7 @@ HMODULE pe_get_ntdll()
 	// (kernel32 is probably also always present, but I don't think that's guaranteed, and I don't need kernel32 anyways)
 	// only parts of the relevant structs are documented, so this is based on
 	// https://github.com/wine-mirror/wine/blob/master/include/winternl.h
-	PEB* peb = get_peb();
+	PEB* peb = pe_get_peb();
 	PEB_LDR_DATA* pld = peb->Ldr;
 	LDR_DATA_TABLE_ENTRY* ldte_exe = (LDR_DATA_TABLE_ENTRY*)pld->Reserved2[1];
 	LDR_DATA_TABLE_ENTRY* ldte_ntdll = (LDR_DATA_TABLE_ENTRY*)ldte_exe->Reserved1[0];
@@ -116,7 +117,6 @@ void* pe_get_proc_address(HMODULE mod, const char * name)
 	DWORD * name_off = (DWORD*)(base_addr + exports->AddressOfNames);
 	WORD * ordinal = (WORD*)(base_addr + exports->AddressOfNameOrdinals);
 	
-	// TODO: enable this (if I find one, mingw prefers names)
 	//if ((uintptr_t)name < 0x10000) // ordinal
 	//{
 	//	size_t idx = (uintptr_t)name - exports->Base;
@@ -125,13 +125,17 @@ void* pe_get_proc_address(HMODULE mod, const char * name)
 	//	return base_addr + addr_off[idx];
 	//}
 	
-	// TODO: forwarder RVAs (if I find one, mingw resolves them when creating the exe/dll)
+	// forwarder RVAs are identified by the return value being inside the IMAGE_EXPORT_DIRECTORY section (size is IMAGE_DATA_DIRECTORY::Size)
+	// I can't support them here; even if I wanted to, the target could be lazy loaded and uninitialized
+	// doesn't matter either, it's not like ntdll has anything to forward to
 	
 	for (size_t i=0;i<exports->NumberOfNames;i++)
 	{
 		const char * exp_name = (const char*)(base_addr + name_off[i]);
 		if (streq(name, exp_name))
+		{
 			return base_addr + addr_off[ordinal[i]];
+		}
 	}
 	return NULL;
 }
@@ -146,11 +150,13 @@ struct ntdll_t {
 	NTSTATUS (NTAPI * LdrLoadDll)(const WCHAR * DirPath, uint32_t Flags, const UNICODE_STRING * ModuleFileName, HMODULE* ModuleHandle);
 	NTSTATUS (NTAPI * NtProtectVirtualMemory)(HANDLE process, void** addr_ptr, size_t* size_ptr, uint32_t new_prot, uint32_t* old_prot);
 	IMAGE_BASE_RELOCATION* (NTAPI * LdrProcessRelocationBlock)(void* page, unsigned count, uint16_t* relocs, intptr_t delta);
+	NTSTATUS (NTAPI * LdrGetProcedureAddress)(HMODULE module, const ANSI_STRING * name, ULONG ord, PVOID* address);
 };
 static const char ntdll_t_names[] =
 	"LdrLoadDll\0"
 	"NtProtectVirtualMemory\0"
 	"LdrProcessRelocationBlock\0"
+	"LdrGetProcedureAddress\0"
 	;
 
 void pe_get_ntdll_syms(ntdll_t* out, HMODULE this_mod)
@@ -183,7 +189,8 @@ void pe_process_imports(ntdll_t* ntdll, HMODULE mod)
 		UNICODE_STRING libname_us = { (uint16_t)((libname16iter-libname16)*sizeof(WCHAR)), sizeof(libname16), libname16 };
 		
 		HMODULE mod;
-		if (FAILED(ntdll->LdrLoadDll(NULL, 0, &libname_us, &mod))) mod = NULL;
+		if (FAILED(ntdll->LdrLoadDll(NULL, 0, &libname_us, &mod)))
+			mod = NULL;
 		
 		void* * out = (void**)(base_addr + imports->FirstThunk);
 		uintptr_t* thunks = (uintptr_t*)(base_addr + (imports->OriginalFirstThunk ? imports->OriginalFirstThunk : imports->FirstThunk));
@@ -191,7 +198,12 @@ void pe_process_imports(ntdll_t* ntdll, HMODULE mod)
 		while (*thunks)
 		{
 			IMAGE_IMPORT_BY_NAME* imp = (IMAGE_IMPORT_BY_NAME*)(base_addr + *thunks);
-			*out = pe_get_proc_address(mod, (char*)imp->Name);
+			const char * name = (char*)imp->Name;
+			ANSI_STRING name_wrap = { uint16_t(strlen(name)), uint16_t(strlen(name)+1), (char*)name };
+			// can't just pe_get_proc_address, it fails if the target is a forwarder RVA
+			// for example, on windows 10, advapi32!SystemFunction036 forwards to cryptbase!SystemFunction036
+			// the pe_get_ntdll_syms calls should be safe, there's nothing for ntdll to forward to
+			ntdll->LdrGetProcedureAddress(mod, &name_wrap, 0, out);
 			thunks++;
 			out++;
 		}
@@ -219,7 +231,7 @@ void pe_do_relocs(ntdll_t* ntdll, HMODULE mod)
 	for (uint16_t i=0;i<head_nt->FileHeader.NumberOfSections;i++)
 	{
 		// ideally, there should be no relocations in .text, so we can just skip that section
-		// in practice, __CTOR_LIST__ is there, and possibly some others (lots of others on i386, but i386 is currently unsupported anyways)
+		// in practice, __CTOR_LIST__ is there, and possibly some others (lots of others on i386)
 		// (no clue why, it makes more sense in .rdata, or as a sequence of call instructions rather than pointers)
 		// the easiest solution is to just mark everything PAGE_EXECUTE_READWRITE instead of PAGE_READWRITE
 		// we're already deep into shenanigans territory, a W^X violation is nothing to worry about
@@ -293,7 +305,7 @@ static void run_static_ctors()
 	// maybe less platform dependent, maybe they want same mechanism for ctors and dtors (which run in opposite order)
 	do {
 		iter--;
-		(*iter)(); 
+		(*iter)();
 	} while (iter != end);
 }
 

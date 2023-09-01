@@ -274,9 +274,9 @@ static bool test_needs(testlist* a, testlist* b)
 {
 	if (!*a->needs) return false;
 	if (!*b->provides) return false;
-	//kinda funny code to avoid using Arlib features before they're tested
-	//except strtoken, but even in the worst case, I can just revert it or set this to 'return false'
-	return strtoken(a->needs, b->provides, ',');
+	// kinda weird to use Arlib features before they're tested
+	// but if it screws up, I can just set it to 'return false'
+	return string(a->needs).split(",").contains(b->provides);
 }
 
 //whether 'a' must be before any test in 'list'

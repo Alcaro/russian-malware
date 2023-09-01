@@ -189,7 +189,7 @@ void arlib_init_file()
 
 
 
-bool file2::open(cstrnul filename, mode m)
+bool file2::openat(int dirfd, cstrnul filename, mode m)
 {
 	reset();
 	static const int flags[] = {
@@ -199,7 +199,7 @@ bool file2::open(cstrnul filename, mode m)
 		O_RDWR|O_CREAT|O_TRUNC|O_CLOEXEC, // m_replace
 		O_RDWR|O_CREAT|O_EXCL |O_CLOEXEC  // m_create_excl
 	};
-	fd = ::open(filename, flags[m&7], 0644);
+	fd = ::openat(dirfd, filename, flags[m&7], 0644);
 	if (m & m_exclusive)
 	{
 		int op;
@@ -212,6 +212,11 @@ bool file2::open(cstrnul filename, mode m)
 	}
 	
 	return (fd >= 0);
+}
+
+bool file2::open(cstrnul filename, mode m)
+{
+	return openat(AT_FDCWD, filename, m);
 }
 
 #define SMALL_MAP 16384
@@ -251,5 +256,57 @@ void file2::mmap_t::unmap(bytesr& by, bool small)
 	else
 		munmap((uint8_t*)by.ptr(), by.size());
 	by = nullptr;
+}
+
+
+directory::directory(cstrnul path)
+{
+	if (file::path_corrupt(path))
+		return;
+	fd = open(path, O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY);
+	iter_next(true);
+}
+bool directory::dent_is_dir()
+{
+	dirent64* dent_raw = current_dirent64();
+	if (dent_raw->d_type == DT_DIR)
+		return true;
+	if (dent_raw->d_type == DT_REG)
+		return false;
+	struct stat st;
+	if (fstatat(fd, dent_raw->d_name, &st, 0) < 0)
+		return false;
+	return S_ISDIR(st.st_mode);
+}
+void directory::iter_next(bool initial)
+{
+	if (initial)
+		goto initial;
+again:
+	buf_at += current_dirent64()->d_reclen;
+	if (buf_at == buf_len)
+	{
+	initial:
+		buf_at = 0;
+		int len = getdents64(fd, buf, sizeof(buf));
+		if (len < 0)
+			len = 0;
+		buf_len = len;
+		if (len <= 0)
+			return;
+	}
+	const char * name = current_dirent64()->d_name;
+	if (name[0] == '.' && (name[1] == '\0' || (name[1] == '.' && name[2] == '\0')))
+		goto again;
+}
+file2 directory::open_file_inner(const char * path, file2::mode m)
+{
+	file2 ret;
+	ret.openat(fd, path, m);
+	return ret;
+}
+directory directory::open_dir_inner(const char * path)
+{
+	return directory(openat(fd, path, O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY));
 }
 #endif

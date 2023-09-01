@@ -1,6 +1,5 @@
 #pragma once
 #include "global.h"
-//#include "string.h"
 #include <compare>
 #include <time.h>
 #include <type_traits>
@@ -21,17 +20,6 @@ struct duration {
 	static duration ms(int ms) { return { ms/1000, ms%1000*1000000 }; }
 	int ms() { return sec*1000 + nsec/1000000; }
 	int64_t us() { return sec*1000000 + nsec/1000; }
-	
-	// Returns time since an unspecified point (can be system boot, can be Unix epoch, can be something else).
-	// May be more precise than timestamp::now(), and/or quicker to read; it's more suitable for speed tests and short timeouts.
-	// May also react differently from timestamp::now() if the system's clock changes, due to leap seconds or whatever.
-	static duration perfcounter()
-	{
-		static_assert(std::is_layout_compatible_v<struct timespec, duration>);
-		duration ret;
-		clock_gettime(CLOCK_MONOTONIC, (struct timespec*)&ret);
-		return ret;
-	}
 };
 struct timestamp {
 	time_t sec;

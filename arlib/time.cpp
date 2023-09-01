@@ -29,11 +29,35 @@ oninit_static()
 // force expand div by constant to mul+shift, gcc won't do that automatically on -Os
 inline uint64_t div10(uint64_t val)
 {
-	return ((unsigned __int128)val*0xCCCCCCCCCCCCCCCD)>>64>>3;
+#if SIZE_MAX > 0xFFFFFFFF // gcc doesn't support int128 on 32bit platforms
+	return ((unsigned __int128)val*0xCCCCCCCCCCCCCCCD) >> 64 >> 3;
+#else
+	return val/10;
+#endif
 }
 inline uint64_t div10000(uint64_t val)
 {
-	return ((unsigned __int128)val*0x346DC5D63886594B)>>64>>11;
+#if SIZE_MAX > 0xFFFFFFFF
+	return ((unsigned __int128)val*0x346DC5D63886594B) >> 64 >> 11;
+#else
+	return val/10000;
+#endif
+}
+inline uint64_t div24(uint64_t val)
+{
+#if SIZE_MAX > 0xFFFFFFFF
+	return ((unsigned __int128)val*0xaaaaaaaaaaaaaaab) >> 64 >> 4;
+#else
+	return val/24;
+#endif
+}
+inline uint64_t div24000(uint64_t val)
+{
+#if SIZE_MAX > 0xFFFFFFFF
+	return ((unsigned __int128)val*0xaec33e1f671529a5) >> 64 >> 14;
+#else
+	return val/24000;
+#endif
 }
 
 uint64_t timer::get_counter()
@@ -44,17 +68,29 @@ uint64_t timer::get_counter()
 }
 uint64_t timer::to_us(uint64_t count)
 {
+#ifdef __x86_64__
 	if (LIKELY(timer_freq.QuadPart == 10000000))
 		return div10(count);
-	else
-		return muldiv64(count, 1000000, timer_freq.QuadPart);
+	// frequency can be 24 million if on an ARM emulating x86, but they can just take the slow path.
+	// This function is mostly for benchmarking, benchmarking under emulation tests the emulator and nothing else.
+#endif
+#ifdef __aarch64__
+	if (LIKELY(timer_freq.QuadPart == 24000000))
+		return div24(count);
+#endif
+	return muldiv64(count, 1000000, timer_freq.QuadPart);
 }
 uint64_t timer::to_ms(uint64_t count)
 {
+#ifdef __x86_64__
 	if (LIKELY(timer_freq.QuadPart == 10000000))
 		return div10000(count);
-	else
-		return muldiv64(count, 1000, timer_freq.QuadPart);
+#endif
+#ifdef __aarch64__
+	if (LIKELY(timer_freq.QuadPart == 24000000))
+		return div24000(count);
+#endif
+	return muldiv64(count, 1000, timer_freq.QuadPart);
 }
 
 #define WINDOWS_TICK 10000000

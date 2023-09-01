@@ -379,7 +379,8 @@ obj/resources.h: arlib/rescompile.py resources resources/* | obj
 obj/resources.cpp: obj/resources.h
     # if this recipe is empty, Make doesn't rebuild things depending on resources.cpp
     # and if both obj/resources.* have the above recipe, Make runs it twice
-	@true
+    # (@ because don't care, - because true isn't a thing on windows)
+	-@true
   DEPS_DEFAULT += obj/resources.h
 endif
 

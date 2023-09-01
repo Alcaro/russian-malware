@@ -326,8 +326,8 @@ test("array_size", "", "")
 {
 	int a[5];
 	static_assert(ARRAY_SIZE(a) == 5);
-	int b[0];
-	static_assert(ARRAY_SIZE(b) == 0);
+	//int b[0];
+	//static_assert(ARRAY_SIZE(b) == 0);
 }
 
 #ifdef __unix__

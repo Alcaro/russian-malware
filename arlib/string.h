@@ -115,12 +115,12 @@ class cstring {
 		else return m_data;
 	}
 	
-	forceinline arrayvieww<uint8_t> bytes_raw() const
+	forceinline bytesw bytes_raw() const
 	{
 		if (inlined())
-			return arrayvieww<uint8_t>((uint8_t*)m_inline, len_if_inline());
+			return bytesw((uint8_t*)m_inline, len_if_inline());
 		else
-			return arrayvieww<uint8_t>(m_data, m_len);
+			return bytesw(m_data, m_len);
 	}
 	
 public:
@@ -130,7 +130,7 @@ public:
 		else return m_len;
 	}
 	
-	forceinline arrayview<uint8_t> bytes() const { return bytes_raw(); }
+	forceinline bytesr bytes() const { return bytes_raw(); }
 	//If this is true, bytes()[bytes().size()] is '\0'. If false, it's undefined behavior.
 	//this[this->length()] is always '\0', even if this is false.
 	forceinline bool bytes_hasterm() const
@@ -166,7 +166,7 @@ private:
 			m_nul = has_nul;
 		}
 	}
-	void init_from_nocopy(arrayview<uint8_t> data, bool has_nul = false) { init_from_nocopy(data.ptr(), data.size(), has_nul); }
+	void init_from_nocopy(bytesr data, bool has_nul = false) { init_from_nocopy(data.ptr(), data.size(), has_nul); }
 	void init_from_nocopy(const cstring& other) { *this = other; }
 	
 	// TODO: make some of these ctors constexpr, so gcc can optimize them into the data section (Clang already does)
@@ -181,11 +181,11 @@ public:
 	
 	cstring(const char * str) { init_from_nocopy(str); }
 	cstring(const char8_t * str) { init_from_nocopy((char*)str); }
-	cstring(arrayview<uint8_t> bytes) { init_from_nocopy(bytes); }
+	cstring(bytesr bytes) { init_from_nocopy(bytes); }
 	cstring(arrayview<char> chars) { init_from_nocopy(chars.reinterpret<uint8_t>()); }
 	cstring(nullptr_t) { init_empty(); }
 	// If has_nul, then bytes[bytes.size()] is zero. (Undefined behavior does not count as zero.)
-	cstring(arrayview<uint8_t> bytes, bool has_nul) { init_from_nocopy(bytes, has_nul); }
+	cstring(bytesr bytes, bool has_nul) { init_from_nocopy(bytes, has_nul); }
 	cstring& operator=(const cstring& other) = default;
 	cstring& operator=(const char * str) { init_from_nocopy(str); return *this; }
 	cstring& operator=(const char8_t * str) { init_from_nocopy((char*)str); return *this; }
@@ -207,7 +207,7 @@ public:
 	{
 		start = realpos(start);
 		end = realpos(end);
-		return cstring(arrayview<uint8_t>(ptr()+start, end-start), (bytes_hasterm() && (uint32_t)end == length()));
+		return cstring(bytesr(ptr()+start, end-start), (bytes_hasterm() && (uint32_t)end == length()));
 	}
 	
 	bool contains(cstring other) const
@@ -329,7 +329,7 @@ private:
 		bool do_free;
 	public:
 		
-		c_string(arrayview<uint8_t> data, bool has_term)
+		c_string(bytesr data, bool has_term)
 		{
 			if (has_term)
 			{
@@ -363,7 +363,7 @@ class cstrnul : public cstring {
 	
 	class has_nul {};
 	cstrnul(noinit) : cstring(noinit()) {}
-	cstrnul(arrayview<uint8_t> bytes, has_nul) : cstring(noinit()) { init_from_nocopy(bytes, true); }
+	cstrnul(bytesr bytes, has_nul) : cstring(noinit()) { init_from_nocopy(bytes, true); }
 	
 public:
 	cstrnul() { init_empty(); }
@@ -382,7 +382,7 @@ public:
 	cstrnul substr_nul(int32_t start) const
 	{
 		start = realpos(start);
-		return cstrnul(arrayview<uint8_t>(ptr()+start, length()-start), has_nul());
+		return cstrnul(bytesr(ptr()+start, length()-start), has_nul());
 	}
 };
 
@@ -415,7 +415,7 @@ class string : public cstrnul {
 		}
 		else init_from_outline(str, len);
 	}
-	forceinline void init_from(arrayview<uint8_t> data) { init_from(data.ptr(), data.size()); }
+	forceinline void init_from(bytesr data) { init_from(data.ptr(), data.size()); }
 	void init_from_outline(const uint8_t * str, size_t len);
 	void init_from_large(const uint8_t * str, size_t len);
 	void init_from(const cstring& other);
@@ -428,9 +428,9 @@ class string : public cstrnul {
 	void reinit_from(const char * str)
 	{
 		if (!str) str = "";
-		reinit_from(arrayview<uint8_t>((uint8_t*)str, strlen(str)));
+		reinit_from(bytesr((uint8_t*)str, strlen(str)));
 	}
-	void reinit_from(arrayview<uint8_t> data);
+	void reinit_from(bytesr data);
 	void reinit_from(cstring other)
 	{
 		reinit_from(other.bytes());
@@ -447,7 +447,7 @@ class string : public cstrnul {
 		if (!inlined()) free(m_data);
 	}
 	
-	void append(arrayview<uint8_t> newdat);
+	void append(bytesr newdat);
 	
 	void append(uint8_t newch)
 	{
@@ -458,7 +458,7 @@ class string : public cstrnul {
 	
 public:
 	//Resizes the string to a suitable size, then allows the caller to fill it in. Initial contents are undefined.
-	arrayvieww<uint8_t> construct(size_t len)
+	bytesw construct(size_t len)
 	{
 		resize(len);
 		return bytes();
@@ -466,7 +466,7 @@ public:
 	
 	string& operator+=(const char * right)
 	{
-		append(arrayview<uint8_t>((uint8_t*)right, strlen(right)));
+		append(bytesr((uint8_t*)right, strlen(right)));
 		return *this;
 	}
 	
@@ -499,7 +499,7 @@ public:
 	string(string&& other) : cstrnul(noinit()) { init_from(std::move(other)); }
 	
 	forceinline string(cstring other) : cstrnul(noinit()) { init_from(other); }
-	forceinline string(arrayview<uint8_t> bytes) : cstrnul(noinit()) { init_from(bytes); }
+	forceinline string(bytesr bytes) : cstrnul(noinit()) { init_from(bytes); }
 	forceinline string(arrayview<char> chars) : cstrnul(noinit()) { init_from(chars.reinterpret<uint8_t>()); }
 	forceinline string(const char * str) : cstrnul(noinit()) { init_from(str); }
 	forceinline string(const char8_t * str) : cstrnul(noinit()) { init_from((char*)str); }
@@ -520,15 +520,15 @@ public:
 	forceinline uint8_t& operator[](int index) { return ptr()[index]; }
 	forceinline uint8_t operator[](int index) const { return ptr()[index]; }
 	
-	forceinline arrayview<uint8_t> bytes() const { return bytes_raw(); }
-	forceinline arrayvieww<uint8_t> bytes() { return bytes_raw(); }
+	forceinline bytesr bytes() const { return bytes_raw(); }
+	forceinline bytesw bytes() { return bytes_raw(); }
 	
 	//Takes ownership of the given pointer. Will free() it when done.
 	static string create_usurp(char * str);
 	static string create_usurp(array<uint8_t>&& in) { return string(std::move(in)); }
 	
 	//Returns a string containing a single NUL.
-	static cstring nul() { return arrayview<uint8_t>((uint8_t*)"", 1); }
+	static cstring nul() { return bytesr((uint8_t*)"", 1); }
 	
 	//Returns U+FFFD for UTF16-reserved codepoints and other forbidden codepoints. 0 yields a NUL byte.
 	static string codepoint(uint32_t cp);
@@ -613,7 +613,7 @@ template<size_t N> inline bool operator==(const cstring& left, const char (&righ
 #endif
 }
 template<typename T, typename Ttest = std::enable_if_t<std::is_same_v<T,const char*> || std::is_same_v<T,char*>>>
-inline bool operator==(const cstring& left, T right) { return left.bytes() == arrayview<uint8_t>((uint8_t*)right, strlen(right)); }
+inline bool operator==(const cstring& left, T right) { return left.bytes() == bytesr((uint8_t*)right, strlen(right)); }
 #else
 forceinline bool operator==(const cstring& left, const char * right)
 {
@@ -625,7 +625,7 @@ forceinline bool operator==(const cstring& left, const char * right)
 		else
 			return (!left.inlined() && left.m_len == len && memeq(left.m_data, right, len));
 	}
-	else return left.bytes() == arrayview<uint8_t>((uint8_t*)right, len);
+	else return left.bytes() == bytesr((uint8_t*)right, len);
 }
 #endif
 
@@ -656,14 +656,42 @@ inline string operator+(string&& left, char right) = delete;
 inline string operator+(cstring left, char right) = delete;
 inline string operator+(char left, cstring right) = delete;
 
-//Checks if needle is one of the 'separator'-separated words in the haystack. The needle may not contain 'separator' or be empty.
-//For example, haystack "GL_EXT_FOO GL_EXT_BAR GL_EXT_QUUX" (with space as separator) contains needles
-// 'GL_EXT_FOO', 'GL_EXT_BAR' and 'GL_EXT_QUUX', but not 'GL_EXT_QUU'.
-bool strtoken(const char * haystack, const char * needle, char separator);
-
 template<typename T>
 cstring arrayview<T>::get_or(size_t n, const char * def) const
 {
 	if (n < count) return items[n];
 	else return def;
 };
+
+class smelly_string {
+	array<uint16_t> body;
+public:
+#ifdef _WIN32
+	smelly_string() {}
+	smelly_string(cstring utf8) : body(utf8_to_utf16(utf8)) { body.append('\0'); }
+	
+	uint16_t* resize(size_t len) { body.resize(len+1); body[len] = '\0'; return body.ptr(); }
+	
+	operator const uint16_t*() const { return body.ptr(); }
+	operator const wchar_t*() const { return (wchar_t*)body.ptr(); }
+	
+	operator string() const { return utf16_to_utf8(body.slice(0, body.size()-1)); }
+#endif
+	
+	static string ucs1_to_utf8(arrayview<uint8_t> ucs1);
+	static string utf16_to_utf8(arrayview<uint16_t> utf16);
+	static string utf16l_to_utf8(arrayview<uint8_t> utf16);
+	
+	// this specific function is so smelly I won't even bother implementing it on linux
+#ifdef _WIN32
+	static array<uint16_t> utf8_to_utf16(cstring utf8);
+#endif
+};
+
+#ifndef puts
+#ifdef _WIN32
+void puts(cstring str);
+#else
+inline void puts(cstring str) { fwrite(str.bytes().ptr(), 1, str.length(), stdout); fputc('\n', stdout); }
+#endif
+#endif

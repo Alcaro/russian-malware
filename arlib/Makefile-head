@@ -131,7 +131,7 @@ ifneq ($(SELFTEST),)
   OBJNAME := $(OBJNAME)-test
 endif
 
-OPTFLAGS += -Os -fomit-frame-pointer -fmerge-all-constants -fno-math-errno -fvisibility=hidden -fno-semantic-interposition
+OPTFLAGS += -Os -fomit-frame-pointer -fmerge-all-constants -fno-math-errno -fvisibility=hidden -fno-semantic-interposition -fno-trapping-math
 OPTFLAGS += -ffunction-sections
 # -fdata-sections inhibits some optimizations, and more importantly, turns .bss into .data on Windows
 # better split it to more .cpp files
@@ -159,6 +159,12 @@ ifeq ($(OS),windows)
     # for the 64bit div/mod functions
     # do this for 32bit only, so I notice if something else sneaks in
     CONF_LFLAGS += -static-libgcc
+    # https://en.wikipedia.org/wiki/X86_calling_conventions says i386 windows abi demands 4-byte alignment only, so gcc shouldn't assume 16
+    # x86_64 mingw with -m32 does the right thing, but i386 mingw does not
+    CONF_CFLAGS += -mpreferred-stack-boundary=2
+    # and for some reason, setting stack boundary seems to disable -fomit-frame-pointer, so re-set it
+    # setting this flag does not affect code that doesn't need stack alignment
+    OPTFLAGS += -mpreferred-stack-boundary=2 -fomit-frame-pointer
   endif
 endif
 OPTFLAGS += -DNDEBUG -DARLIB_OPT

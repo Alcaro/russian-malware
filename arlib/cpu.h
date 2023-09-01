@@ -22,6 +22,7 @@
 #  define __SSE__ 1
 #  define __SSE2__ 1
 # endif
+// msvc has a /d2archSSE42 flag, but I don't know if it sets any #defines. And I don't care too much about undocumented flags anyways.
 # ifdef __AVX__ // conveniently, msvc's AVX names match the GCC names
 #  define __SSE3__ 1
 #  define __SSSE3__ 1
@@ -185,13 +186,22 @@ extern uint32_t arlib_cpuid_l7ebx;
 # define runtime__CLFLUSHOPT__ (arlib_cpuid_l7ebx & 0x00800000)
 #endif
 
-// AVX512 is not implemented above, since I don't have a computer supporting that
-// (and, given the downclocking and given Linus' opinion on it, I'm not sure how future-proof AVX512 is)
 // half of the cpuid bits refer to hardware features only the kernel should care about, so they're absent above
-
 // the PKU/OSPKE features are usable in userspace, but only if enabled with syscalls, so better try it and see what kernel says
 // supported on Linux >= 4.9 (dec 2016), syscall wrappers in glibc >= 2.27 (feb 2018); also FreeBSD >= 13.0 (apr 2021)
-// as of jul 2021, Windows and OSX don't seem to support it
+// as of aug 2023, Windows doesn't seem to support it
+// (though Microsoft Research has done something with it https://www.microsoft.com/en-us/research/publication/libmpk-software-abstraction-for-intel-memory-protection-keys-intel-mpk/ )
+
+// AVX512 lives mostly in cpuid leaves I'm not loading, and given that AVX10 has been announced, AVX512 is not future-proof
+// I'm not touching 512 nor 10 until compiler devs reach an agreement on how to target 'x86-64-v4 but 256bit only', and similar
+
+// in theory, the avx512 features don't depend on each other (except F, and half of functions depend on VL plus something else)
+// in practice, it's a linear upgrade path; if it supports any of AVX512{F,CD,BW,DQ}, it supports all
+// then each generation upgrade gives you one of {VBMI,IFMA}, VNNI, BF16, {VPOPCNTDQ,VBMI2,BITALG}, FP16, (none)
+// (the VBMI2 step also adds VAES, GFNI and VPCLMULQDQ, outside of AVX512)
+// https://cdrdv2.intel.com/v1/dl/getContent/784343 The Converged Vector ISA: Intel Advanced Vector Extensions 10 Technical Paper
+// (oddly enough, the table does not contain AVX512VL, but since x86-64-v4 contains VL, I'm gonna guess it's part of the same group)
+// AMD supports everything up to the BITALG level in Zen 4, and nothing before that; as of aug 2023, no AMD chip supports FP16
 
 // x86-64: CMOV, CMPXCHG8B, FPU, FXSR, MMX, FXSR, SCE, SSE, SSE2
 // x86-64-v2: (close to Nehalem) CMPXCHG16B, LAHF-SAHF, POPCNT, SSE3, SSE4.1, SSE4.2, SSSE3
@@ -201,5 +211,4 @@ extern uint32_t arlib_cpuid_l7ebx;
 //  first four are because cache and crypto stuff may turn out insecure and disabled, don't want to lose the entire level
 //   https://gcc.gnu.org/pipermail/gcc/2020-July/233088.html
 //  unclear why ADX and PCLMUL are absent
-
 #endif

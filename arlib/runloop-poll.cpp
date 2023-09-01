@@ -1,4 +1,5 @@
-#ifdef __unix__
+#if defined(__unix__) && (defined(ARLIB_GUI_GTK3) || !__has_include(<glib.h>))
+// if GLib is included but ARGUI is disabled, using this thing is unwise; block it
 #include "runloop2.h"
 #include "array.h"
 #include <sys/poll.h>
@@ -9,9 +10,6 @@
 #ifdef ARLIB_GUI_GTK3
 #include <gtk/gtk.h>
 #define EXTRA_POLLFDS
-#endif
-#if __has_include(<glib.h>) && !defined(EXTRA_POLLFDS)
-#error unwise to use glib without enabling ARGUI
 #endif
 
 namespace {

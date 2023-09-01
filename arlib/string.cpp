@@ -2,6 +2,9 @@
 #include "test.h"
 #include "simd.h"
 #include "endian.h"
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 extern const uint8_t char_props[256] = {
 	//x0   x1   x2   x3   x4   x5   x6   x7   x8   x9   xA   xB   xC   xD   xE   xF
@@ -35,7 +38,7 @@ void string::resize(size_t newlen)
 			memcpy(newptr, m_inline, max_inline());
 			newptr[newlen] = '\0';
 			m_data = newptr;
-			m_len = newlen;
+			m_len = newlen; // can't overflow, xmalloc rejects anything above 2G
 			m_nul = true;
 			
 			m_inline_len_w() = -1;
@@ -95,7 +98,7 @@ void string::init_from(const cstring& other)
 		init_from_large(other.m_data, other.m_len);
 }
 
-void string::reinit_from(arrayview<uint8_t> data)
+void string::reinit_from(bytesr data)
 {
 	const uint8_t * str = data.ptr();
 	size_t len = data.size();
@@ -114,7 +117,7 @@ void string::reinit_from(arrayview<uint8_t> data)
 	}
 }
 
-void string::append(arrayview<uint8_t> newdat)
+void string::append(bytesr newdat)
 {
 	// cache these four, for performance
 	uint8_t* p1 = ptr();
@@ -317,10 +320,10 @@ array<cstring> cstring::csplit(cstring sep, size_t limit) const
 	{
 		const uint8_t * next = (uint8_t*)memmem(data, dataend-data, sep.ptr(), sep.length());
 		if (!next) break;
-		ret.append(arrayview<uint8_t>(data, next-data));
+		ret.append(bytesr(data, next-data));
 		data = next+sep.length();
 	}
-	ret.append(arrayview<uint8_t>(data, dataend-data));
+	ret.append(bytesr(data, dataend-data));
 	return ret;
 }
 
@@ -342,11 +345,11 @@ array<cstring> cstring::crsplit(cstring sep, size_t limit) const
 			if (datastart==next) goto done;
 			next--;
 		}
-		ret.insert(0, arrayview<uint8_t>(next+sepl, data-(next+sepl)));
+		ret.insert(0, bytesr(next+sepl, data-(next+sepl)));
 		data = next;
 	}
 done:
-	ret.insert(0, arrayview<uint8_t>(datastart, data-datastart));
+	ret.insert(0, bytesr(datastart, data-datastart));
 	return ret;
 }
 
@@ -361,11 +364,11 @@ array<cstring> cstring::cspliti(cstring sep, size_t limit) const
 	{
 		const uint8_t * next = (uint8_t*)memmem(data, dataend-data, sep.ptr(), sep.length());
 		if (!next) break;
-		ret.append(arrayview<uint8_t>(data, next-data+sep.length()));
+		ret.append(bytesr(data, next-data+sep.length()));
 		data = next+sep.length();
 	}
 	if (dataend != data)
-		ret.append(arrayview<uint8_t>(data, dataend-data));
+		ret.append(bytesr(data, dataend-data));
 	return ret;
 }
 
@@ -391,14 +394,14 @@ array<cstring> cstring::crspliti(cstring sep, size_t limit) const
 		}
 		size_t len = data - (next+sepl) + (data == ptr()+length() ? 0 : sepl);
 		if (len)
-			ret.insert(0, arrayview<uint8_t>(next+sepl, len));
+			ret.insert(0, bytesr(next+sepl, len));
 		outlen++;
 		data = next;
 	}
 done:
 	size_t len = data - datastart + (data == ptr()+length() ? 0 : sepl);
 	if (len)
-		ret.insert(0, arrayview<uint8_t>(datastart, len));
+		ret.insert(0, bytesr(datastart, len));
 	return ret;
 }
 
@@ -414,10 +417,10 @@ done:
 //		const uint8_t * next = data;
 //		while (next < dataend && !isspace(*next)) next++;
 //		if (next == dataend) break;
-//		ret.append(arrayview<uint8_t>(data, next-data));
+//		ret.append(bytesr(data, next-data));
 //		data = next+1;
 //	}
-//	ret.append(arrayview<uint8_t>(data, dataend-data));
+//	ret.append(bytesr(data, dataend-data));
 //	return ret;
 //}
 //
@@ -436,11 +439,11 @@ done:
 //			if (datastart==next) goto done;
 //			next--;
 //		}
-//		ret.insert(0, arrayview<uint8_t>(next+1, data-(next+1)));
+//		ret.insert(0, bytesr(next+1, data-(next+1)));
 //		data = next;
 //	}
 //done:
-//	ret.insert(0, arrayview<uint8_t>(datastart, data-datastart));
+//	ret.insert(0, bytesr(datastart, data-datastart));
 //	return ret;
 //}
 
@@ -464,11 +467,11 @@ array<cstring> cstring::csplit(bool(*find)(const uint8_t * start, const uint8_t 
 			continue;
 		}
 		
-		ret.append(arrayview<uint8_t>(gstart, mat-gstart));
+		ret.append(bytesr(gstart, mat-gstart));
 		gstart = mend;
 		at = gstart;
 	}
-	ret.append(arrayview<uint8_t>(gstart, dataend-gstart));
+	ret.append(bytesr(gstart, dataend-gstart));
 	return ret;
 }
 
@@ -838,50 +841,6 @@ test("ctype", "", "string")
 	}
 }
 
-test("strtoken", "", "string")
-{
-	assert(strtoken("aa", "aa", ' '));
-	assert(!strtoken("aa", "a", ' '));
-	assert(!strtoken("aa", "aaa", ' '));
-	assert(strtoken("aa aa aa aa", "aa", ' '));
-	assert(!strtoken("aa aa aa aa", "a", ' '));
-	assert(!strtoken("aa aa aa aa", "aaa", ' '));
-	assert(!strtoken("12345", "1234", ' '));
-	assert(!strtoken("12345", "2345", ' '));
-	assert(!strtoken("12345", "234", ' '));
-	assert(strtoken("1234 123456 2345 123456 0123456 012345 12345 12345", "12345", ' '));
-	assert(strtoken("a b b", "a", ' '));
-	assert(strtoken("b a b", "a", ' '));
-	assert(strtoken("b b a", "a", ' '));
-	
-	//blank needle not allowed
-	//assert(!strtoken("a b c", "", ' '));
-	//assert(strtoken(" a b c", "", ' '));
-	//assert(strtoken("a  b c", "", ' '));
-	//assert(strtoken("a b c ", "", ' '));
-	//assert(strtoken("", "", ' '));
-	
-	assert(strtoken("aa", "aa", ','));
-	assert(!strtoken("aa", "a", ','));
-	assert(!strtoken("aa", "aaa", ','));
-	assert(strtoken("aa,aa,aa,aa", "aa", ','));
-	assert(!strtoken("aa,aa,aa,aa", "a", ','));
-	assert(!strtoken("aa,aa,aa,aa", "aaa", ','));
-	assert(!strtoken("12345", "1234", ','));
-	assert(!strtoken("12345", "2345", ','));
-	assert(!strtoken("12345", "234", ','));
-	assert(strtoken("1234,123456,2345,123456,0123456,012345,12345,12345", "12345", ','));
-	assert(strtoken("a,b,b", "a", ','));
-	assert(strtoken("b,a,b", "a", ','));
-	assert(strtoken("b,b,a", "a", ','));
-	
-	//assert(!strtoken("a,b,c", "", ','));
-	//assert(strtoken(",a,b,c", "", ','));
-	//assert(strtoken("a,,b,c", "", ','));
-	//assert(strtoken("a,b,c,", "", ','));
-	//assert(strtoken("", "", ','));
-}
-
 test("string base", "array,memeq", "string")
 {
 	{
@@ -987,7 +946,7 @@ test("string base", "array,memeq", "string")
 	}
 	
 	{
-		arrayview<uint8_t> a((uint8_t*)"123", 3);
+		bytesr a((uint8_t*)"123", 3);
 		string b = "["+string(a)+"]";
 		string c = "["+cstring(a)+"]";
 		assert_eq(b, "[123]");
@@ -1119,11 +1078,11 @@ test("string base", "array,memeq", "string")
 	}
 	
 	{
-		cstring a(arrayview<uint8_t>((uint8_t*)"\0", 1));
+		cstring a(bytesr((uint8_t*)"\0", 1));
 		assert_eq(a.length(), 1);
 		assert_eq(a[0], '\0');
 		
-		cstring b(arrayview<uint8_t>((uint8_t*)"\0\0\0", 3));
+		cstring b(bytesr((uint8_t*)"\0\0\0", 3));
 		assert_eq(b.length(), 3);
 		assert_eq(b.replace(a, "ee"), "eeeeee");
 	}
@@ -1131,7 +1090,7 @@ test("string base", "array,memeq", "string")
 	{
 		assert(cstring().isutf8());
 		assert(cstring("abc").isutf8());
-		assert(cstring(arrayview<uint8_t>((uint8_t*)"\0", 1)).isutf8());
+		assert(cstring(bytesr((uint8_t*)"\0", 1)).isutf8());
 		assert(cstring("\xC2\xA9").isutf8());
 		assert(cstring("\xE2\x82\xAC").isutf8());
 		assert(cstring("\xF0\x9F\x80\xB0").isutf8());

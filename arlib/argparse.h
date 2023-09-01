@@ -117,6 +117,36 @@ public:
 	arg_file& add_file(            cstring name,                   string* target) { return add_file('\0',  name, NULL,       target); }
 	
 private:
+	class arg_filemany : public arg_t<arg_filemany> {
+		friend class argparse;
+		
+		arg_filemany(bool* has_target, array<string>* target) : arg_t(has_target, true), has_target(has_target), target(target) {}
+		~arg_filemany() {}
+		bool* has_target;
+		array<string>* target;
+		bool parse(bool has_value, cstring arg) override
+		{
+			if (has_target) *has_target = true;
+			if (has_value) target->append(file::sanitize_trusted_path(arg));
+			return true;
+		}
+	public:
+		//none
+	};
+public:
+	arg_filemany& add_file(char sname, cstring name, bool* has_target, array<string>* target)
+	{
+		arg_filemany* arg = new arg_filemany(has_target, target);
+		arg->name = name;
+		arg->sname = sname;
+		m_args.append_take(*arg);
+		return *arg;
+	}
+	arg_filemany& add_file(cstring name, bool* has_target, array<string>* target) { return add_file('\0',  name, has_target, target); }
+	arg_filemany& add_file(char sname, cstring name,       array<string>* target) { return add_file(sname, name, NULL,       target); }
+	arg_filemany& add_file(            cstring name,       array<string>* target) { return add_file('\0',  name, NULL,       target); }
+	
+private:
 	class arg_strmany : public arg_t<arg_strmany> {
 		friend class argparse;
 		

@@ -8,6 +8,6 @@ void terminal_enable();
 // Use only with ARTERMINAL=1.
 void terminal_pause_if_standalone(const char * msg = "Press any key to continue...");
 #else
-static inline void terminal_enable() {}
-static inline void terminal_pause_if_standalone(const char * msg = nullptr) {}
+inline void terminal_enable() {}
+inline void terminal_pause_if_standalone(const char * msg = nullptr) {}
 #endif

@@ -66,13 +66,15 @@ async<bytesr> websocket::msg(int* type, bool all)
 	
 again:
 	uint8_t type_raw = co_await sock.u8();
-	size_t size = co_await sock.u8();
-	if (size & 0x80) // the mask bit; https://datatracker.ietf.org/doc/html/rfc6455#section-5.1 says only client can set it
+	if ((type_raw&0xF0) != 0x80) // final fragment flag (if false, must concatenate with next fragment before returning); three reserved bits
 	{
 	fail:
 		sock = nullptr;
 		co_return nullptr;
 	}
+	size_t size = co_await sock.u8();
+	if (size & 0x80) // the mask bit; https://datatracker.ietf.org/doc/html/rfc6455#section-5.1 says only client can set it
+		goto fail;
 	
 	if (size == 126)
 	{
@@ -97,8 +99,9 @@ again:
 	if ((type_raw&0x0F) == t_close)
 	{
 		sock = nullptr;
-		by = nullptr; // TODO: keep this one alive a little longer, and return it
-		// but only if type != nullptr
+		if (type == nullptr)
+			by = nullptr;
+		by = nullptr; // TODO: find somewhere to keep this one alive a little longer (no server I'm aware of actually sends t_close, but...)
 	}
 	else if (type_raw & 0x08)
 	{

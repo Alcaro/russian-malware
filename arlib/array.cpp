@@ -231,6 +231,26 @@ test("array", "", "array")
 			b = std::move(a);
 		}
 	}
+	
+	// just ensure this compiles
+	{
+		arrayview<int> a;
+		arrayview<int> b(a);
+		arrayview<int> c = a;
+		c = a;
+		arrayview<const int> d = a;
+		arrayview<const int> e = d;
+		arrayview<int> f = e;
+		d = a;
+		f = e;
+	}
+	
+	{
+		struct chunk { int a; int b; int c; };
+		array<chunk> a;
+		a.append({ 1, 2, 3 });
+		a.append({ 1, 2 });
+	}
 }
 
 
@@ -306,7 +326,7 @@ test("bitarray", "", "array")
 	}
 }
 
-// these tests pass if they compiles
+// these tests pass if they compile
 inline arrayview<int> test_ret_arrayview()
 {
 	static const int y[4] = { 1, 2, 3, 4 };

@@ -82,6 +82,8 @@ uint64_t random_base_t<is_global>::rand_mod(uint64_t limit)
 	}
 }
 
+#include "stringconv.h"
+#include "endian.h"
 template class random_base_t<false>;
 #ifdef ARLIB_THREAD
 template class random_base_t<true>;

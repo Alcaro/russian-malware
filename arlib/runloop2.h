@@ -49,8 +49,8 @@ public:
 	bool has_waiter();
 	void moved(); // If you have an array<> of producer and need to resize it, do so, then call this function on every member.
 };
-// The member argument must point to your waiter within its containing class. The function can be any member with matching signature.
-template<waiter<T> Towner:: * memb, void(Towner::*fn_cancel)()>
+// The member argument must point to your producer within its containing class. The function can be any member with matching signature.
+template<producer<T> Towner:: * memb, void(Towner::*fn_cancel)()>
 producer_inner<T> make_producer();
 
 
@@ -815,6 +815,11 @@ public:
 	T* end() { return inner.end(); }
 };
 
+// A co_mutex stops multiple coroutines from running in the same critical section.
+// They will continue in the same order they stop, so you can send three HTTP requests to the same socket,
+//  enter a co_mutex, and read the responses.
+// Usable by coroutines only, not manual waiters.
+// Despite the name, it's not thread safe, but neither is any other runloop-related object.
 class co_mutex {
 public:
 	class lock {

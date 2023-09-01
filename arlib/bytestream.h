@@ -12,11 +12,11 @@ protected:
 	const uint8_t* end;
 	
 public:
-	static forceinline arrayview<uint8_t> to_signature(arrayview<uint8_t> sig) { return sig; }
+	static forceinline arrayview<uint8_t> to_signature(arrayview<uint8_t> sig)  { return sig; }
 	template<size_t N>
-	static forceinline arrayview<uint8_t> to_signature(uint8_t (&sig)[N])      { return { sig, N }; }
-	static forceinline arrayview<uint8_t> to_signature(cstring sig)            { return sig.bytes(); }
-	static forceinline arrayview<uint8_t> to_signature(const char * sig)       { return { (uint8_t*)sig, strlen(sig) }; }
+	static forceinline arrayview<uint8_t> to_signature(const uint8_t (&sig)[N]) { return { sig, N }; }
+	static forceinline arrayview<uint8_t> to_signature(cstring sig)             { return sig.bytes(); }
+	static forceinline arrayview<uint8_t> to_signature(const char * sig)        { return { (uint8_t*)sig, strlen(sig) }; }
 	template<typename... Ts>
 	static forceinline sarray<uint8_t, 1+sizeof...(Ts)>
 	to_signature(uint8_t first, Ts... next)
@@ -59,7 +59,7 @@ public:
 	}
 	
 	template<typename... Ts>
-	forceinline bool signature(Ts... args)
+	forceinline bool signature(Ts&&... args)
 	{
 		auto expected = bytestream::to_signature(args...);
 		if (expected.size() > remaining())
@@ -88,8 +88,8 @@ public:
 	forceinline uint16_t u16b() { return readu_be16(bytes(2).ptr()); }
 	forceinline uint32_t u32l() { return readu_le32(bytes(4).ptr()); }
 	forceinline uint32_t u32b() { return readu_be32(bytes(4).ptr()); }
-	forceinline uint32_t u64l() { return readu_le64(bytes(8).ptr()); }
-	forceinline uint32_t u64b() { return readu_be64(bytes(8).ptr()); }
+	forceinline uint64_t u64l() { return readu_le64(bytes(8).ptr()); }
+	forceinline uint64_t u64b() { return readu_be64(bytes(8).ptr()); }
 	
 	forceinline float f32l() { return readu_lef32(bytes(4).ptr()); }
 	forceinline float f32b() { return readu_bef32(bytes(4).ptr()); }

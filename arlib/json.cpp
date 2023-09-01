@@ -430,19 +430,23 @@ void jsonwriter::map_exit()
 
 
 
-JSON JSON::c_null;
+JSONw JSONw::c_null;
+map<string,JSONw> JSONw::c_null_map;
 
-void JSON::construct(jsonparser& p, jsonparser::event& ev, bool* ok, size_t maxdepth)
+void JSONw::construct(jsonparser& p, jsonparser::event& ev, bool* ok, size_t maxdepth)
 {
-	m_action = ev.action;
 	if(0);
-	else if (ev.action == jsonparser::str) m_str = ev.str;
-	else if (ev.action == jsonparser::num) fromstring(ev.str, m_num);
-	else if (ev.action == jsonparser::error) *ok = false;
+	else if (ev.action == jsonparser::unset) set_to<jsonparser::unset>();
+	else if (ev.action == jsonparser::jtrue) set_to<jsonparser::jtrue>();
+	else if (ev.action == jsonparser::jfalse) set_to<jsonparser::jfalse>();
+	else if (ev.action == jsonparser::jnull) set_to<jsonparser::jnull>();
+	else if (ev.action == jsonparser::str) set_to<jsonparser::str>(ev.str);
+	else if (ev.action == jsonparser::num) set_to<jsonparser::num>(ev.str);
+	else if (ev.action == jsonparser::error) { set_to<jsonparser::error>(); *ok = false; }
 	else if (maxdepth == 0)
 	{
+		set_to<jsonparser::error>();
 		*ok = false;
-		m_action = jsonparser::error;
 		if (ev.action == jsonparser::enter_list || ev.action == jsonparser::enter_map)
 		{
 			// it would be faster to reset the jsonparser somehow,
@@ -461,16 +465,20 @@ void JSON::construct(jsonparser& p, jsonparser::event& ev, bool* ok, size_t maxd
 	}
 	else if (ev.action == jsonparser::enter_list)
 	{
+		set_to<jsonparser::enter_list>();
+		array<JSONw>& children = content.get<jsonparser::enter_list>();
 		while (true)
 		{
 			jsonparser::event next = p.next();
 			if (next.action == jsonparser::exit_list) break;
 			if (next.action == jsonparser::error) *ok = false;
-			m_chld_list.append().construct(p, next, ok, maxdepth-1);
+			children.append().construct(p, next, ok, maxdepth-1);
 		}
 	}
 	else if (ev.action == jsonparser::enter_map)
 	{
+		set_to<jsonparser::enter_map>();
+		map<string,JSONw>& children = content.get<jsonparser::enter_map>();
 		while (true)
 		{
 			jsonparser::event next = p.next();
@@ -478,7 +486,7 @@ void JSON::construct(jsonparser& p, jsonparser::event& ev, bool* ok, size_t maxd
 			if (next.action == jsonparser::map_key)
 			{
 				jsonparser::event ev = p.next();
-				m_chld_map.insert(next.str).construct(p, ev, ok, maxdepth-1);
+				children.insert(next.str).construct(p, ev, ok, maxdepth-1);
 			}
 			if (next.action == jsonparser::error) *ok = false;
 		}
@@ -492,9 +500,6 @@ bool JSON::parse(string s)
 	if (this == &c_null)
 		abort();
 	
-	m_chld_list.reset();
-	m_chld_map.reset();
-	
 	jsonparser p(std::move(s));
 	bool ok = true;
 	jsonparser::event ev = p.next();
@@ -503,7 +508,9 @@ bool JSON::parse(string s)
 	ev = p.next();
 	if (!ok || ev.action != jsonparser::finish)
 	{
-		m_action = jsonparser::error;
+		// this discards the entire object
+		// but considering how rare damaged json is, that's acceptable
+		set_to<jsonparser::error>();
 		return false;
 	}
 	return true;
@@ -512,7 +519,7 @@ bool JSON::parse(string s)
 template<bool sort>
 void JSON::serialize(jsonwriter& w) const
 {
-	switch (m_action)
+	switch (type())
 	{
 	case jsonparser::unset:
 	case jsonparser::error:
@@ -526,28 +533,28 @@ void JSON::serialize(jsonwriter& w) const
 		w.boolean(false);
 		break;
 	case jsonparser::str:
-		w.str(m_str);
+		w.str(content.get<jsonparser::str>());
 		break;
 	case jsonparser::num:
-		if (m_num == (int)m_num) w.num((int)m_num);
-		else w.num(m_num);
+		w.num_unsafe(content.get<jsonparser::num>());
 		break;
 	case jsonparser::enter_list:
 		w.list_enter();
-		for (const JSON& j : m_chld_list) j.serialize<sort>(w);
+		for (const JSON& j : list())
+			j.serialize<sort>(w);
 		w.list_exit();
 		break;
 	case jsonparser::enter_map:
 		w.map_enter();
 		if (sort)
 		{
-			array<const map<string,JSON>::node*> items;
-			for (const map<string,JSON>::node& e : m_chld_map)
+			array<const map<string,JSONw>::node*> items;
+			for (const map<string,JSONw>::node& e : assoc())
 			{
 				items.append(&e);
 			}
-			items.ssort([](const map<string,JSON>::node* a, const map<string,JSON>::node* b) { return string::less(a->key, b->key); });
-			for (const map<string,JSON>::node* e : items)
+			items.ssort([](const map<string,JSONw>::node* a, const map<string,JSONw>::node* b) { return string::less(a->key, b->key); });
+			for (const map<string,JSONw>::node* e : items)
 			{
 				w.map_key(e->key);
 				e->value.serialize<sort>(w);
@@ -555,7 +562,7 @@ void JSON::serialize(jsonwriter& w) const
 		}
 		else
 		{
-			for (auto& e : m_chld_map)
+			for (const map<string,JSONw>::node& e : assoc())
 			{
 				w.map_key(e.key);
 				e.value.serialize<sort>(w);
@@ -878,34 +885,38 @@ test("JSON container", "string,array,set", "json")
 	
 	{
 		JSONw json;
-		json["a"].num() = 1;
-		json["b"].num() = 2;
-		json["c"].num() = 3;
-		json["d"].num() = 4;
-		json["e"].num() = 5;
-		json["f"].num() = 6;
-		json["g"].num() = 7;
-		json["h"].num() = 8;
-		json["i"].num() = 9;
+		json["a"] = 1;
+		json["b"] = 2;
+		json["c"] = 3;
+		json["d"] = 4;
+		json["e"] = 5;
+		json["f"] = 6;
+		json["g"] = 7;
+		json["h"] = 8;
+		json["i"] = 9;
 		assert_eq(json.serialize_sorted(), R"({"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8,"i":9})");
 		assert_ne(json.serialize(),        R"({"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8,"i":9})");
 	}
 	
 	{
 		JSONw json;
-		json["\x01\x02\x03\n\\n☃\""].str() = "\x01\x02\x03\n\\n☃\"";
+		json["\x01\x02\x03\n\\n☃\""] = "\x01\x02\x03\n\\n☃\"";
 		assert_eq(json.serialize(), R"({"\u0001\u0002\u0003\n\\n☃\"":"\u0001\u0002\u0003\n\\n☃\""})");
 	}
 	
 	{
 		JSONw json;
-		json[0].str() = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-		json[1].str() = "aaaaaaaa\"aaaaaaaaaaaaaaaaaaaaaaa";
-		json[2].str() = "aaaaaaaa\x1f""aaaaaaaaaaaaaaaaaaaaaaa";
-		json[3].str() = "aaaaaaaa aaaaaaaaaaaaaaaaaaaaaaa";
-		json[4].str() = "aaaaaaaa\\aaaaaaaaaaaaaaaaaaaaaaa";
+		json[0] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+		json[1] = "aaaaaaaa\"aaaaaaaaaaaaaaaaaaaaaaa";
+		json[2] = "aaaaaaaa\x1f""aaaaaaaaaaaaaaaaaaaaaaa";
+		json[3] = "aaaaaaaa aaaaaaaaaaaaaaaaaaaaaaa";
+		json[4] = "aaaaaaaa\\aaaaaaaaaaaaaaaaaaaaaaa";
+		json[5] = 123;
+		assert_eq((cstring)json[0], "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+		assert_eq((double)json[5], 123.0);
+		assert_eq((size_t)json[5], 123);
 		assert_eq(json.serialize(), R"(["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","aaaaaaaa\"aaaaaaaaaaaaaaaaaaaaaaa",)"
-		           R"("aaaaaaaa\u001Faaaaaaaaaaaaaaaaaaaaaaa","aaaaaaaa aaaaaaaaaaaaaaaaaaaaaaa","aaaaaaaa\\aaaaaaaaaaaaaaaaaaaaaaa"])");
+		           R"("aaaaaaaa\u001Faaaaaaaaaaaaaaaaaaaaaaa","aaaaaaaa aaaaaaaaaaaaaaaaaaaaaaa","aaaaaaaa\\aaaaaaaaaaaaaaaaaaaaaaa",123])");
 	}
 	
 	if (false) // disabled, JSON::construct runs through all 200000 events from the jsonparser which is slow

@@ -95,6 +95,8 @@ public:
 	//  I've never seen one in practice, not even in search-domain-enabled networks.
 	// The domain can be an IP address, and if so, will be resolved synchronously.
 	static async<address> dns(cstring domain);
+	// Like the above, but will parse a port number from the host, if present.
+	static async<address> dns_port(cstring host, uint16_t port);
 	
 	static async<autoptr<socket2>> create(address ip);
 #ifdef ARLIB_SSL

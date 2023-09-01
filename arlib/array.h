@@ -54,6 +54,17 @@ public:
 		this->count = 0;
 	}
 	
+	arrayview(const arrayview<std::remove_const_t<T>>& other)
+	{
+		this->items = (T*)other.ptr();
+		this->count = other.size();
+	}
+	arrayview(const arrayview<const T>& other)
+	{
+		this->items = (T*)other.ptr();
+		this->count = other.size();
+	}
+	
 	arrayview(const T * ptr, size_t count)
 	{
 		this->items = (T*)ptr;
@@ -416,14 +427,15 @@ private:
 		this->count = newcount;
 	}
 	
-	// it would be better if this thing didn't reallocate until it's a quarter of the original size
-	// but I don't store the allocated size, so that's hard
-	// there is malloc_usable_size (and similar), but it may or may not exist depending on the libc used
 	void resize_shrink_noinit(size_t newcount)
 	{
 		if (this->count <= newcount) return;
-		size_t new_bufsize = capacity_for(newcount);
-		if (this->count > new_bufsize) this->items = xrealloc(this->items, sizeof(T)*new_bufsize);
+		// only shrink when halfway between size buckets
+		// going back and forth between 256 and 257 will repeatedly grow to 512, but it already is 512 so that's a noop (on most mallocs)
+		// going back and forth between 170 and 171 will repeatedly shrink to 256, but that's a noop as well
+		// and going back and forth between 170 and 257 is so many operations the amortized cost of reallocations is O(1) per append
+		if (ilog2((newcount*3)|31) < ilog2((this->count*3)|31))
+			this->items = xrealloc(this->items, sizeof(T)*capacity_for(newcount));
 		this->count = newcount;
 	}
 	

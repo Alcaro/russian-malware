@@ -3,6 +3,7 @@
 #include "string.h"
 #include "array.h"
 #include "time.h"
+#include "bytepipe.h"
 #ifdef __unix__
 #include <unistd.h>
 #include <sys/uio.h>
@@ -127,10 +128,13 @@ public:
 	file2(cstrnul filename, mode m = m_read) { open(filename, m); }
 	~file2() { reset(); }
 	bool open(cstrnul filename, mode m = m_read);
+#ifdef __unix__
+	bool openat(fd_t dirfd, cstrnul filename, mode m = m_read);
+#endif
 	void close() { reset(); }
 	operator bool() const { return fd != null_fd; }
 	
-	void create_usurp(fd_t fd) { reset(); this->fd = fd; }
+	void open_usurp(fd_t fd) { reset(); this->fd = fd; }
 	fd_t peek_handle() { return this->fd; }
 	fd_t release_handle() { fd_t ret = this->fd; this->fd = null_fd; return ret; }
 	void create_dup(fd_t fd); // consider create_usurp() and release_handle(), if possible; they're faster
@@ -229,20 +233,31 @@ public:
 	
 	// Reads the entire file in a single function call. Generally not recommended, better use mmap().
 	// Max size is 16MB.
-	static bytearray readall_array(cstrnul filename)
+	bytearray readall_array()
 	{
-		file2 f(filename);
-		if (!f)
+		if (!*this)
 			return {};
-		size_t len = f.size();
-		if (len > 16*1024*1024)
+		size_t len = size();
+		if (len == 0 || len > 16*1024*1024)
 			return {};
 		bytearray ret;
 		ret.resize(len);
-		if (f.read(ret) != len)
+		if (read(ret) != len)
 			return {};
 		return ret;
 	}
+	static bytearray readall_array(cstrnul filename)
+	{
+		return file2(filename).readall_array();
+	}
+	
+	class line_reader {
+		file2* f;
+		bytepipe by;
+	public:
+		line_reader(file2& f) : f(&f) {}
+		cstring line();
+	};
 	
 	// Will always end with a slash.
 	static cstrnul dir_home();
@@ -250,6 +265,7 @@ public:
 	
 #undef null_fd
 };
+
 
 class file : nocopy {
 public:
@@ -495,8 +511,8 @@ public:
 	static string change_ext(cstring path, cstring new_ext); // new_ext should be ".bin" (can be blank)
 	
 	// Takes a byte sequence supposedly representing a relative file path from an untrusted source (for example a ZIP file).
-	// If it's a normal, relative path, it's returned unchanged; if it contains anything weird, it's purged.
-	// Output is guaranteed to be a relative file path without .. or other surprises.
+	// If it's a normal, relative path, it's returned unchanged; if it's absolute or contains .. components, something else is returned.
+	// The return value is a normal relative file path without .. or other surprises.
 	// Output may contain backslashes (Linux only) and spaces. foo/bar/../baz/ does not necessarily get transformed to foo/baz/.
 	static string sanitize_rel_path(string path);
 	
@@ -528,6 +544,17 @@ public:
 #else
 #error unimplemented
 #endif
+	}
+	static bool path_corrupt(cstring path)
+	{
+		if (path.contains_nul()) return true;
+		if (!path) return true;
+#ifdef _WIN32
+		if (path[0] == '/') return true; // TODO: this fails on network shares (\\?\, \\.\, and \??\ should be considered corrupt)
+		if (path[1] == ':' && path[2] != '/') return true;
+		if (path.contains("\\")) return true;
+#endif
+		return false;
 	}
 	
 	//Removes all possible ./ and ../ components, and duplicate slashes, while still referring to the same file.
@@ -573,4 +600,152 @@ public:
 	autommapw(file& f, size_t start, size_t end) : arrayvieww(f.mmapw(start, end)), f(f) {}
 	autommapw(file& f) : arrayvieww(f.mmapw()), f(f) {}
 	~autommapw() { f.unmapw(*this); }
+};
+
+
+class directory {
+#ifdef __linux__
+	int fd = -1;
+	
+	uint16_t buf_at;
+	uint16_t buf_len;
+	uint8_t buf[1024];
+	
+	bool fd_valid() { return fd >= 0; }
+	
+	// docs say this struct doesn't exist, but it does (but the dirent structure is bogus)
+	// docs also say d_off is 64-bit offset to next structure, but that's also wrong; in reality, its only usecase is argument to lseek
+	dirent64* current_dirent64()
+	{
+		return (dirent64*)(buf + buf_at);
+	}
+#endif
+#ifdef _WIN32
+	HANDLE fd = INVALID_HANDLE_VALUE;
+	string path;
+	WIN32_FIND_DATAA find;
+	
+	bool fd_valid() { return fd != INVALID_HANDLE_VALUE; }
+#endif
+	class dentry {
+		directory* parent() { return container_of<&directory::dent>(this); }
+		
+	public:
+		dentry() = default;
+		dentry(const dentry&) = delete;
+		
+		cstrnul name;
+		bool is_dir() { return parent()->dent_is_dir(); }
+	};
+	
+	class iterator {
+		directory* parent;
+		friend class directory;
+		
+	public:
+		iterator(directory* parent) : parent(parent) {}
+		
+		dentry& operator*() { return parent->iter_get(); }
+		void operator++() { parent->iter_next(false); }
+		bool operator!=(const end_iterator&) { return parent->iter_has(); }
+	};
+	
+	dentry dent;
+	
+	bool dent_is_dir();
+	
+	dentry& iter_get()
+	{
+#ifdef __linux__
+		const char * name = current_dirent64()->d_name;
+#endif
+#ifdef _WIN32
+		const char * name = find.cFileName;
+#endif
+		dent.name = name;
+		return dent;
+	}
+	
+	void iter_next(bool initial);
+	bool iter_has()
+	{
+#ifdef __linux__
+		return fd >= 0 && buf_len != 0;
+#endif
+#ifdef _WIN32
+		return fd != INVALID_HANDLE_VALUE;
+#endif
+	}
+	
+	void close_me()
+	{
+#ifdef __linux__
+		if (fd >= 0)
+			close(fd);
+#endif
+#ifdef _WIN32
+		if (fd != INVALID_HANDLE_VALUE)
+			FindClose(fd);
+#endif
+	}
+	
+	void usurp(directory& other)
+	{
+#ifdef __linux__
+		fd = other.fd;
+		other.fd = -1;
+		
+		buf_at = other.buf_at;
+		buf_len = other.buf_len;
+		memcpy(buf, other.buf, buf_len);
+#endif
+#ifdef _WIN32
+		fd = other.fd;
+		other.fd = INVALID_HANDLE_VALUE;
+		
+		path = std::move(other.path);
+		find = other.find;
+#endif
+	}
+	
+#ifdef __linux__
+	directory(int fd) : fd(fd) { iter_next(true); }
+#endif
+	
+	file2 open_file_inner(const char * path, file2::mode m = file2::m_read);
+	directory open_dir_inner(const char * path);
+public:
+	directory() {}
+	directory(cstrnul path);
+	directory(const directory&) = delete;
+	directory(directory&& other) { usurp(other); }
+	directory& operator=(const directory&) = delete;
+	directory& operator=(directory&& other) { close_me(); usurp(other); return *this; }
+	~directory() { close_me(); }
+	operator bool() { return fd_valid(); }
+	
+	file2 open_file(const dentry& dent, file2::mode m = file2::m_read)
+	{
+		return open_file_inner(dent.name, m);
+	}
+	file2 open_file(cstrnul path, file2::mode m = file2::m_read)
+	{
+		if (file::path_corrupt(path))
+			return {};
+		return open_file_inner(path, m);
+	}
+	directory open_dir(const dentry& dent)
+	{
+		return open_dir_inner(dent.name);
+	}
+	directory open_dir(cstrnul path)
+	{
+		if (file::path_corrupt(path))
+			return {};
+		return open_dir_inner(path);
+	}
+	
+	// Each directory object can only be iterated once. If you need to iterate again, use open_dir(".").
+	iterator begin() { return this; }
+	end_iterator end() { return {}; }
 };
