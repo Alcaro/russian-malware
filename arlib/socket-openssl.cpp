@@ -210,6 +210,7 @@ async<autoptr<socket2>> socket2::wrap_ssl_openssl(autoptr<socket2> inner, cstrin
 		int ret = SSL_connect(ossl->ssl);
 		if (ret > 0)
 			break;
+
 		ossl->process_ret(ret, dummy, ossl->recv_block);
 		if (!ossl->sock)
 			co_return nullptr;

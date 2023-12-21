@@ -104,7 +104,7 @@ public:
 
 
 void debug_log_exedir(); // Opens the debug log at the executable's directory. Will affect all applicable of the following.
-const uint8_t * debug_build_id(); // Returns a 16 bytes build ID.
+const uint8_t * debug_build_id(); // Returns a 16-byte build ID.
 void debug_log_exe_version(const char * friendly_name); // Prints build ID and some other stuff to the debug log.
 bool debug_break(const char * text); // If the process is run under a debugger, this triggers a breakpoint. Returns whether it did anything.
 void debug_log(const char * text); // This prints to stderr and a nearby file. The string should have a \n suffix.

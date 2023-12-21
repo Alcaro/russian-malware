@@ -120,12 +120,16 @@ public:
 #ifdef ENABLE_MSGPUMP
 		if (has_gui_events)
 		{
+			if (n_hs > MAXIMUM_WAIT_OBJECTS-1) // just ignore the excess ones; it's a poor solution,
+				n_hs = MAXIMUM_WAIT_OBJECTS-1; // but I haven't been able to find anything better, and I don't need it anyways
 			wait_ret = MsgWaitForMultipleObjectsEx(n_hs, hs, dur.ms(), QS_ALLEVENTS, MWMO_ALERTABLE|MWMO_INPUTAVAILABLE);
 			_window_process_events();
 		}
 		else
 #endif
 		{
+			if (n_hs > MAXIMUM_WAIT_OBJECTS)
+				n_hs = MAXIMUM_WAIT_OBJECTS;
 			if (n_hs == 0) { SleepEx(dur.ms(), true); wait_ret = WAIT_TIMEOUT; }
 			else wait_ret = WaitForMultipleObjectsEx(n_hs, hs, false, dur.ms(), true);
 		}

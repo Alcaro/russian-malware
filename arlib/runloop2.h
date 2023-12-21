@@ -127,12 +127,18 @@ namespace runloop2 {
 	async<void> await_write(int fd) { return await_fd(fd, true); }
 #endif
 #ifdef _WIN32
-	// Limited to MAXIMUM_WAIT_OBJECTS (63) because lol windows.
+	// Limited to MAXIMUM_WAIT_OBJECTS (64) because lol windows.
 	// OVERLAPPED and completion routines is often better,
-	//  but continuing to use a socket after cancelling an operation is undefined, also because lol windows.
+	//  but continuing to use a socket after cancelling an operation is undefined,
+	//  also because lol windows (and there's no completion routine for connecting a socket).
 	// I/O Completion Ports also exist, but they do (as far as I can determine) not interact with window messages in any way.
-	// If I need something with a huge number of HANDLEs, I'll either disassemble MsgWaitForMultipleObjects until I find the queue HANDLE,
-	//  make an alternate IOCP-based runloop backend and force any bulk processing onto a separate thread, or simply tell people to use Linux.
+	// If I need something with a huge number of HANDLEs, I'll do one of
+	// - disassemble MsgWaitForMultipleObjects until I find the queue HANDLE
+	// - make an alternate IOCP-based runloop backend and force any bulk processing onto a separate thread
+	// - spawn a thread whose job is to wait for an IOCP, and wake main thread whenever anything happens
+	// - switch to WSARecv's completion routines and hope nobody's trying to connect 64 sockets simultaneously
+	// - make an IOCP-based backend and use AttachThreadInput on a side thread to wake main when receiving a window message (if it works)
+	// - or simply tell people to use Linux.
 	async<void> await_handle(HANDLE h);
 #endif
 	
@@ -904,7 +910,7 @@ public:
 		if (the_lock)
 			the_lock->parent = nullptr;
 #ifndef ARLIB_OPT
-		if (first) // allow deleting the coro while someone has it locked (dtor ordering is tricky), but not while anyone's waiting
+		if (first) // allow deleting the co_mutex while someone has it locked (dtor ordering is tricky), but not while anyone's waiting
 			abort();
 #endif
 	}

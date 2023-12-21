@@ -28,9 +28,9 @@ enum {
 	off_h_ptr = 0, // 0 if empty, 1 for tombstone, else file offset (always a multiple of 32)
 	off_h_hash = 8, // full hash
 	off_h_nodesize = 16,
-	// the root object contains
+	// the root object (which is at file offset 0) contains
 	off_r_sig = 8, // "arlsmap" 0x00
-	sig_passive = 0x0070616d736c7261,
+	sig_passive = 0x0070616d736c7261, // endian issues, yay
 	sig_active  = 0x0170616d736c7261,
 	off_r_sigactive = 15, // the 0x00 is instead 0x01 while the staticmap object exists in any process
 	off_r_hm_ptr = 16, // pointer to hashmap (hashmap size can be read from its object header)

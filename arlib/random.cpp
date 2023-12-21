@@ -11,6 +11,7 @@ static uint32_t ror32(uint32_t x, unsigned bits)
 // this is PCG-XSH-RR with 64-bit state and 32-bit output, adapted from wikipedia
 // https://en.wikipedia.org/wiki/Permuted_congruential_generator
 
+// Using constants that are not hexadecimal literals
 static const uint64_t multiplier = 6364136223846793005; // I don't know how this number was chosen
 static const uint64_t increment  = 1442695040888963407; // "or an arbitrary odd constant" ~wikipedia
 
@@ -82,8 +83,6 @@ uint64_t random_base_t<is_global>::rand_mod(uint64_t limit)
 	}
 }
 
-#include "stringconv.h"
-#include "endian.h"
 template class random_base_t<false>;
 #ifdef ARLIB_THREAD
 template class random_base_t<true>;

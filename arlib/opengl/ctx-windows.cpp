@@ -401,20 +401,20 @@ public:
 	
 	
 	
-	void makeCurrent(bool make)
+	void makeCurrent(bool make) override
 	{
 		if (make) wgl.MakeCurrent(this->GL_hdc, this->GL_hglrc);
 		else wgl.MakeCurrent(NULL, NULL);
 	}
 	
-	funcptr getProcAddress(const char * proc)
+	funcptr getProcAddress(const char * proc) override
 	{
 		PROC ret = wgl.GetProcAddress(proc);
 		if (!ret) ret = ::GetProcAddress(wgl.lib, proc); // lol windows
 		return (funcptr)ret;
 	}
 	
-	void swapInterval(int interval)
+	void swapInterval(int interval) override
 	{
 #ifdef AROPENGL_D3DSYNC
 		if (d3dsync) vsync = (interval==1);
@@ -423,7 +423,7 @@ public:
 			wgl.SwapIntervalEXT(interval);
 	}
 	
-	void swapBuffers()
+	void swapBuffers() override
 	{
 #ifdef AROPENGL_D3DSYNC
 		if (d3dsync)
@@ -470,14 +470,14 @@ public:
 		}
 	}
 	
-	GLuint outputFramebuffer()
+	GLuint outputFramebuffer() override
 	{
 		if (d3dsync) return GL_fboname;
 		else return 0;
 	}
 #endif
 	
-	void destroy()
+	void destroy() override
 	{
 		//early return to ensure the libUnload functions aren't called too much
 		//this is the first member set in init()

@@ -16,7 +16,7 @@
 namespace {
 
 // Per RFCs and other rules and specifications, a legal domain name matches
-//  ^(?=.{1,253}$)(xn--[a-z0-9\-]{1,59}|(?!..--)[a-z0-9\-]{1,63}\.)*([a-z]{1,63}|xn--[a-z0-9\-]{1,59})$
+//  ^(?=.{1,253}$)(xn--[a-z0-9\-]{1,59}|(?![a-z][a-z]--)[a-z0-9\-]{1,63}\.)*([a-z]{1,63}|xn--[a-z0-9\-]{1,59})$
 // or, in plaintext:
 // - The domain is 1 to 253 chars textual (3 to 255 bytes encoded)
 // - The domain consists of zero or more dot-separated child labels, followed by the TLD label
@@ -132,7 +132,7 @@ public:
 		producer<socket2::address> prod = make_producer<&waiter_node::prod, &waiter_node::cancel>();
 		void cancel() { get_dns()->cancel(this); }
 		
-		timestamp sent;
+		timestamp expiry = {};
 		
 		uint16_t trid;
 		
@@ -237,7 +237,7 @@ public:
 		bytestreamw req(n->send_buf);
 		
 		n->trid = this->pick_trid();
-		n->sent = timestamp::now();
+		n->expiry = timestamp::now() + duration::ms(5000);
 		req.u16b(n->trid);
 		
 		uint16_t flags = 0;
@@ -305,28 +305,29 @@ public:
 	
 	void timeout(waiter_node* special)
 	{
-		timestamp expired = timestamp::now() - duration::ms(5000);
-		timestamp first = timestamp::at_never();
+		// probably shouldn't have timeouts here at all
+		timestamp now = timestamp::now();
+		timestamp next_expiry = timestamp::at_never();
 		for (size_t i=0;i<waiting.size();i++) // don't foreach, it'll break if waiting grows (due to completing anything)
 		{
 			waiter_node& n = waiting.begin()[i];
 			if (&n != special && !n.prod.has_waiter())
 				continue;
-			if (n.sent <= expired)
+			if (n.expiry <= now)
 			{
 				waiting.dealloc(&n);
 				n.prod.complete({});
 			}
 			else
-				first = min(first, n.sent);
+				next_expiry = min(next_expiry, n.expiry);
 		}
-		if (first == timestamp::at_never())
+		if (next_expiry == timestamp::at_never())
 		{
 			recv_w.cancel();
 			sock = nullptr;
 		}
-		if (first != timestamp::at_never() && !time_w.is_waiting())
-			runloop2::await_timeout(first + duration::ms(5000)).then(&time_w);
+		if (next_expiry != timestamp::at_never() && !time_w.is_waiting())
+			runloop2::await_timeout(next_expiry).then(&time_w);
 	}
 	
 	void cancel(waiter_node* n)
@@ -459,7 +460,7 @@ again:
 	if (stream.u16b() != 0x0001) return {}; // class IN
 	stream.u32b(); // TTL, ignore
 	
-	if (type == 0x0005) // type CNAME (cnames can be stacked, so this must be a loop)
+	if (type == 5) // type CNAME (cnames can be stacked, so this must be a loop)
 	{
 		size_t namelen;
 		namelen = stream.u16b();
@@ -575,7 +576,7 @@ test("DNS", "udp,string,sockaddr", "dns")
 		
 		is_sync = false;
 		
-		// keep inside the test_nomalloc, cancelling the waiters won't do any good
+		// keep inside the test_nomalloc, the test1s declare a bunch of waiters that shouldn't be cancelled
 		while (n_done != n_total)
 			runloop2::step();
 	}

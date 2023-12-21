@@ -30,21 +30,22 @@
 
 extern const uint8_t char_props[256];
 // bit meanings:
-// 0x80 - space (\t\n\r ) - contrary to libc isspace, \f\v are not considered space
-// 0x40 - digit (0-9)
-// 0x20 - letter (A-Za-z) - tolower/toupper needs 0x20 to be letter,
-// 0x10 - unused             and 0x80 is cheaper to test on some platforms, so it goes to the most common test (space)
-// 0x08 - unused            other bit assignments are arbitrary
-// 0x04 - lowercase (a-z)   also contrary to libc, these functions handle byte values only;
-// 0x02 - uppercase (A-Z)    EOF is not a valid input (EOF feels like a poor design)
-// 0x01 - hex digit (0-9A-Fa-f)
+// 0x80 - space (\t\n\r )             tolower/toupper needs 0x20 to be letter,
+// 0x40 - C space (\t\n\v\f\r )         and 0x80 is cheaper to test on some platforms, so it goes to the most common test (space)
+// 0x20 - letter (A-Za-z)               other bit assignments are arbitrary
+// 0x10 - alphanumeric (0-9A-Za-z)    contrary to libc, these functions handle byte values only;
+// 0x08 - hex digit (0-9A-Fa-f)         EOF is not a valid input (EOF feels like a poor design)
+// 0x04 - unused
+// 0x02 - unused
+// 0x01 - unused
 static inline bool isspace(uint8_t c) { return char_props[c] & 0x80; }
-static inline bool isdigit(uint8_t c) { return char_props[c] & 0x40; }
-static inline bool isalpha(uint8_t c) { return char_props[c] & 0x20; }
-static inline bool islower(uint8_t c) { return char_props[c] & 0x04; }
-static inline bool isupper(uint8_t c) { return char_props[c] & 0x02; }
-static inline bool isalnum(uint8_t c) { return char_props[c] & 0x60; }
-static inline bool isxdigit(uint8_t c) { return char_props[c] & 0x01; }
+static inline bool iscspace(uint8_t c) { return char_props[c] & 0x40; }
+static inline bool isdigit(uint8_t c) { return c >= '0' && c <= '9'; } // range check is cheaper than table lookup and bit check
+static inline bool isalpha(uint8_t c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'); } // optimized to bitand plus range check
+static inline bool islower(uint8_t c) { return c >= 'a' && c <= 'z'; }
+static inline bool isupper(uint8_t c) { return c >= 'A' && c <= 'Z'; }
+static inline bool isalnum(uint8_t c) { return char_props[c] & 0x10; } // multi range check is expensive
+static inline bool isxdigit(uint8_t c) { return char_props[c] & 0x08; }
 static inline uint8_t tolower(uint8_t c) { return c|(char_props[c]&0x20); }
 static inline uint8_t toupper(uint8_t c) { return c&~(char_props[c]&0x20); }
 
@@ -582,14 +583,6 @@ cstring::c_string::operator cstrnul() const { return ptr; }
 
 inline string cstring::upper() const { return string(*this).lower(); }
 inline string cstring::lower() const { return string(*this).lower(); }
-
-// TODO: I need a potentially-owning string class
-// cstring never owns memory, string always does, new one has a flag for whether it does
-// it's like a generalized cstring::c_str()
-// will be immutable after creation, like cstring
-// will be used for json/bml parsers, and most likely a lot more
-// need to find a good name for it first
-// also need to check how much time SSO saves once that class exists
 
 #undef OBJ_SIZE
 #undef MAX_INLINE

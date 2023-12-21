@@ -286,16 +286,17 @@ public:
 	
 	void reset()
 	{
-		send_wait.cancel();
-		sock = nullptr;
-		recv_by.reset(4096);
-		send_by.reset();
 #ifndef ARLIB_OPT
 		if (recv_op != op_none)
 			debug_fatal_stack("can't reset a socketbuf that someone's trying to read");
 		if (send_prod.has_waiter())
 			debug_fatal_stack("can't reset a socketbuf that someone's trying to write");
 #endif
+		send_wait.cancel();
+		recv_cancel();
+		sock = nullptr;
+		recv_by.reset(4096);
+		send_by.reset();
 	}
 	
 	operator bool() { return sock != nullptr; }

@@ -45,9 +45,14 @@ if use_incbin:
      ".size " varname ", " STR(size) "\n" \
      ".type " varname ", @object\n" \
      varname ":\n"
-#else
+#endif
+#if defined(_WIN32)
 #  define ASM_RODATA(text) __asm__(".section .rdata,\"dr\"\n" text ".text\n")
-#  define ASM_LABEL(varname, size) varname ":\n"
+#  if defined(__i386__)
+#    define ASM_LABEL(varname, size) "_" varname ":\n"
+#  else
+#    define ASM_LABEL(varname, size) varname ":\n"
+#  endif
 #endif
 
 

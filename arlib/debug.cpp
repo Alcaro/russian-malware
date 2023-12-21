@@ -279,7 +279,11 @@ const uint8_t * debug_build_id()
 	
 	uint8_t* image_base = (uint8_t*)&__ImageBase;
 	IMAGE_NT_HEADERS* head_nt = (IMAGE_NT_HEADERS*)(image_base + __ImageBase.e_lfanew);
-	uint32_t dbgdir_offset = head_nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG].VirtualAddress;
+	IMAGE_DATA_DIRECTORY* dirs = head_nt->OptionalHeader.DataDirectory;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds" // this is a VLA; I know it's safe, but gcc doesn't
+	uint32_t dbgdir_offset = dirs[IMAGE_DIRECTORY_ENTRY_DEBUG].VirtualAddress;
+#pragma GCC diagnostic pop
 	IMAGE_DEBUG_DIRECTORY* dbgdir = (IMAGE_DEBUG_DIRECTORY*)(image_base + dbgdir_offset);
 	struct CV_INFO_PDB70 {
 		ULONG CvSignature;

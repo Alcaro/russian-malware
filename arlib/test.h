@@ -229,7 +229,7 @@ void _assert_range(const T&  actual, const char * actual_exp,
 #define assert_unreachable() do { _testfail("assert_unreachable() wasn't unreachable", __FILE__, __LINE__); } while(0)
 #define test_nomalloc contextmanager(test_nomalloc_begin(), test_nomalloc_end())
 #define testctx(x) contextmanager(_teststack_pushstr(x), _teststack_popstr())
-#define testcall(x) do { contextmanager(_teststack_push(__FILE__, __LINE__), _teststack_pop()) { x; } } while(0)
+#define testcall(...) do { contextmanager(_teststack_push(__FILE__, __LINE__), _teststack_pop()) { __VA_ARGS__; } } while(0)
 #define test_skip(x) do { _test_skip(x); } while(0)
 #define test_skip_force(x) do { _test_skip_force(x); } while(0)
 #define test_fail(msg) do { _testfail(msg, __FILE__, __LINE__); } while(0)

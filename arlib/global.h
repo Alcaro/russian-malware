@@ -272,16 +272,6 @@ template<> struct static_assert_t<false> {};
 //	typedef char JOIN(static_assertion_, __COUNTER__)[(expr)?1:-1]
 
 
-// TODO: remove with clang's real version once https://github.com/llvm/llvm-project/issues/48204 resolves
-// TODO: remove when all offending compilers are dropped for other reasons
-#if (defined(__clang_major__) && __clang_major__ < 99) || (!defined(__clang_major__) && defined(__GNUC__) && __GNUC__ < 12)
-namespace std {
-	template<typename T1, typename T2>
-	inline constexpr bool is_layout_compatible_v = true;
-}
-#endif
-
-
 #ifdef __cplusplus
 class anyptr {
 	void* data;

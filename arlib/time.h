@@ -18,8 +18,8 @@ struct duration {
 	std::strong_ordering operator<=>(const duration& other) const = default;
 	
 	static duration ms(int ms) { return { ms/1000, ms%1000*1000000 }; }
-	int ms() { return sec*1000 + nsec/1000000; }
-	int64_t us() { return sec*1000000 + nsec/1000; }
+	int ms() const { return sec*1000 + nsec/1000000; }
+	int64_t us() const { return sec*1000000 + nsec/1000; }
 };
 struct timestamp {
 	time_t sec;
@@ -77,7 +77,11 @@ struct timestamp {
 #ifdef __unix__
 	static timestamp now()
 	{
+// TODO: replace with clang's real version once https://github.com/llvm/llvm-project/issues/48204 resolves
+// TODO: remove this ifdef when all offending compilers are dropped for other reasons
+#if (defined(__clang_major__) && __clang_major__ >= 99) || (!defined(__clang_major__) && defined(__GNUC__) && __GNUC__ >= 12)
 		static_assert(std::is_layout_compatible_v<struct timespec, timestamp>);
+#endif
 		timestamp ret;
 		clock_gettime(CLOCK_REALTIME, (struct timespec*)&ret);
 		return ret;

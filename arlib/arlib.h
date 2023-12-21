@@ -20,7 +20,6 @@
 #include "stringconv.h"
 
 #include "thread/thread.h" //no ifdef on this one, it contains some dummy implementations if threads are disabled
-#include "bml.h"
 #include "json.h"
 
 #include "argparse.h"

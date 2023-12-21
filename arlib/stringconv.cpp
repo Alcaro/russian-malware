@@ -106,18 +106,14 @@ template<typename Tu> bool fromstring_int_inner(const char * in, const char * en
 	return true;
 }
 
-template<typename Tu> bool fromstring_uint_real(cstring s, Tu& out)
+template<typename Tu> bool fromstring_uint_real(const char * start, const char * end, Tu& out)
 {
-	const char * start = (char*)s.bytes().ptr();
-	const char * end = start + s.length();
 	return fromstring_int_inner<Tu>(start, end, out);
 }
 
-template<typename Tu, typename Ts> bool fromstring_int_real(cstring s, Ts& out)
+template<typename Tu, typename Ts> bool fromstring_int_real(const char * start, const char * end, Ts& out)
 {
 	out = 0;
-	const char * start = (char*)s.bytes().ptr();
-	const char * end = start + s.length();
 	
 	if (UNLIKELY(start == end)) return false;
 	bool neg = (*start == '-');
@@ -160,38 +156,25 @@ template<typename Tu> bool fromstring_hex_real(const char * s, size_t len, Tu& o
 	return true;
 }
 
-template<typename Tu> inline bool fromstring_uint(cstring s, Tu& out)
+template<typename Tu> inline bool fromstring_uint(const char * s, size_t len, Tu& out)
 {
 	// funny wrappers to minimize number of fromstring_(u)int_real instantiations, for size reasons
-	if constexpr (sizeof(Tu) > sizeof(uintptr_t)) return fromstring_uint_real<Tu>(s, out);
-	if constexpr (sizeof(Tu) == sizeof(uintptr_t)) return fromstring_uint_real<uintptr_t>(s, (uintptr_t&)out);
+	if constexpr (sizeof(Tu) > sizeof(uintptr_t)) return fromstring_uint_real<Tu>(s, s+len, out);
+	if constexpr (sizeof(Tu) == sizeof(uintptr_t)) return fromstring_uint_real<uintptr_t>(s, s+len, (uintptr_t&)out);
 	uintptr_t tmp;
-	bool ret = fromstring_uint_real<uintptr_t>(s, tmp);
+	bool ret = fromstring_uint_real<uintptr_t>(s, s+len, tmp);
 	out = (Tu)tmp;
 	return (ret && tmp == (uintptr_t)out);
 }
 
-template<typename Tu, typename Ts> inline bool fromstring_int(cstring s, Ts& out)
+template<typename Tu, typename Ts> inline bool fromstring_int(const char * s, size_t len, Ts& out)
 {
-	if constexpr (sizeof(Ts) > sizeof(intptr_t)) return fromstring_int_real<Tu, Ts>(s, out);
-	if constexpr (sizeof(Ts) == sizeof(intptr_t)) return fromstring_int_real<uintptr_t, intptr_t>(s, (intptr_t&)out);
+	if constexpr (sizeof(Ts) > sizeof(intptr_t)) return fromstring_int_real<Tu, Ts>(s, s+len, out);
+	if constexpr (sizeof(Ts) == sizeof(intptr_t)) return fromstring_int_real<uintptr_t, intptr_t>(s, s+len, (intptr_t&)out);
 	intptr_t tmp;
-	bool ret = fromstring_int_real<uintptr_t, intptr_t>(s, tmp);
+	bool ret = fromstring_int_real<uintptr_t, intptr_t>(s, s+len, tmp);
 	out = (Ts)tmp;
 	return (ret && tmp == (intptr_t)out);
-}
-
-template<typename Tu> inline bool fromstring_hex(cstring s, Tu& out)
-{
-	const char * ptr = (char*)s.bytes().ptr();
-	size_t len = s.length();
-	
-	if constexpr (sizeof(Tu) > sizeof(uintptr_t)) return fromstring_hex_real<Tu>(ptr, len, out);
-	if constexpr (sizeof(Tu) == sizeof(uintptr_t)) return fromstring_hex_real<uintptr_t>(ptr, len, (uintptr_t&)out);
-	uintptr_t tmp;
-	bool ret = fromstring_hex_real<uintptr_t>(ptr, len, tmp);
-	out = (Tu)tmp;
-	return (ret && tmp == (uintptr_t)out);
 }
 
 template<typename Tu> inline bool fromstring_hex(const char * s, size_t len, Tu& out)
@@ -205,9 +188,11 @@ template<typename Tu> inline bool fromstring_hex(const char * s, size_t len, Tu&
 }
 
 #define FROMFUNC(Tu, Ts) \
-	bool fromstring(cstring s, Tu& out) { return fromstring_uint<Tu>(s, out); } \
-	bool fromstring(cstring s, Ts& out) { return fromstring_int<Tu, Ts>(s, out); } \
-	bool fromstringhex(cstring s, Tu& out) { return fromstring_hex<Tu>(s, out); } \
+	bool fromstring(cstring s, Tu& out) { return fromstring_uint<Tu>((char*)s.bytes().ptr(), s.length(), out); } \
+	bool fromstring(cstring s, Ts& out) { return fromstring_int<Tu, Ts>((char*)s.bytes().ptr(), s.length(), out); } \
+	bool fromstringhex(cstring s, Tu& out) { return fromstring_hex<Tu>((char*)s.bytes().ptr(), s.length(), out); } \
+	bool fromstring_ptr(const char * s, size_t len, Tu& out) { return fromstring_uint<Tu>(s, len, out); } \
+	bool fromstring_ptr(const char * s, size_t len, Ts& out) { return fromstring_int<Tu, Ts>(s, len, out); } \
 	bool fromstringhex_ptr(const char * s, size_t len, Tu& out) { return fromstring_hex<Tu>(s, len, out); }
 FROMFUNC(unsigned char,      signed char)
 FROMFUNC(unsigned short,     signed short)

@@ -17,8 +17,39 @@
 // don't place any expectations on event order inside a map.
 //After the document ends, { finish } will be returned forever until the object is deleted.
 //The cstrings in the event are valid as long as the jsonparser itself.
-class jsonparser : nocopy {
+class jsonparser {
+	string m_data_holder;
+	uint8_t * m_at;
+	bool m_want_key = false;
+	bool m_errored = false;
+	bool m_need_error = false;
+	bitarray m_nesting; // an entry is false for list, true for map; after [[{, this is false,false,true
+	
+	friend class json5parser;
+	
+	jsonparser() {}
+	
+	void init(string json)
+	{
+		m_data_holder = std::move(json);
+		m_at = m_data_holder.bytes().ptr();
+		
+		skip_spaces_json();
+		if (!*m_at)
+			m_need_error = true;
+	}
+	void init5(string json)
+	{
+		m_data_holder = std::move(json);
+		m_at = m_data_holder.bytes().ptr();
+		
+		skip_spaces_json5();
+		if (!*m_at)
+			m_need_error = true;
+	}
+	
 public:
+	
 	enum {
 		unset      = 0,
 		jtrue      = 1,
@@ -35,39 +66,80 @@ public:
 		finish     = 12,
 	};
 	struct event {
-		int action = unset;
+		int type = unset;
 		cstring str; // string, stringified number, or error message (TODO: actual error messages)
 	};
 	
-	//You can't stream data into this object.
-	jsonparser(string json)
-	{
-		m_data_holder = std::move(json);
-		m_data = m_data_holder.bytes().ptr();
-		m_data_end = m_data + m_data_holder.length();
-	}
+	// You can't stream data into this object.
+	jsonparser(string json) { init(std::move(json)); }
+	
 	event next();
 	bool errored() const { return m_errored; }
 	
+	// Meaningless helper, in case something is templated on the JSON parser type.
+	template<typename T>
+	static bool parse_num(const event& ev, T& out) requires std::is_arithmetic_v<T>
+	{
+		return fromstring(ev.str, out);
+	}
+	
 private:
-	string m_data_holder;
-	uint8_t * m_data;
-	uint8_t * m_data_end;
+	template<bool json5> cstring decode_backslashes(bytesw by);
+	template<bool json5> event next_inner();
+	template<bool json5> void skip_spaces();
+	template<bool json5> event prepare_next(event ev, size_t forward = 0);
 	
-	bool m_want_key = false; // true if inside {}
-	bool m_need_value = true; // true after a comma or at the start of the object
+	void skip_spaces_json();
+	void skip_spaces_json5();
 	
-	bool m_unexpected_end = false; // used to avoid sending the same error again after the document "{" whines
-	bool m_errored = false;
-	event do_error() { m_errored=true; return { error }; }
-	
-	bitarray m_nesting; // an entry is false for list, true for map; after [[{, this is false,false,true
-	
-	uint8_t nextch();
-	bool skipcomma(size_t depth = 1);
-	
-	string getstr();
+	event next5();
 };
+
+class json5parser {
+	jsonparser inner;
+public:
+	using event = jsonparser::event;
+	
+	// You can't stream data into this object.
+	json5parser(string json) { inner.init5(std::move(json)); }
+	
+	event next() { return inner.next5(); }
+	bool errored() const { return inner.errored(); }
+	
+	// JSON5 numbers support a few formats that normal JSON does not, so a separate decoder function is needed.
+	// May return unexpected answers if the input is not valid JSON5.
+	template<typename T>
+	static bool parse_num(const event& ev, T& out) requires std::is_arithmetic_v<T>
+	{
+		if constexpr (std::is_floating_point_v<T>)
+		{
+			double v;
+			bool ret = parse_num_as_double(ev.str, v);
+			out = v;
+			return ret;
+		}
+		else if constexpr (std::is_unsigned_v<T>)
+		{
+			uintmax_t v;
+			bool ret = parse_num_as_unsigned(ev.str, v);
+			out = v;
+			return (ret && ((uintmax_t)out == v));
+		}
+		else
+		{
+			intmax_t v;
+			bool ret = parse_num_as_signed(ev.str, v);
+			out = v;
+			return (ret && ((intmax_t)out == v));
+		}
+	}
+	
+private:
+	static bool parse_num_as_double(cstring str, double& out);
+	static bool parse_num_as_unsigned(cstring str, uintmax_t& out);
+	static bool parse_num_as_signed(cstring str, intmax_t& out);
+};
+
 
 
 //This is also streaming.
@@ -114,7 +186,6 @@ public:
 
 
 class JSONw : nocopy {
-	
 	variant_idx<void, void, void, void, string, string, array<JSONw>, void, map<string,JSONw>, void, void, void, void> content;
 	
 	template<int idx, typename... Ts> void set_to(Ts... args)
@@ -161,8 +232,8 @@ public:
 		case jsonparser::jnull: return false;
 		case jsonparser::str: return content.get<jsonparser::str>();
 		case jsonparser::num: return try_fromstring<double>(content.get<jsonparser::num>());
-		case jsonparser::enter_list: return content.contains<jsonparser::enter_list>() && content.get<jsonparser::enter_list>().size();
-		case jsonparser::enter_map: return content.contains<jsonparser::enter_map>() && content.get<jsonparser::enter_map>().size();
+		case jsonparser::enter_list: return content.get<jsonparser::enter_list>().size();
+		case jsonparser::enter_map: return content.get<jsonparser::enter_map>().size();
 		case jsonparser::error: return false;
 		default: abort(); // unreachable
 		}

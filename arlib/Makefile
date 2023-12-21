@@ -163,7 +163,7 @@ ifeq ($(OS),windows)
 endif
 # wine 7.0~repack-4 (Debian) can print stack traces on crash, but only with dwarf-4, not 5
 # addr2line on Ubuntu 22.04 doesn't like dw5 either
-# valgrind is also occasionally outdated
+# valgrind needs 3.20, oct 2022 (gcc output works since 3.17, mar 2021, but not clang output)
 CONF_CFLAGS += -gdwarf-4
 
 CFLAGS += -g
@@ -390,23 +390,11 @@ CCXXFLAGS += $(patsubst %,-D%,$(DEFINES))
 
 CONF_CXXFLAGS := $(CONF_CXXFLAGS) $(CONF_CFLAGS)
 TRUE_CFLAGS := -std=c99 $(CCXXFLAGS) $(CONF_CFLAGS) $(CFLAGS)
-# C++20/etc wishlist:
-# - Coroutines, for runloop-related stuff (nearly every single socket-related operation is ugly)
-#    present in GCC 11
+# C++23/etc wishlist:
 # - If a lambda is a coroutine, the captures should be in the coroutine frame, not in the likely-temporary lambda object
 #    reportedly considered for c++23, but not approved yet
-# - Template string literals (for the regex parser)
-#    present in GCC 9
-# - Concepts (also for the regex parser, the errors are absurd)
-# - consteval (still for the regex parser, that template mess is terrible)
-#    present in GCC 10
-# - Down with typename http://wg21.link/p0634r3
-#    present in GCC 9
-# - [[likely]]
-# - [[no_unique_address]] (ideally on by default)
-# - Ban non-twos-complement signed - will probably enable various other language simplifications and improvements
+# - Turn on [[no_unique_address]] by default
 # - void foo(auto arg) (shorthand for template<typename T> void foo(T arg) - simplifies function::bind_member)
-# - Designated initializers (foo_t foo = { .a = 42, .b = 123 })
 # - std::stacktrace (C++23), to delete the testcall macro (and probably simplify debug.cpp)
 # - [[trivially_relocatable]] http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p1144r3.html
 # - Lambdas without braces/return, function<int(int)> mul2 = [](int i) => i*2; https://wg21.link/p0573 (useful for LINQ)
@@ -423,11 +411,24 @@ TRUE_CFLAGS := -std=c99 $(CCXXFLAGS) $(CONF_CFLAGS) $(CFLAGS)
 # - Overloading operator[] depending on whether it's a read or write access, int x = std::map[key_t] mutating is silly
 #     not sure if map[key].foo.bar() should count as read or write; not all wishes are realistic
 # - Modules, if they're good (I haven't looked into them, it's easy to make a bad module system)
+#     exists in C++20, but not yet implemented in compilers
 # - Virtual constants, constants stored directly in the vtable (as opposed to a function that returns the constant)
-# - Singleton tag on a class - there's exactly one instance of it, and it's a global. Compiler is allowed to optimize the this pointer into a constant.
-#     More for bsnes than myself, but we both would benefit.
+# - Singleton tag on a class - there's exactly one instance of it, and it's a global.
+#     Compiler is allowed to optimize the this pointer into a constant.
 # - #elifdef, #elifndef
-# Much of the above exists in C++20, I just haven't upgraded Arlib yet.
+# - Some equivalent of my container_of<&parent_cls::member>(this)
+#     also known as CONTAINING_RECORD in Windows/FreeBSD kernels
+
+# C++20 features I should investigate using more of:
+# - Template string literals (for the regex parser)
+# - Concepts (also for the regex parser, the errors are absurd)
+# - consteval (still for the regex parser, that template mess is terrible)
+# - Down with typename http://wg21.link/p0634r3
+# - [[likely]]
+# - [[no_unique_address]]
+# - Designated initializers (foo_t foo = { .a = 42, .b = 123 })
+
+
 TRUE_CXXFLAGS := -std=c++20 -fno-rtti $(CCXXFLAGS) $(CONF_CXXFLAGS) $(CXXFLAGS)
 TRUE_LFLAGS := $(CONF_LFLAGS) $(LFLAGS)
 

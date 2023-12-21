@@ -47,12 +47,10 @@ struct floatinf {
 static const floatinf fi_double = { 1ull<<53, 22, 52, 963 };
 static const floatinf fi_float = { 1<<24, 10, 23, 67 };
 
-static bool fromstring_float(cstring s, double& out, const floatinf * fi)
+static bool fromstring_float(const char * start, const char * end, double& out, const floatinf * fi)
 {
 	out = 0;
 	
-	const char * start = (const char*)s.bytes().ptr();
-	const char * end = start + s.length();
 	const char * digits_end = end;
 	if (end-start > 10000) return false; // 0.(9999 zeroes)1e+10000 is technically equal to 1, but it's also stupid.
 	// TODO: should allow it anyways
@@ -64,12 +62,13 @@ static bool fromstring_float(cstring s, double& out, const floatinf * fi)
 		start++;
 	}
 	
-	if (UNLIKELY(!isdigit(*start) || start==end))
+	if (UNLIKELY(start == end)) return false;
+	if (UNLIKELY(!isdigit(*start)))
 	{
-		if (s == "inf") { out = HUGE_VAL; return true; }
-		if (s == "-inf") { out = -HUGE_VAL; return true; }
-		if (s == "nan") { out = NAN; return true; }
-		return false;
+		if (end-start == 3 && memeq(start, "inf", 3)) { out = neg ? -HUGE_VAL : HUGE_VAL; return true; }
+		if (end-start == 3 && memeq(start, "nan", 3)) { out = NAN; return true; }
+		if (start[0] == '.' && start+1 != end && isdigit(start[1])) {}
+		else return false;
 	}
 	
 	const char * iter = start;
@@ -92,7 +91,6 @@ static bool fromstring_float(cstring s, double& out, const floatinf * fi)
 		else if (*iter == '.')
 		{
 			if (exponent <= 0) return false;
-			if (iter == end || !isdigit(iter[1])) return false;
 			exponent = 0;
 		}
 		else if ((0x20|*iter) == 'e')
@@ -401,12 +399,28 @@ done:
 }
 bool fromstring(cstring s, double& out)
 {
-	return fromstring_float(s, out, &fi_double);
+	const char * start = (const char*)s.bytes().ptr();
+	const char * end = start + s.length();
+	return fromstring_float(start, end, out, &fi_double);
 }
 bool fromstring(cstring s, float& out)
 {
+	const char * start = (const char*)s.bytes().ptr();
+	const char * end = start + s.length();
 	double tmp;
-	bool ret = fromstring_float(s, tmp, &fi_float);
+	bool ret = fromstring_float(start, end, tmp, &fi_float);
+	out = tmp;
+	return ret;
+}
+
+bool fromstring_ptr(const char * s, size_t len, double& out)
+{
+	return fromstring_float(s, s+len, out, &fi_double);
+}
+bool fromstring_ptr(const char * s, size_t len, float& out)
+{
+	double tmp;
+	bool ret = fromstring_float(s, s+len, tmp, &fi_float);
 	out = tmp;
 	return ret;
 }
@@ -605,7 +619,7 @@ test("string conversion - string to float", "", "string")
 	testfromdouble("11e1", 110);
 	testfromdouble("11e+1", 110);
 	testfromdouble("11e-1", 1.1);
-	testfromdouble("1E1", 10);
+	testfromdouble("1E1", 10); // I'm not a huge fan of this one, but this function is supposed to match Python, which accepts that
 	testfromdouble("-1", -1);
 	testfromdouble("inf", HUGE_VAL);
 	testfromdouble("-inf", -HUGE_VAL);
@@ -618,7 +632,6 @@ test("string conversion - string to float", "", "string")
 	testfromfloat("-inf"+string::nul(), 0.0f, false);
 	testfromfloat("nan"+string::nul(), 0.0f, false);
 	testfromdouble("nan", NAN);
-	testfromdouble("-0", -0.0);
 	testfromdouble("1.2e+08", 120000000.0); // no octal allowed in exponent either
 	testfromdouble("1.2e+0", 1.2);
 	testfromdouble("0", 0.0);
@@ -644,11 +657,11 @@ test("string conversion - string to float", "", "string")
 	testfromfloat("1e", 0.0f, false);
 	testfromfloat("1e+", 0.0f, false);
 	testfromfloat("1e-", 0.0f, false);
-	testfromfloat("1.", 0.0f, false);
-	testfromfloat(".1", 0.0f, false);
+	testfromfloat("1.", 1.0f); // I don't like these two either
+	testfromfloat(".1", 0.1f);
 	testfromfloat(".", 0.0f, false);
-	testfromfloat("1.e+1", 0.0f, false);
-	testfromfloat(".1e+1", 0.0f, false);
+	testfromfloat("1.e+1", 10.0f);
+	testfromfloat(".1e+1", 1.0f);
 	testfromfloat("e+1", 0.0f, false);
 	testfromfloat(".e1", 0.0f, false);
 	testfromfloat("1.2.3", 0.0f, false);

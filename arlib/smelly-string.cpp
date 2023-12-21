@@ -8,31 +8,22 @@
 
 string smelly_string::ucs1_to_utf8(arrayview<uint8_t> ucs1)
 {
-#ifdef __SSE2__
-	const uint8_t * fast_iter = ucs1.ptr();
-	const uint8_t * fast_iter_end = fast_iter + ucs1.size();
-	while (fast_iter+16 <= fast_iter_end)
-	{
-		if (_mm_movemask_epi8(_mm_loadu_si128((__m128i*)fast_iter)) != 0)
-			goto slowpath;
-		fast_iter += 16;
-	}
-	while (fast_iter < fast_iter_end)
-	{
-		if (*fast_iter++ & 0x80)
-			goto slowpath;
-	}
-	return ucs1;
-slowpath:
-#endif
-	
 	bytearray ret;
 	ret.resize(ucs1.size()*2);
 	uint8_t* out_start = ret.ptr();
 	uint8_t* out = out_start;
-	for (size_t n=0;n<ucs1.size();n++)
+	size_t n=0;
+	while (n < ucs1.size())
 	{
-		uint32_t codepoint = ucs1[n];
+#ifdef __SSE2__
+		while (n+16 <= ucs1.size() && _mm_movemask_epi8(_mm_loadu_si128((__m128i*)(ucs1.ptr()+n))) == 0)
+		{
+			memcpy(out, ucs1.ptr()+n, 16);
+			out += 16;
+			n += 16;
+		}
+#endif
+		uint32_t codepoint = ucs1[n++];
 		if (LIKELY(codepoint < 0x80))
 		{
 			*out++ = codepoint;
@@ -138,7 +129,11 @@ void puts(cstring str)
 
 test("smelly_string", "", "")
 {
-	assert_eq(smelly_string::ucs1_to_utf8(cstring("sm\xF6rg\xE5sr\xE4ka").bytes()), "smörgåsräka");
+#define E32 "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+#define SMR_UCS1 "sm\xF6rg\xE5sr\xE4ka"
+#define SMR_U8 "smörgåsräka"
+	assert_eq(smelly_string::ucs1_to_utf8(cstring(SMR_UCS1).bytes()), SMR_U8);
+	assert_eq(smelly_string::ucs1_to_utf8(cstring(E32 SMR_UCS1 E32).bytes()), E32 SMR_U8 E32);
 	
 	uint16_t utf16[] = { 's','m',0xF6,'r','g',0xE5,'s','r',0xE4,'k','a',0x2603,0xD83E,0xDD14 };
 	assert_eq(smelly_string::utf16_to_utf8(utf16), "smörgåsräka☃🤔");

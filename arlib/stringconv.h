@@ -140,6 +140,18 @@ bool fromstringhex(cstring s, unsigned int & out);
 bool fromstringhex(cstring s, unsigned long & out);
 bool fromstringhex(cstring s, unsigned long long & out);
 
+bool fromstring_ptr(const char * s, size_t len,   signed char & out);
+bool fromstring_ptr(const char * s, size_t len, unsigned char & out);
+bool fromstring_ptr(const char * s, size_t len,   signed short & out);
+bool fromstring_ptr(const char * s, size_t len, unsigned short & out);
+bool fromstring_ptr(const char * s, size_t len,   signed int & out);
+bool fromstring_ptr(const char * s, size_t len, unsigned int & out);
+bool fromstring_ptr(const char * s, size_t len,   signed long & out);
+bool fromstring_ptr(const char * s, size_t len, unsigned long & out);
+bool fromstring_ptr(const char * s, size_t len,   signed long long & out);
+bool fromstring_ptr(const char * s, size_t len, unsigned long long & out);
+bool fromstring_ptr(const char * s, size_t len, float & out);
+bool fromstring_ptr(const char * s, size_t len, double & out);
 bool fromstringhex_ptr(const char * s, size_t len, unsigned char & out);
 bool fromstringhex_ptr(const char * s, size_t len, unsigned short & out);
 bool fromstringhex_ptr(const char * s, size_t len, unsigned int & out);

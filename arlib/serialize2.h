@@ -1,4 +1,3 @@
-#include "bml.h"
 #include "json.h"
 
 // A basic serialize() function looks like
@@ -265,11 +264,12 @@ auto ser_compact2(Ts& s)
 }
 
 
-class jsondeserializer2 : public serializer_base<jsondeserializer2> {
+template<typename Tparser>
+class jsondeserializer2_base : public serializer_base<jsondeserializer2_base<Tparser>> {
 public:
 	static const bool serializing = false;
 private:
-	jsonparser p;
+	Tparser p;
 	jsonparser::event ev;
 	
 	cstring current_name;
@@ -286,7 +286,7 @@ private:
 	{
 	again:
 		ev = p.next();
-		if (ev.action == jsonparser::error)
+		if (ev.type == jsonparser::error)
 		{
 			_valid = false;
 			has_current_name = false;
@@ -299,7 +299,7 @@ private:
 		has_current_name = false;
 		current_name = "";
 		next_ev_raw();
-		if (ev.action == jsonparser::map_key)
+		if (ev.type == jsonparser::map_key)
 		{
 			has_current_name = true;
 			current_name = ev.str;
@@ -317,19 +317,19 @@ private:
 	{
 		while (true)
 		{
-			if (ev.action == jsonparser::enter_map || ev.action == jsonparser::enter_list) nest++;
-			if (ev.action == jsonparser::exit_map || ev.action == jsonparser::exit_list) nest--;
+			if (ev.type == jsonparser::enter_map || ev.type == jsonparser::enter_list) nest++;
+			if (ev.type == jsonparser::exit_map || ev.type == jsonparser::exit_list) nest--;
 			if (nest <= 0) break;
 			next_ev();
 		}
 	}
 	
 public:
-	jsondeserializer2(cstring json) : p(json) { next_ev(); }
+	jsondeserializer2_base(cstring json) : p(json) { next_ev(); }
 	
 	bool _begin()
 	{
-		if (ev.action != jsonparser::enter_map)
+		if (ev.type != jsonparser::enter_map)
 		{
 			_valid = false;
 			finish_item();
@@ -338,7 +338,7 @@ public:
 			return false;
 		}
 		next_ev();
-		if (ev.action == jsonparser::exit_map)
+		if (ev.type == jsonparser::exit_map)
 		{
 			did_anything = true;
 			next_ev();
@@ -355,7 +355,7 @@ public:
 			finish_item(); // points to list_exit
 			next_ev(); // points to whatever's after map_key
 		}
-		if (ev.action == jsonparser::exit_map)
+		if (ev.type == jsonparser::exit_map)
 		{
 			did_anything = true;
 			next_ev();
@@ -375,7 +375,7 @@ public:
 	
 	bool _begin_array()
 	{
-		if (ev.action != jsonparser::enter_list)
+		if (ev.type != jsonparser::enter_list)
 		{
 			_valid = false;
 			finish_item();
@@ -385,7 +385,7 @@ public:
 		}
 		did_anything = false;
 		next_ev();
-		if (ev.action == jsonparser::exit_list)
+		if (ev.type == jsonparser::exit_list)
 		{
 			did_anything = true;
 			next_ev();
@@ -401,7 +401,7 @@ public:
 			finish_item(); // points to list_exit
 			next_ev(); // points to next item
 		}
-		if (ev.action != jsonparser::exit_list)
+		if (ev.type != jsonparser::exit_list)
 		{
 			did_anything = false;
 			return true;
@@ -421,7 +421,7 @@ public:
 	}
 	bool has_item()
 	{
-		return (ev.action != jsonparser::exit_list && ev.action != jsonparser::exit_map);
+		return (ev.type != jsonparser::exit_list && ev.type != jsonparser::exit_map);
 	}
 	
 	template<typename T>
@@ -429,21 +429,21 @@ public:
 	{
 		if constexpr (std::is_same_v<T, bool>)
 		{
-			if (ev.action == jsonparser::jtrue)
+			if (ev.type == jsonparser::jtrue)
 				val = true;
-			else if (ev.action == jsonparser::jfalse)
+			else if (ev.type == jsonparser::jfalse)
 				val = false;
 			else
 				_valid = false;
 		}
 		else if constexpr (std::is_integral_v<T>)
 		{
-			if (ev.action == jsonparser::num) _valid &= fromstring(ev.str, val);
+			if (ev.type == jsonparser::num) _valid &= fromstring(ev.str, val);
 			else _valid = false;
 		}
 		else if constexpr (requires { fromstring("", val); })
 		{
-			if (ev.action == jsonparser::str) _valid &= fromstring(ev.str, val);
+			if (ev.type == jsonparser::str) _valid &= fromstring(ev.str, val);
 			else _valid = false;
 		}
 		else
@@ -461,7 +461,7 @@ public:
 	}
 	void item_hex(bytesw val)
 	{
-		if (ev.action == jsonparser::str) _valid &= fromstringhex(ev.str, val);
+		if (ev.type == jsonparser::str) _valid &= fromstringhex(ev.str, val);
 		else _valid = false;
 		did_anything = true;
 		finish_item();
@@ -469,15 +469,18 @@ public:
 	}
 	void item_hex(bytearray& val)
 	{
-		if (ev.action == jsonparser::str) _valid &= fromstringhex(ev.str, val);
+		if (ev.type == jsonparser::str) _valid &= fromstringhex(ev.str, val);
 		else _valid = false;
 		did_anything = true;
 		finish_item();
 		next_ev();
 	}
 	
-	bool valid() { return _valid && (ev.action == jsonparser::finish); }
+	bool valid() { return _valid && (ev.type == jsonparser::finish); }
 };
+using jsondeserializer2 = jsondeserializer2_base<jsonparser>;
+using json5deserializer2 = jsondeserializer2_base<json5parser>;
+
 template<typename T> T jsondeserialize2(cstring json, bool* valid = nullptr)
 {
 	T out{};
@@ -486,152 +489,10 @@ template<typename T> T jsondeserialize2(cstring json, bool* valid = nullptr)
 	if (valid) *valid = s.valid();
 	return out;
 }
-
-
-class bmldeserializer2 : public serializer_base<bmldeserializer2> {
-public:
-	static const bool serializing = false;
-private:
-	bmlparser p;
-	bmlparser::event ev;
-	bool did_anything;
-public:
-	bool _valid = true;
-private:
-	
-	// serialize() is entered with ev pointing to the first object after map/list_enter (often a map_key)
-	
-	void next_ev()
-	{
-	again:
-		ev = p.next();
-		if (ev.action == bmlparser::error)
-		{
-			_valid = false;
-			goto again;
-		}
-	}
-	
-	// input: ev points to any node
-	// output: if ev pointed to enter, it now points to corresponding exit; if not, no change
-	void skip_contents()
-	{
-		int nest = 0;
-		while (true)
-		{
-			if (ev.action == bmlparser::enter) nest++;
-			else nest--;
-			if (nest <= 0) break;
-			next_ev();
-		}
-	}
-	
-	void next_object()
-	{
-		did_anything = true;
-		skip_contents();
-		next_ev();
-	}
-	
-public:
-	bmldeserializer2(cstring bml) : p(bml)
-	{
-		ev = { bmlparser::enter, "", "" };
-	}
-	
-	bool _begin()
-	{
-		next_ev();
-		if (ev.action == bmlparser::enter)
-		{
-			did_anything = false;
-			return true;
-		}
-		else
-		{
-			did_anything = true;
-			return false;
-		}
-	}
-	bool _continue()
-	{
-		if (!did_anything)
-			next_object();
-		if (ev.action == bmlparser::enter)
-		{
-			did_anything = false;
-			return true;
-		}
-		else
-		{
-			next_ev();
-			did_anything = true;
-			return false;
-		}
-	}
-	cstring get_name()
-	{
-		return bmlwriter::unescape(ev.name);
-	}
-	bool _name(cstring name)
-	{
-		return (name == bmlwriter::unescape(ev.name));
-	}
-	
-	bool _begin_array()
-	{
-		did_anything = false;
-		return true;
-	}
-	bool _continue_array()
-	{
-		if (!did_anything)
-			next_object();
-		did_anything = true;
-		return false;
-	}
-	void _cancel_array() { __builtin_trap(); }
-	bool has_item()
-	{
-		return !did_anything;
-		return false;
-	}
-	
-	template<typename T>
-	void _primitive(T& val)
-	{
-		_valid &= fromstring(ev.value, val);
-		next_object();
-	}
-	
-	template<typename T>
-	void item_hex(T& val) requires (std::is_unsigned_v<T> && !std::is_same_v<T, bool>)
-	{
-		_valid &= fromstringhex(ev.value, val);
-		next_object();
-	}
-	template<size_t n>
-	void item_hex(uint8_t (&val)[n])
-	{
-		item_hex(bytesw(val));
-	}
-	void item_hex(bytesw val)
-	{
-		_valid &= fromstringhex(ev.value, val);
-		next_object();
-	}
-	void item_hex(bytearray& val)
-	{
-		_valid &= fromstringhex(ev.value, val);
-		next_object();
-	}
-	
-	bool valid() { return _valid && (ev.action == bmlparser::finish); }
-};
-template<typename T> T bmldeserialize2(cstring bml, bool* valid = nullptr)
+template<typename T> T json5deserialize2(cstring json, bool* valid = nullptr)
 {
 	T out{};
-	bmldeserializer2 s(bml);
+	json5deserializer2 s(json);
 	s.item(out);
 	if (valid) *valid = s.valid();
 	return out;
