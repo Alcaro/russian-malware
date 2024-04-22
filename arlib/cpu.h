@@ -200,8 +200,8 @@ extern uint32_t arlib_cpuid_l7ebx;
 // then each generation upgrade gives you one of {VBMI,IFMA}, VNNI, BF16, {VPOPCNTDQ,VBMI2,BITALG}, FP16, (none)
 // (the VBMI2 step also adds VAES, GFNI and VPCLMULQDQ, outside of AVX512)
 // https://cdrdv2.intel.com/v1/dl/getContent/784343 The Converged Vector ISA: Intel Advanced Vector Extensions 10 Technical Paper
-// (oddly enough, the table does not contain AVX512VL, but since x86-64-v4 contains VL, I'm gonna guess it's part of the same group)
-// AMD supports everything up to the BITALG level in Zen 4, and nothing before that; as of aug 2023, no AMD chip supports FP16
+// (oddly enough, the table does not contain AVX512VL, but since x86-64-v4 contains VL, I'm gonna guess it's part of the same group as F)
+// AMD supports everything up to the VBMI2 level in Zen 4, and nothing before that; as of aug 2023, no AMD chip supports FP16
 
 // x86-64: CMOV, CMPXCHG8B, FPU, FXSR, MMX, FXSR, SCE, SSE, SSE2
 // x86-64-v2: (close to Nehalem) CMPXCHG16B, LAHF-SAHF, POPCNT, SSE3, SSE4.1, SSE4.2, SSSE3

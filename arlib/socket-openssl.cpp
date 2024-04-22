@@ -107,6 +107,10 @@ public:
 	
 	ssize_t recv_sync(bytesw by) override
 	{
+#ifndef ARLIB_OPT
+		if (!by)
+			debug_fatal_stack("cannot receive zero bytes");
+#endif
 		if (!sock)
 			return -1;
 		size_t ret;
@@ -114,6 +118,10 @@ public:
 	}
 	ssize_t send_sync(bytesr by) override
 	{
+#ifndef ARLIB_OPT
+		if (!by)
+			debug_fatal_stack("cannot send zero bytes");
+#endif
 		if (!sock)
 			return -1;
 		size_t ret;

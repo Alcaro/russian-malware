@@ -278,4 +278,32 @@ test("socketbuf crash", "", "")
 		assert_eq(++step, 5);
 	}
 }
+test("socketbuf reset", "", "")
+{
+	// test that socketbuf can be reset while someone's waiting for it, and this causes socket to return failure
+	static int step;
+	{
+		step = 0;
+		fake_socket* inner = new fake_socket();
+		socketbuf sock = autoptr<socket2>(inner);
+		sock.send(cstring("abc").bytes());
+		assert_eq(++step, 1);
+		runloop2::detach([](socketbuf& sock)->async<void>{
+				assert_eq(++step, 2);
+				co_await sock.u32l();
+				assert_range(++step, 5, 6); // doesn't matter which order these two run
+				assert(!sock);
+			}(sock));
+		runloop2::detach([](socketbuf& sock)->async<void>{
+				assert_eq(++step, 3);
+				bool ok = co_await sock.await_send();
+				assert_eq(ok, false);
+				assert_range(++step, 5, 6);
+				assert(!sock);
+			}(sock));
+		assert_eq(++step, 4);
+		sock = nullptr;
+		assert_eq(++step, 7);
+	}
+}
 #endif

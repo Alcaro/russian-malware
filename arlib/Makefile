@@ -163,7 +163,7 @@ ifeq ($(OS),windows)
 endif
 # wine 7.0~repack-4 (Debian) can print stack traces on crash, but only with dwarf-4, not 5
 # addr2line on Ubuntu 22.04 doesn't like dw5 either
-# valgrind needs 3.20, oct 2022 (gcc output works since 3.17, mar 2021, but not clang output)
+# valgrind needs 3.20, oct 2022 (gcc output works since 3.17, mar 2021, but clang output does not)
 CONF_CFLAGS += -gdwarf-4
 
 CFLAGS += -g
@@ -394,7 +394,6 @@ TRUE_CFLAGS := -std=c99 $(CCXXFLAGS) $(CONF_CFLAGS) $(CFLAGS)
 # - If a lambda is a coroutine, the captures should be in the coroutine frame, not in the likely-temporary lambda object
 #    reportedly considered for c++23, but not approved yet
 # - Turn on [[no_unique_address]] by default
-# - void foo(auto arg) (shorthand for template<typename T> void foo(T arg) - simplifies function::bind_member)
 # - std::stacktrace (C++23), to delete the testcall macro (and probably simplify debug.cpp)
 # - [[trivially_relocatable]] http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p1144r3.html
 # - Lambdas without braces/return, function<int(int)> mul2 = [](int i) => i*2; https://wg21.link/p0573 (useful for LINQ)

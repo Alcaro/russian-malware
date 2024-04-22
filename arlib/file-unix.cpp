@@ -143,6 +143,35 @@ array<string> file::listdir(cstring path)
 	return ret;
 }
 
+string file::readlink(cstrnul path)
+{
+	char buf[256];
+	
+	ssize_t r = ::readlink(path, buf, sizeof(buf));
+	if (r <= 0) return "";
+	
+	if ((size_t)r < sizeof(buf)-1)
+	{
+		buf[r] = '\0'; // readlink doesn't nul terminate
+		return buf;
+	}
+	else
+	{
+		size_t buflen = sizeof(buf);
+		char* ptr = NULL;
+	again:
+		buflen *= 2;
+		ptr = xrealloc(ptr, buflen);
+		
+		ssize_t r = ::readlink(path, ptr, buflen);
+		if (r <= 0) return "";
+		if ((size_t)r >= buflen-1) goto again;
+		
+		ptr[r] = '\0';
+		return string::create_usurp(ptr);
+	}
+}
+
 
 /*
 static char* g_cwd;
@@ -200,6 +229,9 @@ bool file2::openat(int dirfd, cstrnul filename, mode m)
 		O_RDWR|O_CREAT|O_EXCL |O_CLOEXEC  // m_create_excl
 	};
 	fd = ::openat(dirfd, filename, flags[m&7], 0644);
+	if (!fd.valid())
+		return false;
+	
 	if (m & m_exclusive)
 	{
 		int op;
@@ -211,7 +243,7 @@ bool file2::openat(int dirfd, cstrnul filename, mode m)
 			close();
 	}
 	
-	return (fd >= 0);
+	return true;
 }
 
 bool file2::open(cstrnul filename, mode m)

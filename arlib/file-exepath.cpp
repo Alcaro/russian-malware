@@ -51,32 +51,7 @@ struct exepath_finder {
 		const char * linkpath = "/proc/self/exe";
 #endif
 		
-		char buf[256];
-		
-		ssize_t r = readlink(linkpath, buf, sizeof(buf));
-		if (r <= 0) return;
-		
-		if ((size_t)r < sizeof(buf)-1)
-		{
-			buf[r] = '\0'; // readlink doesn't nul terminate
-			fullname = buf;
-		}
-		else
-		{
-			size_t buflen = sizeof(buf);
-			char* ptr = NULL;
-		again:
-			buflen *= 2;
-			ptr = xrealloc(ptr, buflen);
-			
-			ssize_t r = readlink(linkpath, ptr, buflen);
-			if (r <= 0) return;
-			if ((size_t)r >= buflen-1) goto again;
-			
-			ptr[r] = '\0';
-			fullname = string::create_usurp(ptr);
-		}
-		
+		fullname = file::readlink(linkpath);
 		path = file::dirname(fullname);
 	}
 };

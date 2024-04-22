@@ -147,6 +147,7 @@ async<autoptr<socket2>> socket2::create(address addr)
 	if (sock < 0)
 		co_return nullptr;
 	setblock(sock, false);
+	// one would expect WSAEINPROGRESS, but both docs and actual behavior say it's WOULDBLOCK
 	if (connect(sock, addr.as_native(), sizeof(addr)) != 0 && WSAGetLastError() != WSAEWOULDBLOCK)
 	{
 	fail:
@@ -250,8 +251,7 @@ autoptr<socketlisten> socketlisten::create(uint16_t port, function<void(autoptr<
 	return new socketlisten(sock, cb);
 }
 
-socketlisten::socketlisten(SOCKET sock, function<void(autoptr<socket2>)> cb)
-	: sock(sock), cb(cb)
+socketlisten::socketlisten(SOCKET sock, function<void(autoptr<socket2>)> cb) : cb(cb), sock(sock)
 {
 	setblock(sock, false);
 	ev = CreateEvent(NULL, true, false, NULL);
@@ -271,7 +271,7 @@ void socketlisten::on_incoming()
 
 socketlisten::~socketlisten()
 {
-	wait.cancel();
+	wait.cancel(); // must do this before closing ev/sock
 	CloseHandle(ev);
 	closesocket(sock);
 }

@@ -7,6 +7,7 @@
 #include "time.h"
 #include "bytepipe.h"
 #include "endian.h"
+#include "file.h"
 #include <unistd.h>
 
 #ifdef _WIN32
@@ -73,10 +74,10 @@ public:
 	
 #ifdef __unix__
 	// If positive, reading or writing this fd is equivalent to recv_sync and send_sync. Can be used for ktls, but little or nothing else.
-	// Only implemented for socket2::create(), everything else will return -1.
-	virtual int get_fd() { return -1; }
+	// Only implemented for socket2::create() and create_from_fd(), everything else will return -1.
+	virtual fd_raw_t get_fd() { return fd_t::null(); }
 #else
-	int get_fd() { return -1; }
+	fd_raw_t get_fd() { return fd_t::null(); }
 #endif
 	
 	// These will accept a port from the domain name, if one is provided.
@@ -86,6 +87,11 @@ public:
 	static async<autoptr<socket2>> create_ssl(cstring host, uint16_t port);
 #endif
 	static async<autoptr<socket2>> create_sslmaybe(bool ssl, cstring host, uint16_t port);
+	static autoptr<socket2> create_from_fd(fd_t fd); // Takes ownership of the fd.
+#ifdef __unix__
+	static void set_fd_block(fd_raw_t fd, bool block); // Does not take ownership.
+	static void set_fd_nonblock(fd_raw_t fd) { set_fd_block(fd, false); }
+#endif
 	
 	// These ones are low level devices. You probably want the above instead.
 	
@@ -170,35 +176,26 @@ public:
 
 // The socketlisten is a TCP server.
 // Since it can yield multiple sockets, and there's little or no need for state management here, it's not a coroutine; it takes a callback.
+class socketlisten {
+	waiter<void> wait = make_waiter<&socketlisten::wait, &socketlisten::on_incoming>();
+	function<void(autoptr<socket2>)> cb;
 #ifdef __unix__
-class socketlisten {
-	int fd = -1;
-	waiter<void> wait = make_waiter<&socketlisten::wait, &socketlisten::on_incoming>();
-	function<void(autoptr<socket2>)> cb;
-	
-	socketlisten(int fd, function<void(autoptr<socket2>)> cb);
-	void on_incoming();
-public:
-	static autoptr<socketlisten> create(const socket2::address & addr, function<void(autoptr<socket2>)> cb);
-	static autoptr<socketlisten> create(uint16_t port, function<void(autoptr<socket2>)> cb);
-	~socketlisten() { close(fd); }
-};
-#endif
-#ifdef _WIN32
-class socketlisten {
-	SOCKET sock = INVALID_SOCKET;
+	fd_t fd;
+	socketlisten(fd_t fd, function<void(autoptr<socket2>)> cb);
+#else
+	SOCKET sock;
 	HANDLE ev = NULL;
-	waiter<void> wait = make_waiter<&socketlisten::wait, &socketlisten::on_incoming>();
-	function<void(autoptr<socket2>)> cb;
+public:
+	~socketlisten();
+private:
+	socketlisten(SOCKET sock, function<void(autoptr<socket2>)> cb);
+#endif
 	
-	socketlisten(SOCKET fd, function<void(autoptr<socket2>)> cb);
 	void on_incoming();
 public:
 	static autoptr<socketlisten> create(const socket2::address & addr, function<void(autoptr<socket2>)> cb);
 	static autoptr<socketlisten> create(uint16_t port, function<void(autoptr<socket2>)> cb);
-	~socketlisten();
 };
-#endif
 
 // A socketbuf is a convenience wrapper to read structured data from the socket. Ask for N bytes and you get N bytes, no need for loops.
 // On the send side, it converts send to memcpy, making it act as if it's synchronous and allowing multiple concurrent writers.
@@ -213,11 +210,7 @@ class socketbuf {
 		op_u64b, op_u64l,
 		op_bytesr, op_bytesr_partial,
 		op_line,
-	} recv_op
-#ifndef ARLIB_OPT
-		= op_none
-#endif
-		;
+	} recv_op = op_none;
 	size_t recv_bytes; // or max length for op_line
 	
 	template<typename T>
@@ -233,9 +226,7 @@ class socketbuf {
 	            producer_t<bytesr>, producer_t<cstring>> recv_prod;
 	void recv_cancel()
 	{
-#ifndef ARLIB_OPT
 		recv_op = op_none;
-#endif
 		recv_wait.cancel();
 	}
 	
@@ -249,11 +240,9 @@ class socketbuf {
 	template<typename T, op_t op>
 	async<T> get_async()
 	{
-#ifndef ARLIB_OPT
-		if (this->recv_op != op_none)
+		if (recv_op != op_none)
 			debug_fatal_stack("can't read from a socketbuf twice");
-#endif
-		this->recv_op = op;
+		recv_op = op;
 		async<T> ret = &recv_prod.construct<producer_t<T>>()->inner;
 		recv_complete(0);
 		return ret;
@@ -275,6 +264,7 @@ public:
 	}
 	socketbuf& operator=(socketbuf&& other)
 	{
+		reset();
 		other.send_wait.cancel();
 		sock = std::move(other.sock);
 		recv_by = std::move(other.recv_by);
@@ -286,15 +276,7 @@ public:
 	
 	void reset()
 	{
-#ifndef ARLIB_OPT
-		if (recv_op != op_none)
-			debug_fatal_stack("can't reset a socketbuf that someone's trying to read");
-		if (send_prod.has_waiter())
-			debug_fatal_stack("can't reset a socketbuf that someone's trying to write");
-#endif
-		send_wait.cancel();
-		recv_cancel();
-		sock = nullptr;
+		socket_failed();
 		recv_by.reset(4096);
 		send_by.reset();
 	}
@@ -378,4 +360,6 @@ public:
 		else
 			return &send_prod;
 	}
+	
+	void moved();
 };

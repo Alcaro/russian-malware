@@ -57,6 +57,7 @@ clang: error: unknown argument: '-fcoroutines'
 #    define _CRT_NONSTDC_NO_DEPRECATE
 #    define _CRT_SECURE_NO_WARNINGS
 #  endif
+#  define STRSAFE_NO_DEPRECATE
 #  ifdef __MINGW32__
 #    define _FILE_OFFSET_BITS 64
 // mingw *really* wants to define its own printf/scanf, which adds ~20KB random stuff to the binary
@@ -108,10 +109,11 @@ void srand(unsigned) __attribute__((deprecated("g_rand doesn't need this")));
 // in case something is technically undefined behavior, but works as long as compiler can't prove anything
 template<typename T> T launder(T v)
 {
-#ifdef __clang__
-	__asm__ volatile("" :: "g"(v) : "memory");
+	static_assert(std::is_trivial_v<T>);
+#ifdef _MSC_VER
+	_ReadWriteBarrier(); // documented deprecated, but none of the replacements look like a usable compiler barrier
 #else
-	__asm__("" : "+g"(v));
+	__asm__("" : "+r"(v));
 #endif
 	return v;
 }
@@ -119,13 +121,14 @@ template<typename T> T launder(T v)
 // Returns whatever is currently in that register. The value can be passed around, but any math or deref is undefined behavior.
 template<typename T> T nondeterministic()
 {
+	static_assert(std::is_trivial_v<T>);
 #if __has_builtin(__builtin_nondeterministic_value)
 	T out;
 	return __builtin_nondeterministic_value(out);
 #else
 	T out;
-	// optimizes better with volatile - without it, calling twice will insert empty asm once and copy result
-	__asm__ volatile("" : "=g"(out));
+	// optimizes better with volatile - without it, calling twice will insert the empty asm once and copy the result
+	__asm__ volatile("" : "=r"(out));
 	return out;
 #endif
 }
@@ -135,12 +138,10 @@ typedef void(*funcptr)();
 #define using(obj) if(obj;true)
 template<typename T> class defer_holder {
 	T fn;
-	bool doit;
 public:
-	defer_holder(T fn) : fn(std::move(fn)), doit(true) {}
+	defer_holder(T&& fn) : fn(std::move(fn)) {}
 	defer_holder(const defer_holder&) = delete;
-	defer_holder(defer_holder&& other) : fn(std::move(other.fn)), doit(true) { other.doit = false; }
-	~defer_holder() { if (doit) fn(); }
+	~defer_holder() { fn(); }
 };
 template<typename T>
 defer_holder<T> dtor(T&& f)
@@ -841,14 +842,15 @@ template<typename T> inline T memxor_t(const uint8_t * a, const uint8_t * b)
 {
 	T an; memcpy(&an, a, sizeof(T));
 	T bn; memcpy(&bn, b, sizeof(T));
-	return an^bn;
+	return an ^ bn;
 }
 // memeq is small after optimization, but looks big to the inliner, so forceinline it
 // if caller doesn't know size, caller should also be forceinlined too
 forceinline bool memeq(const void * a, const void * b, size_t len)
 {
 #ifdef __GNUC__
-	if (!__builtin_constant_p(len)) return !memcmp(a, b, len);
+	if (!__builtin_constant_p(len))
+		return !memcmp(a, b, len);
 #endif
 	
 #if defined(__i386__) || defined(__x86_64__)

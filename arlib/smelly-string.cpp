@@ -4,6 +4,7 @@
 #include "test.h"
 #ifdef _WIN32
 #include <windows.h>
+#include <io.h>
 #endif
 
 string smelly_string::ucs1_to_utf8(arrayview<uint8_t> ucs1)
@@ -93,42 +94,41 @@ array<uint16_t> smelly_string::utf8_to_utf16(cstring utf8)
 	return ret;
 }
 
-static void fputs_utf8(FILE* f, DWORD n, cstring str)
+static void fputs_utf8(cstring str, FILE* f)
 {
-	// I've tried several permutations of
-	//  setlocale(LC_ALL, "en_US.UTF-8")
-	//  SetConsoleOutputCP(CP_UTF8)
-	//  fputws(smelly_string(str), stdout)
-	// but they all break in various ways; this is the best I can find
-	// (WriteConsoleW fails to process astral planes characters; not sure if that's fixed in the new Terminal)
-	HANDLE h = GetStdHandle(n);
-	DWORD ignore;
-	if (GetConsoleMode(h, &ignore))
+	int fd = _fileno(f);
+	if (fd >= 0)
 	{
-		fflush(f);
-		array<uint16_t> utf16 = smelly_string::utf8_to_utf16(str);
-		WriteConsoleW(h, utf16.ptr(), utf16.size(), nullptr, nullptr);
+		HANDLE h = (HANDLE)_get_osfhandle(fd);
+		// I could use GetStdHandle instead, but that'd require passing around things other than a FILE*
+		if (h != INVALID_HANDLE_VALUE)
+		{
+			DWORD ignore;
+			if (GetConsoleMode(h, &ignore))
+			{
+				fflush(f);
+				array<uint16_t> utf16 = smelly_string::utf8_to_utf16(str);
+				WriteConsoleW(h, utf16.ptr(), utf16.size(), nullptr, nullptr);
+				return;
+			}
+		}
 	}
-	else
-	{
-		fwrite(str.bytes().ptr(), 1, str.length(), f);
-	}
-}
-template<bool use_stderr>
-void fputs_utf8(cstring str)
-{
-	fputs_utf8(use_stderr ? stderr : stdout, use_stderr ? STD_ERROR_HANDLE : STD_OUTPUT_HANDLE, str);
+	fwrite(str.bytes().ptr(), 1, str.length(), f);
 }
 
 void puts(cstring str)
 {
-	fputs_utf8<false>(str);
+	fputs_utf8(str, stdout);
 	fputc('\n', stdout);
 }
 #endif
 
 test("smelly_string", "", "")
 {
+	// ensure strings are utf8
+	static_assert("ö"[0] == (char)0xC3); // extra cast because char is signed on x86
+	static_assert("ö"[1] == (char)0xB6);
+	static_assert("ö"[2] == (char)0x00);
 #define E32 "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
 #define SMR_UCS1 "sm\xF6rg\xE5sr\xE4ka"
 #define SMR_U8 "smörgåsräka"

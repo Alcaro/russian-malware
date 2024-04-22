@@ -506,8 +506,8 @@ test("socket address", "", "sockaddr")
 	testcall(test1("127.0.1", "")); // goofy legacy formats, should also be considered corrupt in this year
 	testcall(test1("127.1", ""));
 	testcall(test1("2130706433", ""));
-	testcall(test1("0127.0.0.1", ""));
-	testcall(test1("127.00.0.1", ""));
+	testcall(test1("0127.0.0.1", "")); // octal and hex are banned by https://tools.ietf.org/html/rfc6943#section-3.1.1
+	testcall(test1("127.00.0.1", "")); // don't know where, or if, less-than-four components is banned
 	testcall(test1("127.0.00.1", ""));
 	testcall(test1("127.0.0.01", ""));
 	testcall(test1("0x7f.0.0.1", ""));

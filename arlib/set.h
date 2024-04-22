@@ -458,6 +458,13 @@ public:
 		else return def;
 	}
 	template<typename Tk2>
+	cstring get_or(const Tk2& key, cstring def) const requires (std::is_same_v<Tvalue, string>)
+	{
+		node* ret = items.get_or_null(key);
+		if (ret) return ret->value;
+		else return def;
+	}
+	template<typename Tk2>
 	Tvalue* get_or_null(const Tk2& key)
 	{
 		node* ret = items.get_or_null(key);

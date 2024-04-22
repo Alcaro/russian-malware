@@ -63,19 +63,58 @@ static_assert(sizeof(off_t) == 8);
 
 template<typename T> class async;
 
-class file2 : nocopy {
 #ifdef __unix__
-	typedef int fd_t;
-	static const constexpr fd_t null_fd = -1;
-	fd_t fd = -1;
-	void reset() { if (fd != null_fd) ::close(fd); fd = null_fd; }
+typedef int fd_raw_t;
+#define NULL_FD (-1)
 #endif
 #ifdef _WIN32
-	typedef HANDLE fd_t;
-#define null_fd INVALID_HANDLE_VALUE
-	fd_t fd = null_fd;
-	void reset() { if (fd != null_fd) CloseHandle(fd); fd = null_fd; }
+typedef HANDLE fd_raw_t;
+#define NULL_FD INVALID_HANDLE_VALUE
 #endif
+class fd_t {
+	fd_raw_t val;
+	
+public:
+	fd_t() : val(NULL_FD) {}
+	fd_t(fd_raw_t raw) : val(raw) {}
+	fd_t(const fd_t&) = delete;
+	fd_t(fd_t&& other) { val = other.val; other.val = NULL_FD; }
+	
+	fd_t& operator=(const fd_t&) = delete;
+	fd_t& operator=(fd_t&& other) { close(); val = other.val; other.val = NULL_FD; return *this; }
+	fd_t& operator=(fd_raw_t raw) { close(); val = raw; return *this; }
+	operator fd_raw_t() const { return val; }
+	operator bool() const = delete; // ambiguous with operator int
+	
+	bool valid() const { return val != NULL_FD; }
+	
+	static fd_raw_t null() { return NULL_FD; }
+	
+	static void close(fd_raw_t val)
+	{
+		if (val == NULL_FD)
+			return;
+#ifdef __unix__
+		::close(val);
+#endif
+#ifdef _WIN32
+		::CloseHandle(val);
+#endif
+	}
+	fd_raw_t release()
+	{
+		fd_raw_t ret = val;
+		val = NULL_FD;
+		return ret;
+	}
+	void close() { close(val); val = NULL_FD; }
+	~fd_t() { close(); }
+};
+#undef NULL_FD
+
+class file2 : nocopy {
+	fd_t fd;
+	void reset() { fd.close(); }
 	
 public:
 	enum mode {
@@ -123,21 +162,21 @@ public:
 	};
 	
 	file2() {}
-	file2(file2&& f) { fd = f.fd; f.fd = null_fd; }
-	file2& operator=(file2&& f) { reset(); fd = f.fd; f.fd = null_fd; return *this; }
+	file2(file2&& f) { fd = std::move(f.fd); }
+	file2& operator=(file2&& f) { reset(); fd = std::move(f.fd); return *this; }
 	file2(cstrnul filename, mode m = m_read) { open(filename, m); }
 	~file2() { reset(); }
 	bool open(cstrnul filename, mode m = m_read);
 #ifdef __unix__
-	bool openat(fd_t dirfd, cstrnul filename, mode m = m_read);
+	bool openat(fd_raw_t dirfd, cstrnul filename, mode m = m_read);
 #endif
 	void close() { reset(); }
-	operator bool() const { return fd != null_fd; }
+	operator bool() const { return fd.valid(); }
 	
-	void open_usurp(fd_t fd) { reset(); this->fd = fd; }
-	fd_t peek_handle() { return this->fd; }
-	fd_t release_handle() { fd_t ret = this->fd; this->fd = null_fd; return ret; }
-	void create_dup(fd_t fd); // consider create_usurp() and release_handle(), if possible; they're faster
+	void open_usurp(fd_t fd) { this->fd = std::move(fd); }
+	fd_raw_t peek_handle() { return this->fd; }
+	fd_t release_handle() { return std::move(this->fd); }
+	void create_dup(fd_t fd); // consider open_usurp() and release_handle(), if possible; they're faster
 	
 #ifndef __unix__
 	// All return number of bytes processed. 0 means both EOF and error, return can't be negative.
@@ -262,8 +301,6 @@ public:
 	// Will always end with a slash.
 	static cstrnul dir_home();
 	static cstrnul dir_config();
-	
-#undef null_fd
 };
 
 
@@ -569,6 +606,9 @@ public:
 		else return resolve(parent+sub);
 	}
 	
+	// Returns the symlink target, as stored on disk. If not a symlink, returns empty string.
+	static string readlink(cstrnul path);
+	
 	//Returns the location of the currently executing code, whether that's EXE or DLL.
 	//May be blank if the path can't be determined. The cstring is owned by Arlib and lives forever.
 	static cstrnul exepath();
@@ -577,6 +617,7 @@ public:
 	//Returns the current working directory.
 	static const string& cwd();
 	
+	// Does not resolve symlinks.
 	static string realpath(cstring path) { return resolve(cwd(), path); }
 private:
 	static bool mkdir_fs(cstring filename);

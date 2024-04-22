@@ -26,7 +26,7 @@ struct cwd_finder {
 		}
 		if (iter[-1] != '/') *iter++ = '/';
 		path = cstring(bytesr((uint8_t*)chars, iter-chars));
-#elif defined(__linux__)
+#elif defined(__GLIBC__)
 		path = string::create_usurp(getcwd(NULL, 0));
 		if (path[path.length()-1] != '/')
 			path += "/";

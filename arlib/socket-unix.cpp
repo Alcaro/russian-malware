@@ -13,6 +13,15 @@ static int mksocket(int domain, int type, int protocol)
 	return socket(domain, type, protocol);
 }
 
+//MSG_DONTWAIT is usually better, but accept() and connect() don't take that argument
+void socket2::set_fd_block(fd_raw_t fd, bool newblock)
+{
+	int flags = fcntl(fd, F_GETFL, 0);
+	flags &= ~O_NONBLOCK;
+	if (!newblock) flags |= O_NONBLOCK;
+	fcntl(fd, F_SETFL, flags);
+}
+
 namespace {
 
 static int fixret(int ret)
@@ -52,21 +61,26 @@ static void configure_sock(int fd)
 	setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, 10); // seconds per ping once the pings start
 }
 
-//MSG_DONTWAIT is usually better, but accept() and connect() don't take that argument
-static void MAYBE_UNUSED setblock(int fd, bool newblock)
-{
-	int flags = fcntl(fd, F_GETFL, 0);
-	flags &= ~O_NONBLOCK;
-	if (!newblock) flags |= O_NONBLOCK;
-	fcntl(fd, F_SETFL, flags);
-}
-
 class socket2_impl : public socket2 {
 public:
 	int fd;
 	socket2_impl(int fd) : fd(fd) {}
-	ssize_t recv_sync(bytesw by) override { assert(by); return fixret(::recv(fd, (char*)by.ptr(), by.size(), MSG_DONTWAIT|MSG_NOSIGNAL)); }
-	ssize_t send_sync(bytesr by) override { assert(by); return fixret(::send(fd, (char*)by.ptr(), by.size(), MSG_DONTWAIT|MSG_NOSIGNAL)); }
+	ssize_t recv_sync(bytesw by) override
+	{
+#ifndef ARLIB_OPT
+		if (!by)
+			debug_fatal_stack("cannot receive zero bytes");
+#endif
+		return fixret(::recv(fd, (char*)by.ptr(), by.size(), MSG_DONTWAIT|MSG_NOSIGNAL));
+	}
+	ssize_t send_sync(bytesr by) override
+	{
+#ifndef ARLIB_OPT
+		if (!by)
+			debug_fatal_stack("cannot send zero bytes");
+#endif
+		return fixret(::send(fd, (char*)by.ptr(), by.size(), MSG_DONTWAIT|MSG_NOSIGNAL));
+	}
 	async<void> can_recv() override { return runloop2::await_read(fd); }
 	async<void> can_send() override { return runloop2::await_write(fd); }
 	int get_fd() override { return fd; }
@@ -104,6 +118,12 @@ async<autoptr<socket2>> socket2::create(address addr)
 	}
 	
 	co_return new socket2_impl(fd);
+}
+
+autoptr<socket2> socket2::create_from_fd(fd_t fd)
+{
+	set_fd_nonblock(fd);
+	return new socket2_impl(fd.release());
 }
 
 
@@ -151,10 +171,10 @@ autoptr<socketlisten> socketlisten::create(uint16_t port, function<void(autoptr<
 	return create(socket2::address(localhost, port), cb);
 }
 
-socketlisten::socketlisten(int fd, function<void(autoptr<socket2>)> cb) : fd(fd), cb(std::move(cb))
+socketlisten::socketlisten(fd_t fd, function<void(autoptr<socket2>)> cb) : cb(std::move(cb)), fd(std::move(fd))
 {
-	setblock(fd, false);
-	runloop2::await_read(fd).then(&wait);
+	socket2::set_fd_nonblock(this->fd);
+	runloop2::await_read(this->fd).then(&wait);
 }
 
 void socketlisten::on_incoming()

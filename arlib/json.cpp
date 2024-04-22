@@ -881,6 +881,15 @@ static jsonparser::event test5e[]={
 	{ e_finish }
 };
 
+static const char * test6 =
+"\"#\\\n#\\\r#\\\r\n#\\\xE2\x80\xA8#\\\xE2\x80\xA9#\\\xE2\x80\xAA#\""
+;
+
+static jsonparser::event test6e[]={
+	{ e_str, "######\xE2\x80\xAA#" },
+	{ e_finish }
+};
+
 template<typename T>
 static void testjson(cstring json, jsonparser::event* expected)
 {
@@ -985,6 +994,8 @@ static void testjson_all()
 	testcall(testjson<T>(test3, test3e));
 	testcall(testjson<T>(test4, test4e));
 	testcall(testjson<T>(test5, test5e));
+	if (json5)
+		testcall(testjson<T>(test6, test6e));
 	
 	testcall(testjson_error<T>(""));
 	testcall(testjson_error<T>("           "));
@@ -1065,6 +1076,9 @@ static void testjson_all()
 	testcall(testjson_error<T,json5>("{unquoted:1}"));
 	testcall(testjson_error<T,json5>("'single quoted'"));
 	testcall(testjson_error<T,json5>("\"line\\\nbreak\""));
+	testcall(testjson_error<T,json5>("\"line\\\rbreak\""));
+	testcall(testjson_error<T,json5>("\"line\\\r\nbreak\""));
+	testcall(testjson_error<T,json5>("\"#\\\xE2\x80\xA8#\\\xE2\x80\xA9#\""));
 	testcall(testjson_error<T,json5>("-Infinity"));
 	testcall(testjson_error<T,json5>("+NaN"));
 	testcall(testjson_error<T,json5>("1\f\v"));

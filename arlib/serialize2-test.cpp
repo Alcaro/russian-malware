@@ -92,8 +92,7 @@ struct ser12 {
 	bool t;
 	bool f;
 	
-	template<typename T>
-	void serialize(T& s)
+	void serialize(auto& s)
 	{
 		s.items("foo", foo, "t", t, "f", f);
 	}
@@ -103,8 +102,7 @@ struct ser13 {
 	uint8_t foo[4];
 	array<uint8_t> bar;
 	
-	template<typename T>
-	void serialize(T& s)
+	void serialize(auto& s)
 	{
 		SER_ENTER(s)
 		{
@@ -128,8 +126,7 @@ public:
 struct ser14 {
 	int_wrap foo;
 	
-	template<typename T>
-	void serialize(T& s)
+	void serialize(auto& s)
 	{
 		s.items("foo", foo);
 	}
@@ -141,8 +138,7 @@ struct ser15 {
 	bool c;
 	int d;
 	
-	template<typename T>
-	void serialize(T& s)
+	void serialize(auto& s)
 	{
 		SER_ENTER(s)
 		{
@@ -159,8 +155,7 @@ struct ser16 {
 	array<array<int>> b;
 	map<string,array<int>> c;
 	
-	template<typename T>
-	void serialize(T& s)
+	void serialize(auto& s)
 	{
 		SER_ENTER(s)
 		{

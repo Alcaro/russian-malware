@@ -165,6 +165,16 @@ test("array", "", "array")
 	}
 	
 	{
+		array<int> x = { 3,1,4,5,9,2,6,8,7,0 };
+		array<int> y = { 3,1,4,5,9,2,6,8,7,0 };
+		array<int> z = { 0,1,2,3,4,5,6,7,8,9 };
+		x.ssort();
+		y.ssort([](int a, int b) { return a < b; });
+		assert_eq(x, z);
+		assert_eq(y, z);
+	}
+	
+	{
 		array<int> x = { 1,2,3,4,5,6,7,8,9,0 };
 		x = x.slice(3, 6);
 		assert_eq(x.size(), 6);
@@ -323,6 +333,22 @@ test("bitarray", "", "array")
 		b.resize(65);
 		b.resize(64);
 		assert_eq(tostring(b), "0000000000000000000000000000000000000000000000000000000000000000");
+	}
+	
+	{
+		array<string> a;
+		a.append("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+		a.append("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+		a.append("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+		sarray<arrayview<string>,2> b = { a, a };
+		assert_eq(b[0].size(), 3);
+		assert_eq(b[1].size(), 3);
+		assert_eq(b[0][0], "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+		assert_eq(b[0][1], "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+		assert_eq(b[0][2], "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+		assert_eq(b[1][0], "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+		assert_eq(b[1][1], "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+		assert_eq(b[1][2], "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
 	}
 }
 

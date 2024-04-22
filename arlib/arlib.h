@@ -30,6 +30,7 @@
 #include "image.h"
 #include "inotify.h"
 #include "prioqueue.h"
+#include "process.h"
 #include "regex.h"
 #include "runloop2.h"
 #include "serialize.h"

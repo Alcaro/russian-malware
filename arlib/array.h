@@ -5,6 +5,7 @@
 #include <type_traits>
 #include "linqbase.h"
 #include "serialize2-head.h"
+#include "heap.h"
 
 template<typename T> class arrayview;
 template<typename T> class arrayvieww;
@@ -128,8 +129,7 @@ public:
 	
 	template<typename T2> inline array<T2> cast() const;
 	
-private:
-	const T* find_inner(const T& item) const
+	const T* find_ptr(const T& item) const
 	{
 		if constexpr (std::is_same_v<T, char> || std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t>)
 		{
@@ -142,16 +142,15 @@ private:
 		}
 		return nullptr;
 	}
-public:
 	size_t find(const T& item) const
 	{
-		const T * found = find_inner(item);
+		const T * found = find_ptr(item);
 		if (found) return found - this->items;
 		else return -1;
 	}
 	bool contains(const T& item) const
 	{
-		return find_inner(item) != nullptr;
+		return find_ptr(item) != nullptr;
 	}
 	size_t find(arrayview<T> sequence) const requires (std::is_same_v<T, uint8_t>)
 	{
@@ -192,15 +191,13 @@ public:
 	
 	static constexpr bool serialize_as_array() { return true; }
 	template<typename Ts>
-	std::enable_if_t<Ts::serializing>
-	serialize(Ts& s) const
+	void serialize(Ts& s) const requires Ts::serializing
 	{
 		for (size_t i=0;i<size();i++)
 		{
 			s.item(items[i]);
 		}
 	}
-	
 	template<typename Ts>
 	void serialize2(Ts& s) const requires Ts::serializing
 	{
@@ -278,8 +275,14 @@ public:
 	template<typename Tless>
 	void sort(const Tless& less)
 	{
-		// TODO: less lazy
-		ssort(less);
+		heap::heapify(this->items, this->count, [&](const T& a, const T& b) { return less(b, a); });
+		
+		for (size_t remaining = this->count; remaining; remaining--)
+		{
+			char tmp[sizeof(T)];
+			heap::pop(this->items, remaining, (T*)tmp, [&](const T& a, const T& b) { return less(b, a); });
+			memcpy((void*)(this->items+remaining-1), tmp, sizeof(T));
+		}
 	}
 	
 	void sort()
@@ -289,7 +292,6 @@ public:
 	}
 	
 	//stable sort
-	//less() is guaranteed to only be called with a later than b in the input
 	template<typename Tless>
 	void ssort(const Tless& less)
 	{
@@ -345,10 +347,9 @@ public:
 		}
 	}
 	
-	template<typename Ts>
-	void serialize2(Ts& s)
+	void serialize2(auto& s)
 	{
-		if constexpr (Ts::serializing)
+		if constexpr (std::remove_reference_t<decltype(s)>::serializing) // can't change to s.serializing, Clang rejects that
 		{
 			SER_ENTER_ARRAY(s)
 			{
@@ -377,6 +378,7 @@ template<typename T> class array : public arrayvieww<T> {
 	//T * items;
 	//size_t count;
 	
+public:
 	static size_t capacity_for(size_t n)
 	{
 		// don't allocate enough space for 1 entry, just go for 4 or 8 directly - fewer mallocs means faster
@@ -386,6 +388,7 @@ template<typename T> class array : public arrayvieww<T> {
 		else return bitround(n);
 	}
 	
+private:
 	void clone(const arrayview<T>& other)
 	{
 		this->count = other.size(); // I can't access non-this instances of my base class, so let's just use the public interface
@@ -523,6 +526,12 @@ public:
 		this->items[index].~T();
 		memmove((void*)(this->items+index), (void*)(this->items+index+1), sizeof(T)*(this->count-1-index));
 		resize_shrink_noinit(this->count-1);
+	}
+	void remove_matching(const T& item)
+	{
+		const T * found = this->find_ptr(item);
+		if (found)
+			remove(found - this->items);
 	}
 	
 	void remove_range(size_t start, size_t end)
@@ -682,10 +691,9 @@ public:
 	}
 	
 	
-	template<typename Ts>
-	void serialize(Ts& s)
+	void serialize(auto& s)
 	{
-		if constexpr (Ts::serializing)
+		if constexpr (std::remove_reference_t<decltype(s)>::serializing) // can't change to s.serializing, Clang rejects that
 		{
 			arrayview<T>::serialize(s);
 		}
@@ -696,10 +704,9 @@ public:
 		}
 	}
 	
-	template<typename Ts>
-	void serialize2(Ts& s)
+	void serialize2(auto& s)
 	{
-		if constexpr (Ts::serializing)
+		if constexpr (std::remove_reference_t<decltype(s)>::serializing) // can't change to s.serializing, Clang rejects that
 		{
 			arrayview<T>::serialize2(s);
 		}
@@ -733,7 +740,11 @@ template<typename T, size_t N> class sarray {
 public:
 	sarray() = default;
 	// One argument per member - useful for parameter packs and fixed-size items.
-	template<typename... Ts> sarray(Ts... args) : storage{ (T)args... }
+	template<typename... Ts> sarray(const Ts&... args) : storage{ (T)args... }
+	{
+		static_assert(sizeof...(Ts) == N);
+	}
+	template<typename... Ts> sarray(Ts&&... args) : storage{ (T)std::move(args)... }
 	{
 		static_assert(sizeof...(Ts) == N);
 	}
@@ -747,6 +758,10 @@ public:
 	size_t size() const { return N; }
 	const T* ptr() const { return storage; }
 	T* ptr() { return storage; }
+	T* begin() { return storage; }
+	T* end() { return storage+N; }
+	const T* begin() const { return storage; }
+	const T* end() const { return storage+N; }
 	//TODO: implement more missing features
 	
 	template<size_t n>

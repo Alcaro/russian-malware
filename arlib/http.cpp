@@ -178,21 +178,17 @@ async<http_t::rsp> http_t::request(req q_orig)
 			if (q.loc.scheme == "http")
 				sock = co_await cb_mksock(false, q.loc.host, 80);
 			else if (q.loc.scheme == "https")
-#ifdef ARLIB_SSL
 				sock = co_await cb_mksock(true, q.loc.host, 443);
-#else
-				co_return set_error(r, e_connect);
-#endif
 			else co_return set_error(r, e_bad_url);
+			
+			if (!sock)
+				co_return set_error(r, e_connect);
 			
 			sock_loc.set_origin(q.loc);
 			sock_generation++;
 			sock_sent = 0;
 			sock_received = 0;
 			sock_keepalive_until = timestamp::now() + duration::ms(2000);
-			
-			if (!sock)
-				co_return set_error(r, e_connect);
 		}
 		can_retry = false;
 	}

@@ -119,8 +119,10 @@ public:
 // Arrays of waiters or producers require each object to hold a pointer to the parent (or find it in a thread local, or something).
 
 namespace runloop2 {
-	// Registering a wait is amortized O(1), with no syscalls or malloc.
-	// Syscalls and malloc may happen only if this is the max number of concurrent waiters in the runloop's lifetime.
+	// Registering a wait is O(1), with no syscalls or malloc,
+	//  except if this is the max number of concurrent waiters in the runloop's lifetime,
+	//  in which case O(1) number of malloc and syscalls may happen.
+	//  (Even if the max was exceeded, registering a wait is still amortized O(1).)
 #ifdef __unix__
 	async<void> await_fd(int fd, bool want_write);
 	async<void> await_read(int fd) { return await_fd(fd, false); }
@@ -132,12 +134,13 @@ namespace runloop2 {
 	//  but continuing to use a socket after cancelling an operation is undefined,
 	//  also because lol windows (and there's no completion routine for connecting a socket).
 	// I/O Completion Ports also exist, but they do (as far as I can determine) not interact with window messages in any way.
-	// If I need something with a huge number of HANDLEs, I'll do one of
+	// If I need something with a large number of HANDLEs, I'll do one of
 	// - disassemble MsgWaitForMultipleObjects until I find the queue HANDLE
 	// - make an alternate IOCP-based runloop backend and force any bulk processing onto a separate thread
 	// - spawn a thread whose job is to wait for an IOCP, and wake main thread whenever anything happens
 	// - switch to WSARecv's completion routines and hope nobody's trying to connect 64 sockets simultaneously
 	// - make an IOCP-based backend and use AttachThreadInput on a side thread to wake main when receiving a window message (if it works)
+	// - MWFMO with an iocp as the only handle (seems to be undocumented and win10 only - use only if ossified, i.e. implemented in Wine)
 	// - or simply tell people to use Linux.
 	async<void> await_handle(HANDLE h);
 #endif
@@ -184,7 +187,7 @@ public:
 // Unlike a normal mutex, waiters are ordered.
 // The object is not thread safe. Arlib does not, at this point, support any kind of interaction between coroutines and threads.
 // Releasing the mutex will send the successor to runloop2::schedule(), not run it immediately; code like
-// async<void> my_coro() { { auto lock = co_await mut1; co_await something(); } { auto lock = co_await mut2; co_await something_else(); } }
+// async<void> my_coro() { { auto lock = co_await mut1; co_await something(); } { auto lock = co_await mut2; co_await something2(); } }
 // will not allow any coroutine to overtake another, even if some of the something()s are synchronous.
 // The object does not allocate any memory, other than what runloop2::schedule() does.
 class co_mutex {
@@ -825,7 +828,7 @@ public:
 // They will continue in the same order they stop, so you can send three HTTP requests to the same socket,
 //  enter a co_mutex, and read the responses.
 // Usable by coroutines only, not manual waiters.
-// Despite the name, it's not thread safe, but neither is any other runloop-related object.
+// Despite the name, it's not thread safe (just like all other runloop-related objects).
 class co_mutex {
 public:
 	class lock {

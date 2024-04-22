@@ -77,9 +77,8 @@ struct timestamp {
 #ifdef __unix__
 	static timestamp now()
 	{
-// TODO: replace with clang's real version once https://github.com/llvm/llvm-project/issues/48204 resolves
-// TODO: remove this ifdef when all offending compilers are dropped for other reasons
-#if (defined(__clang_major__) && __clang_major__ >= 99) || (!defined(__clang_major__) && defined(__GNUC__) && __GNUC__ >= 12)
+// TODO: remove this ifdef when dropping the offending compilers
+#if (defined(__clang_major__) && __clang_major__ >= 18) || (!defined(__clang_major__) && defined(__GNUC__) && __GNUC__ >= 12)
 		static_assert(std::is_layout_compatible_v<struct timespec, timestamp>);
 #endif
 		timestamp ret;

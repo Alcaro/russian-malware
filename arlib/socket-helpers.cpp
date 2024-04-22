@@ -66,8 +66,8 @@ void socketbuf::socket_failed()
 		RETURN_IF_CALLBACK_DESTRUCTS(send_prod.complete(false));
 	if (recv_op != op_none)
 	{
-		op_t op = this->recv_op;
-		this->recv_op = op_none;
+		op_t op = recv_op;
+		recv_op = op_none;
 		// the numeric branches yield identical machine code and should be merged
 		// (they aren't)
 		if (op == op_u8)
@@ -91,7 +91,7 @@ void socketbuf::recv_ready()
 	ssize_t n = sock->recv_sync(recv_by.push_begin(1024));
 	if (n < 0)
 		socket_failed();
-	if (!sock)
+	if (n < 0 || !sock) // don't read sock after calling socket_failed, it could've deleted this
 		return;
 	size_t prev_size = recv_by.size();
 	recv_by.push_finish(n);
@@ -207,5 +207,24 @@ void socketbuf::send(bytesr by)
 	}
 	send_by.push(by);
 	send_prepare();
+}
+
+void socketbuf::moved()
+{
+	recv_wait.moved();
+	if (recv_op)
+	{
+		if (recv_op == op_u8) recv_prod.get<producer_t<uint8_t>>().inner.moved();
+		else if (recv_op == op_u16b) recv_prod.get<producer_t<uint16_t>>().inner.moved();
+		else if (recv_op == op_u16l) recv_prod.get<producer_t<uint16_t>>().inner.moved();
+		else if (recv_op == op_u32b) recv_prod.get<producer_t<uint32_t>>().inner.moved();
+		else if (recv_op == op_u32l) recv_prod.get<producer_t<uint32_t>>().inner.moved();
+		else if (recv_op == op_u64b) recv_prod.get<producer_t<uint64_t>>().inner.moved();
+		else if (recv_op == op_u64l) recv_prod.get<producer_t<uint64_t>>().inner.moved();
+		else if (recv_op == op_bytesr) recv_prod.get<producer_t<bytesr>>().inner.moved();
+		else __builtin_unreachable();
+	}
+	send_wait.moved();
+	send_prod.moved();
 }
 #endif

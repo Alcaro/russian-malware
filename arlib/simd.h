@@ -24,6 +24,48 @@ static inline __attribute__((target("sse2"), always_inline)) __m128i _mm_undefin
 }
 # endif
 
+// guaranteed safe by
+// https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf 7.3.2 Access Atomicity
+// https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html volume 3A, 9.1.1 Guaranteed Atomic Operations
+// https://discord.com/channels/737189251069771789/737734473751330856/1181320524178149427 (ms-stl discord)
+// "VIA confirmed this via an LLVM issue not sure about their documentation" (can't find that LLVM issue)
+__m128i inline __attribute__((always_inline, artificial, target("avx")))
+_mm_loadatomic_si128(const __m128i * p)
+{
+	__m128i v;
+	__asm__("vmovdqa {%1,%0|%0,%1}" : "=x"(v) : "m"(*p) : "memory"); // the memory clobbers are just to ensure ordering with other threads
+	return v;                                                        // deleting them would yield relaxed memory order
+}
+void inline __attribute__((always_inline, artificial, target("avx")))
+_mm_storeatomic_si128(__m128i * p, __m128i v)
+{
+	__asm__("vmovdqa {%1,%0|%0,%1}" : "=m"(*p) : "x"(v) : "memory");
+}
+__m128 inline __attribute__((always_inline, artificial, target("avx")))
+_mm_loadatomic_ps(const __m128 * p)
+{
+	__m128 v;
+	__asm__("vmovaps {%1,%0|%0,%1}" : "=x"(v) : "m"(*p) : "memory"); // clang optimizes every movdqa to movaps
+	return v;
+}
+void inline __attribute__((always_inline, artificial, target("avx")))
+_mm_storeatomic_ps(const __m128 * p, __m128 v)
+{
+	__asm__("vmovaps {%0,%1|%1,%0}" :: "x"(v), "m"(*p) : "memory");
+}
+__m128d inline __attribute__((always_inline, artificial, target("avx")))
+_mm_loadatomic_pd(const __m128d * p)
+{
+	__m128d v;
+	__asm__("vmovapd {%1,%0|%0,%1}" : "=x"(v) : "m"(*p) : "memory");
+	return v;
+}
+void inline __attribute__((always_inline, artificial, target("avx")))
+_mm_storeatomic_pd(const __m128d * p, __m128d v)
+{
+	__asm__("vmovapd {%0,%1|%1,%0}" :: "x"(v), "m"(*p) : "memory");
+}
+
 # ifdef __i386__
 // malloc is guaranteed to have 16-byte alignment on 64bit, but only 8 on 32bit
 // I want to use the aligned instructions on 64bit, not ifdef it any further, not rewrite array<>, and not invent custom names,
