@@ -121,7 +121,7 @@ public:
 		return out;
 	}
 	
-	template<typename T2> arrayview<T2> reinterpret() const
+	template<typename T2> arrayview<T2> transmute() const
 	{
 		size_t newsize = this->count * sizeof(T) / sizeof(T2);
 		return arrayview<T2>((T2*)this->items, newsize);
@@ -275,8 +275,21 @@ public:
 	template<typename Tless>
 	void sort(const Tless& less)
 	{
+		// if sorted already, just leave it
+		size_t i=0;
+		while (true)
+		{
+			if (i+1 >= this->count)
+				return;
+			if (less(this->items[i+1], this->items[i]))
+				break;
+			i++;
+		}
+		
+		// create a max heap (popping will remove the highest element)
 		heap::heapify(this->items, this->count, [&](const T& a, const T& b) { return less(b, a); });
 		
+		// and repeatedly take the highest element and put it at the end
 		for (size_t remaining = this->count; remaining; remaining--)
 		{
 			char tmp[sizeof(T)];
@@ -748,8 +761,8 @@ public:
 	{
 		static_assert(sizeof...(Ts) == N);
 	}
-	// Undefined behavior if the input is too small.
-	sarray(arrayview<T> ptr) { memcpy(storage, ptr.ptr(), sizeof(storage)); }
+	// Undefined behavior if the input is too small. Also, undefined behavior in general if object isn't trivially copyable.
+	//sarray(arrayview<T> ptr) { memcpy(storage, ptr.ptr(), sizeof(storage)); }
 	
 	T& operator[](size_t n) { return storage[n]; }
 	const T& operator[](size_t n) const { return storage[n]; }
@@ -857,7 +870,7 @@ public:
 	~fifo()
 	{
 		for (size_t n=0;n<wr;n++)
-			items[n].~T();
+			items[rd+n].~T();
 		free(items);
 	}
 };

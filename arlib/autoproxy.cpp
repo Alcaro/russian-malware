@@ -53,8 +53,8 @@ public:
 		uint32_t buckets = by.u32l();
 		
 		size_t items_start = 0x20 + sizeof(uint32_t)*bloom + sizeof(uint32_t)*buckets;
-		static_assert(END_LITTLE); // reinterpreting stuff like this is endian dependent
-		items = map.slice(items_start, items_end-items_start).reinterpret<gvdb_item>();
+		static_assert(END_LITTLE); // transmuting stuff like this is endian dependent
+		items = map.slice(items_start, items_end-items_start).transmute<gvdb_item>();
 	}
 	
 private:

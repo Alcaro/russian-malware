@@ -222,6 +222,8 @@ int process::create(params& param)
 
 co_test("process", "array,string", "process")
 {
+	if (RUNNING_ON_VALGRIND)
+		test_skip_force("prints valgrind heap summary a few times");
 	{
 		process p;
 		assert(p.create({ "true", { "/bin/true" } }));

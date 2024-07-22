@@ -38,7 +38,7 @@ void lock_write(T* val, T2 newval) { __atomic_store_n(val, newval, order); }
 template<lockorder_t order, typename T>
 T lock_incr(T* val) { static_assert(std::is_integral_v<T>); return __atomic_fetch_add(val, 1, order); }
 template<lockorder_t order, typename T>
-T lock_decr(T* val) { static_assert(std::is_integral_v<T>); return __atomic_fetch_add(val, 1, order); }
+T lock_decr(T* val) { static_assert(std::is_integral_v<T>); return __atomic_fetch_sub(val, 1, order); }
 template<lockorder_t order, typename T, typename T2>
 T lock_xchg(T* val, T2 newval) { return __atomic_exchange_n(val, newval, order); }
 template<lockorder_t order, lockorder_t orderfail, typename T, typename T2>

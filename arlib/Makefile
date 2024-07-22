@@ -119,7 +119,7 @@ endif
 ifeq ($(OS),linux)
   # -ldl is unnecessary on glibc >= 2.34 (aug 2021); musl has, as far as I can determine, never needed it
   # it can be removed once 2.34 is 5 years old, and it's confirmed to be unnecessary on musl
-  # other libcs are rare, they're safe to ignore
+  # (I don't think anyone uses other libcs, but if so, I can put it back)
   CONF_LFLAGS += -ldl -Wl,-z,relro,-z,now,--as-needed,--no-undefined
   ifeq ($(ARTYPE),dll)
     CONF_CFLAGS += -fpic
@@ -190,7 +190,7 @@ endif
 
 ifneq ($(ASAN),)
   CONF_CFLAGS += -fsanitize=address
-  #ASan must be first
+  # ASan must be first
   CONF_LFLAGS := -lasan $(CONF_LFLAGS)
 endif
 ifneq ($(TSAN),)
@@ -417,6 +417,7 @@ TRUE_CFLAGS := -std=c99 $(CCXXFLAGS) $(CONF_CFLAGS) $(CFLAGS)
 # - #elifdef, #elifndef
 # - Some equivalent of my container_of<&parent_cls::member>(this)
 #     also known as CONTAINING_RECORD in Windows/FreeBSD kernels
+# - static_assert(false) - valid in clang >= 17 and gcc >= 13
 
 # C++20 features I should investigate using more of:
 # - Template string literals (for the regex parser)

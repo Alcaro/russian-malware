@@ -248,9 +248,9 @@ public:
 	
 	//TODO: reenable, and add a bunch of static asserts that every type (including return) is either unchanged,
 	// or a primitive type (integer or pointer - no struct, float, or other funny stuff) of the same size as the original
-	//Usage: function<void(void*)> x; function<void(int*)> y = x.reinterpret<void(int*)>();
+	//Usage: function<void(void*)> x; function<void(int*)> y = x.transmute<void(int*)>();
 	//template<typename T>
-	//function<T> reinterpret()
+	//function<T> transmute()
 	//{
 	//	
 	//}

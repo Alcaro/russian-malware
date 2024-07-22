@@ -147,6 +147,7 @@ struct ntdll_t {
 	//decltype(::LdrLoadDll)* LdrLoadDll;
 	//decltype(::NtProtectVirtualMemory)* NtProtectVirtualMemory;
 	//decltype(::LdrProcessRelocationBlock)* LdrProcessRelocationBlock;
+	//decltype(::LdrGetProcedureAddress)* LdrGetProcedureAddress;
 	NTSTATUS (NTAPI * LdrLoadDll)(const WCHAR * DirPath, uint32_t Flags, const UNICODE_STRING * ModuleFileName, HMODULE* ModuleHandle);
 	NTSTATUS (NTAPI * NtProtectVirtualMemory)(HANDLE process, void** addr_ptr, size_t* size_ptr, uint32_t new_prot, uint32_t* old_prot);
 	IMAGE_BASE_RELOCATION* (NTAPI * LdrProcessRelocationBlock)(void* page, unsigned count, uint16_t* relocs, intptr_t delta);
@@ -312,7 +313,7 @@ static void run_static_ctors()
 
 
 // can't use a normal runonce or mutex here, OS facilities aren't available yet
-// I could switch from busyloop to OS facility once relocs are done and ctors are running, but no real point
+// I could switch from busywait to OS facility once relocs are done and ctors are running, but no real point
 enum { init_no, init_busy, init_done };
 static uint8_t init_state = init_no;
 

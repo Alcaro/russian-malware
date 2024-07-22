@@ -310,6 +310,7 @@ string cstring::replace(cstring in, cstring out) const
 }
 
 
+// TODO: too many split functions, need to unify them somehow
 array<cstring> cstring::csplit(cstring sep, size_t limit) const
 {
 	array<cstring> ret;
@@ -404,6 +405,28 @@ done:
 		ret.insert(0, bytesr(datastart, len));
 	return ret;
 }
+
+
+void cstring::csplit_to(cstring sep, arrayvieww<cstring> target) const
+{
+	size_t i = 0;
+	const uint8_t * data = ptr();
+	const uint8_t * dataend = ptr()+length();
+	
+	while (i < target.size()-1)
+	{
+		const uint8_t * next = (uint8_t*)memmem(data, dataend-data, sep.ptr(), sep.length());
+		if (!next) break;
+		target[i++] = bytesr(data, next-data);
+		data = next+sep.length();
+	}
+	target[i] = bytesr(data, dataend-data);
+}
+
+// todo: implement these
+//void cstring::crsplit_to(cstring sep, arrayvieww<cstring> target) const
+//void cstring::cspliti_to(cstring sep, arrayvieww<cstring> target) const
+//void cstring::crspliti_to(cstring sep, arrayvieww<cstring> target) const
 
 
 //array<cstring> cstring::csplitw(size_t limit) const

@@ -65,9 +65,7 @@
 // I could put the others in a detail namespace, but that'd make the already-annoying error messages even longer.
 // I could detail it in release builds, but that wouldn't accomplish anything useful.
 namespace regex {
-#ifdef __OPTIMIZE__ // discard the templates from object files; don't do this in debug builds, it bloats the error messages
-namespace {
-#endif
+namespace { // this anon namespace significantly reduces the size of the object file
 
 template<size_t min, size_t max> struct range_t; // used for char_class and repeat
 
@@ -942,17 +940,6 @@ template<size_t n_capture, typename T> struct flat_optimizer {
 
 
 
-//wipe the nuls early, to improve compile time by not passing large amounts of trash into deep template instantiations,
-// and to improve error messages by trimming the fat and passing str as chars
-template<size_t n, typename out, char... tail> struct mkstr_sub;
-template<size_t n, char... out, char head, char... tail> struct mkstr_sub<n, parser::str<out...>, head, tail...> {
-	using content = typename mkstr_sub<n-1, parser::str<out..., head>, tail...>::content;
-};
-template<char... out, char... tail>
-struct mkstr_sub<0, parser::str<out...>, 0, tail...> {
-	using content = parser::str<out..., ')'>;
-};
-
 //I could use static_assert(std::is_same<out_tree, str<>>), but that would remove what out_tree actually is from the errors.
 template<typename chars, typename inner> struct assert_empty;
 template<typename inner> struct assert_empty<parser::str<>, inner> {
@@ -961,12 +948,12 @@ template<typename inner> struct assert_empty<parser::str<>, inner> {
 
 template<typename chars> struct parse_outer;
 
-template<size_t n_chars, char... rawchars>
-struct mkstr {
-	static_assert(n_chars < sizeof...(rawchars), "input too long, extend RE_UNPACK");
-	// weirdo indirection, to delete rawchars from the compiler errors
-	static parse_outer<typename mkstr_sub<n_chars, parser::str<'(','?',':'>, rawchars...>::content> chars() { return {}; }
-};
+template<size_t... Ns>
+auto mkstr(auto get_str, std::index_sequence<Ns...>)
+{
+	constexpr const char * str = get_str();
+	return parse_outer<parser::str<'(','?',':', str[Ns]..., ')'>>();
+}
 
 template<char... chars> struct parse_outer<parser::str<chars...>> {
 	using content = parser::parse_term<1, parser::str<chars...>>;
@@ -1285,28 +1272,14 @@ public:
 #endif
 };
 
-#ifdef __OPTIMIZE__
 }
-#endif
 }
 
-#define RE_UNPACK1(str,n) \
-	,(n < sizeof(str) ? str[n] : 0) 
-#define RE_UNPACK8(str,n) \
-	RE_UNPACK1(str,(n)*8+0) RE_UNPACK1(str,(n)*8+1) RE_UNPACK1(str,(n)*8+2) RE_UNPACK1(str,(n)*8+3) \
-	RE_UNPACK1(str,(n)*8+4) RE_UNPACK1(str,(n)*8+5) RE_UNPACK1(str,(n)*8+6) RE_UNPACK1(str,(n)*8+7)
-#define RE_UNPACK64(str,n) \
-	RE_UNPACK8(str,(n)*8+0) RE_UNPACK8(str,(n)*8+1) RE_UNPACK8(str,(n)*8+2) RE_UNPACK8(str,(n)*8+3) \
-	RE_UNPACK8(str,(n)*8+4) RE_UNPACK8(str,(n)*8+5) RE_UNPACK8(str,(n)*8+6) RE_UNPACK8(str,(n)*8+7)
-#define RE_UNPACK(str) \
-	sizeof(str)-1 \
-	RE_UNPACK64(str,0) RE_UNPACK64(str,1) RE_UNPACK64(str,2) RE_UNPACK64(str,3) \
-	RE_UNPACK64(str,4) RE_UNPACK64(str,5) RE_UNPACK64(str,6) RE_UNPACK64(str,7)
-
-#define REGEX(str) (regex::mkstr<RE_UNPACK(str)>::chars().parse().compile().optimize())
+#define REGEX_TYPE(str) (regex::mkstr([]{ return "" str ""; }, std::make_index_sequence<sizeof(str)-1>()))
+#define REGEX(str) (REGEX_TYPE(str).parse().compile().optimize())
 // These four emit a compiler error containing the given regex at various stages of parsing.
 // Useful for debugging this module, less useful for anything else.
-#define REGEX_DEBUG_STR(str) (regex::mkstr<RE_UNPACK(str)>::chars().fail())
-#define REGEX_DEBUG_TREE(str) (regex::mkstr<RE_UNPACK(str)>::chars().parse().fail())
-#define REGEX_DEBUG_FLATIN(str) (regex::mkstr<RE_UNPACK(str)>::chars().parse().compile().fail())
-#define REGEX_DEBUG_FLAT(str) (regex::mkstr<RE_UNPACK(str)>::chars().parse().compile().optimize().fail())
+#define REGEX_DEBUG_STR(str) (REGEX_TYPE(str).fail())
+#define REGEX_DEBUG_TREE(str) (REGEX_TYPE(str).parse().fail())
+#define REGEX_DEBUG_FLATIN(str) (REGEX_TYPE(str).parse().compile().fail())
+#define REGEX_DEBUG_FLAT(str) (REGEX_TYPE(str).parse().compile().optimize().fail())

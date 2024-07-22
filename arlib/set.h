@@ -237,6 +237,10 @@ public:
 	set& operator=(set&& other) { destruct(); construct(std::move(other)); return *this; }
 	~set() { destruct(); }
 	
+	void add(const T& item)
+	{
+		get_create(item);
+	}
 	template<typename T2>
 	void add(const T2& item)
 	{

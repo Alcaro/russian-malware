@@ -3,7 +3,7 @@
 
 // __builtin_cpu_supports relies on a setup function that takes about 2KB of statically linked machine code,
 //   mostly to make up its own feature bit order, and to calculate cpu model and other rarely useful information
-// it also optimizes poorly
+// it also remains as a runtime check if the feature is enabled with -mavx2
 // better reinvent it
 #define __builtin_cpu_supports ("use runtime__SSE2__ instead"/0)
 
@@ -30,10 +30,11 @@
 #  define __SSE4_2__ 1
 #  define __POPCNT__ 1 // implied by SSE4.2; PCLMUL and AES are not implied by anything
 # endif
-// AVX2 implies nothing except itself and AVX
-# ifdef __AVX512F__
-#  define __FMA__ 1
+# ifdef __AVX2__
+#  define __FMA__ 1 // not implied by AVX2 on GCC/Clang, but it is on msvc
 # endif
+// 512 does, to my knowledge, not imply anything in particular
+// (MSVC enables all of F CD BW DQ VL if any is enabled, but it adds all five preprocessor symbols)
 #endif
 
 #if defined(__i386__) || defined(__x86_64__)
@@ -45,7 +46,7 @@ extern uint32_t arlib_cpuid_l7ebx;
 // sorted by approximate date of introduction (no real research done)
 
 // ideally I'd have a way to return constant false for unsupported features if the binary isn't intended for distribution
-// (for example -march=native and Gentoo), but I'm not sure how to implement that, and it's unlikely to be worthwhile
+// (for example -march=native on Gentoo), but I'm not sure how to implement that, and it's unlikely to be worthwhile
 
 #ifdef __MMX__
 # define runtime__MMX__ 1

@@ -28,6 +28,7 @@ public:
 	
 	// Does not permit being called on an initialized object. Deinit it first.
 	bool init(const char * filename);
+	bool inited() { return handle; }
 	
 	// Will return NULL if initialization failed.
 	void* sym_ptr(const char * name);
@@ -49,8 +50,14 @@ public:
 		else if constexpr (std::is_function_v<std::remove_pointer_t<T>>) return (T)sym_func(name);
 		else return (T)sym_ptr(name);
 	}
+	template<auto T>
+	auto sym(const char * name)
+	{
+		return sym<decltype(T)>(name);
+	}
 	// Usage recommendation:
-	// auto Direct3DCreate9 = d3d9.sym<decltype(::Direct3DCreate9)>("Direct3DCreate9");
+	// IDirect3D9* ret = d3d9.sym<Direct3DCreate9>("Direct3DCreate9")(D3D_SDK_VERSION);
+	// auto Direct3DCreate9 = d3d9.sym< ::Direct3DCreate9>("Direct3DCreate9");
 	// If you need multiple symbols, using DECL_DYLIB_T will save you a bit of typing.
 	
 	//Fetches multiple symbols. 'names' must be a NUL-separated list of names, terminated with a blank one.
@@ -80,6 +87,7 @@ public:
 			/* call this even on failure, to ensure members are nulled */ \
 			return _internal_dylib.sym_multi((funcptr*)this, PPFOREACH_A(DECL_DYLIB_NAME, prefix, __VA_ARGS__)); \
 		} \
+		bool inited() { return _internal_dylib.inited(); } \
 	private: \
 		dylib _internal_dylib; \
 	}

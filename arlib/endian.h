@@ -73,32 +73,32 @@ forceinline uint32_t readu_be32(const uint8_t* in) { uint32_t ret; memcpy(&ret, 
 forceinline uint64_t readu_le64(const uint8_t* in) { uint64_t ret; memcpy(&ret, in, sizeof(ret)); return END_BIG ? end_swap64(ret) : ret; }
 forceinline uint64_t readu_be64(const uint8_t* in) { uint64_t ret; memcpy(&ret, in, sizeof(ret)); return END_BIG ? ret : end_swap64(ret); }
 
-forceinline float  readu_lef32(const uint8_t* in) { return reinterpret<float >(readu_le32(in)); }
-forceinline float  readu_bef32(const uint8_t* in) { return reinterpret<float >(readu_be32(in)); }
-forceinline double readu_lef64(const uint8_t* in) { return reinterpret<double>(readu_le64(in)); }
-forceinline double readu_bef64(const uint8_t* in) { return reinterpret<double>(readu_be64(in)); }
+forceinline float  readu_lef32(const uint8_t* in) { return transmute<float >(readu_le32(in)); }
+forceinline float  readu_bef32(const uint8_t* in) { return transmute<float >(readu_be32(in)); }
+forceinline double readu_lef64(const uint8_t* in) { return transmute<double>(readu_le64(in)); }
+forceinline double readu_bef64(const uint8_t* in) { return transmute<double>(readu_be64(in)); }
 
 // TODO: do I need this?
 /*
 template<typename T> forceinline T readu_le(const uint8_t* in)
 {
 	static_assert(std::is_arithmetic_v<T>);
-	if (std::is_same_v<bool,std::remove_cv_t<T>>) // reinterpret<bool>(2) is UB, and sizeof(bool) != 1 on PowerPC; override it
+	if (std::is_same_v<bool,std::remove_cv_t<T>>) // transmute<bool>(2) is UB, and sizeof(bool) != 1 on PowerPC; override it
 		return readu_le8(in);
-	if (sizeof(T) == 1) return reinterpret<T>(readu_le8( in));
-	if (sizeof(T) == 2) return reinterpret<T>(readu_le16(in));
-	if (sizeof(T) == 4) return reinterpret<T>(readu_le32(in));
-	if (sizeof(T) == 8) return reinterpret<T>(readu_le64(in));
+	if (sizeof(T) == 1) return transmute<T>(readu_le8( in));
+	if (sizeof(T) == 2) return transmute<T>(readu_le16(in));
+	if (sizeof(T) == 4) return transmute<T>(readu_le32(in));
+	if (sizeof(T) == 8) return transmute<T>(readu_le64(in));
 }
 template<typename T> forceinline T readu_be(const uint8_t* in)
 {
 	static_assert(std::is_arithmetic_v<T>);
 	if (std::is_same_v<bool,std::remove_cv_t<T>>)
 		return readu_be8(in);
-	if (sizeof(T) == 1) return reinterpret<T>(readu_be8( in));
-	if (sizeof(T) == 2) return reinterpret<T>(readu_be16(in));
-	if (sizeof(T) == 4) return reinterpret<T>(readu_be32(in));
-	if (sizeof(T) == 8) return reinterpret<T>(readu_be64(in));
+	if (sizeof(T) == 1) return transmute<T>(readu_be8( in));
+	if (sizeof(T) == 2) return transmute<T>(readu_be16(in));
+	if (sizeof(T) == 4) return transmute<T>(readu_be32(in));
+	if (sizeof(T) == 8) return transmute<T>(readu_be64(in));
 }
 */
 
@@ -111,10 +111,10 @@ forceinline void writeu_be32(uint8_t* target, uint32_t n) { n = END_BIG ? n : en
 forceinline void writeu_le64(uint8_t* target, uint64_t n) { n = END_BIG ? end_swap64(n) : n; memcpy(target, &n, 8); }
 forceinline void writeu_be64(uint8_t* target, uint64_t n) { n = END_BIG ? n : end_swap64(n); memcpy(target, &n, 8); }
 
-forceinline void writeu_lef32(uint8_t* target, float  n) { writeu_le32(target, reinterpret<uint32_t>(n)); }
-forceinline void writeu_bef32(uint8_t* target, float  n) { writeu_be32(target, reinterpret<uint32_t>(n)); }
-forceinline void writeu_lef64(uint8_t* target, double n) { writeu_le64(target, reinterpret<uint64_t>(n)); }
-forceinline void writeu_bef64(uint8_t* target, double n) { writeu_be64(target, reinterpret<uint64_t>(n)); }
+forceinline void writeu_lef32(uint8_t* target, float  n) { writeu_le32(target, transmute<uint32_t>(n)); }
+forceinline void writeu_bef32(uint8_t* target, float  n) { writeu_be32(target, transmute<uint32_t>(n)); }
+forceinline void writeu_lef64(uint8_t* target, double n) { writeu_le64(target, transmute<uint64_t>(n)); }
+forceinline void writeu_bef64(uint8_t* target, double n) { writeu_be64(target, transmute<uint64_t>(n)); }
 
 forceinline sarray<uint8_t,1> pack_le8( uint8_t  n) { sarray<uint8_t,1> ret; writeu_le8( ret.ptr(), n); return ret; }
 forceinline sarray<uint8_t,1> pack_be8( uint8_t  n) { sarray<uint8_t,1> ret; writeu_be8( ret.ptr(), n); return ret; }
@@ -125,10 +125,10 @@ forceinline sarray<uint8_t,4> pack_be32(uint32_t n) { sarray<uint8_t,4> ret; wri
 forceinline sarray<uint8_t,8> pack_le64(uint64_t n) { sarray<uint8_t,8> ret; writeu_le64(ret.ptr(), n); return ret; }
 forceinline sarray<uint8_t,8> pack_be64(uint64_t n) { sarray<uint8_t,8> ret; writeu_be64(ret.ptr(), n); return ret; }
 
-forceinline sarray<uint8_t,4> pack_lef32(float  n) { return pack_le32(reinterpret<uint32_t>(n)); }
-forceinline sarray<uint8_t,4> pack_bef32(float  n) { return pack_be32(reinterpret<uint32_t>(n)); }
-forceinline sarray<uint8_t,8> pack_lef64(double n) { return pack_le64(reinterpret<uint64_t>(n)); }
-forceinline sarray<uint8_t,8> pack_bef64(double n) { return pack_be64(reinterpret<uint64_t>(n)); }
+forceinline sarray<uint8_t,4> pack_lef32(float  n) { return pack_le32(transmute<uint32_t>(n)); }
+forceinline sarray<uint8_t,4> pack_bef32(float  n) { return pack_be32(transmute<uint32_t>(n)); }
+forceinline sarray<uint8_t,8> pack_lef64(double n) { return pack_le64(transmute<uint64_t>(n)); }
+forceinline sarray<uint8_t,8> pack_bef64(double n) { return pack_be64(transmute<uint64_t>(n)); }
 
 #undef end_swap16 // delete these, so callers are forced to use the functions instead
 #undef end_swap32

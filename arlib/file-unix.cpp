@@ -123,6 +123,7 @@ array<string> file::listdir(cstring path)
 	while ((ent = readdir(dir)))
 	{
 		// don't use strcmp, its constant overhead is suboptimal at best
+		// (it's inlined in gcc -O2, but not -Os. And not in clang. And it's inlined poorly.)
 		if (UNLIKELY(ent->d_name[0] == '.'))
 		{
 			if (ent->d_name[1] == '\0') continue;

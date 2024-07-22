@@ -183,7 +183,7 @@ public:
 	cstring(const char * str) { init_from_nocopy(str); }
 	cstring(const char8_t * str) { init_from_nocopy((char*)str); }
 	cstring(bytesr bytes) { init_from_nocopy(bytes); }
-	cstring(arrayview<char> chars) { init_from_nocopy(chars.reinterpret<uint8_t>()); }
+	cstring(arrayview<char> chars) { init_from_nocopy(chars.transmute<uint8_t>()); }
 	cstring(nullptr_t) { init_empty(); }
 	// If has_nul, then bytes[bytes.size()] is zero. (Undefined behavior does not count as zero.)
 	cstring(bytesr bytes, bool has_nul) { init_from_nocopy(bytes, has_nul); }
@@ -229,12 +229,18 @@ public:
 	
 	string replace(cstring in, cstring out) const;
 	
-	//crsplitwi - cstring-returning backwards-counting split on word boundaries, inclusive
+	//fcrsplitwi - fixed-size cstring-returning backwards-counting split on word boundaries, inclusive
+	//fixed-size - returns sarray, not array
 	//cstring-returning - obvious
 	//backwards-counting - splits at the rightmost opportunity, "a b c d".rsplit<1>(" ") is ["a b c", "d"]
 	//word boundary - isspace()
 	//inclusive - the boundary string is included in the output, "a\nb\n".spliti("\n") is ["a\n", "b\n"]
 	//all subsets of splitting options are supported
+	
+	// todo:
+	// - rename all the non-f splits to d (dynamic-size)
+	// - change most callers to f
+	// - remove f from most of them, sarray should be the default
 	
 	array<cstring> csplit(cstring sep, size_t limit) const;
 	template<size_t limit = SIZE_MAX>
@@ -268,6 +274,31 @@ public:
 	array<string> rspliti(cstring sep, size_t limit) const { return crspliti(sep, limit).cast<string>(); }
 	template<size_t limit>
 	array<string> rspliti(cstring sep) const { return rspliti(sep, limit); }
+	
+	
+private:
+	void csplit_to(cstring sep, arrayvieww<cstring> target) const;
+	void crsplit_to(cstring sep, arrayvieww<cstring> target) const;
+	void cspliti_to(cstring sep, arrayvieww<cstring> target) const;
+	void crspliti_to(cstring sep, arrayvieww<cstring> target) const;
+public:
+	template<size_t limit>
+	sarray<cstring,limit+1> fcsplit(cstring sep) const { sarray<cstring,limit+1> ret; csplit_to(sep, ret); return ret; }
+	template<size_t limit>
+	sarray<cstring,limit+1> fcrsplit(cstring sep) const { sarray<cstring,limit+1> ret; crsplit_to(sep, ret); return ret; }
+	template<size_t limit>
+	sarray<string,limit+1> fsplit(cstring sep) const { return fcsplit<limit>(sep).template cast<string>(); }
+	template<size_t limit>
+	sarray<string,limit+1> frsplit(cstring sep) const { return fcrsplit<limit>(sep).template cast<string>(); }
+	
+	template<size_t limit>
+	sarray<cstring,limit+1> fcspliti(cstring sep) const { sarray<cstring,limit+1> ret; cspliti_to(sep, ret); return ret; }
+	template<size_t limit>
+	sarray<cstring,limit+1> fcrspliti(cstring sep) const { sarray<cstring,limit+1> ret; crspliti_to(sep, ret); return ret; }
+	template<size_t limit>
+	sarray<string,limit+1> fspliti(cstring sep) const { return fcspliti<limit>(sep).template cast<string>(); }
+	template<size_t limit>
+	sarray<string,limit+1> frspliti(cstring sep) const { return fcrspliti<limit>(sep).template cast<string>(); }
 	
 private:
 	// Input: Three pointers, start <= at <= end. The found match must be within the incoming at..end.
@@ -501,7 +532,7 @@ public:
 	
 	forceinline string(cstring other) : cstrnul(noinit()) { init_from(other); }
 	forceinline string(bytesr bytes) : cstrnul(noinit()) { init_from(bytes); }
-	forceinline string(arrayview<char> chars) : cstrnul(noinit()) { init_from(chars.reinterpret<uint8_t>()); }
+	forceinline string(arrayview<char> chars) : cstrnul(noinit()) { init_from(chars.transmute<uint8_t>()); }
 	forceinline string(const char * str) : cstrnul(noinit()) { init_from(str); }
 	forceinline string(const char8_t * str) : cstrnul(noinit()) { init_from((char*)str); }
 	string(array<uint8_t>&& bytes);

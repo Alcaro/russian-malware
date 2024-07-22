@@ -67,8 +67,8 @@ struct timestamp {
 	}
 	
 #ifdef __unix__
-	static timestamp from_native(struct timespec ts) { return reinterpret<timestamp>(ts); }
-	struct timespec to_native() const { return reinterpret<struct timespec>(*this); }
+	static timestamp from_native(struct timespec ts) { return transmute<timestamp>(ts); }
+	struct timespec to_native() const { return transmute<struct timespec>(*this); }
 #else
 	static timestamp from_native(FILETIME ts);
 	FILETIME to_native() const;

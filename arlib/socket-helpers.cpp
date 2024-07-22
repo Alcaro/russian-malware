@@ -3,10 +3,10 @@
 #include <errno.h>
 
 // some of this should be deduplicated into calling each other, but not until compilers are better at inlining coroutines
-async<socket2::address> socket2::dns_port(cstring host, uint16_t port)
+async<socket2::address> socket2::dns_port(cstring host, uint16_t port, size_t tries)
 {
 	cstring domain = socket2::address::split_port(host, &port);
-	co_return (co_await socket2::dns(domain)).with_port(port);
+	co_return (co_await socket2::dns(domain, tries)).with_port(port);
 }
 async<autoptr<socket2>> socket2::create(cstring host, uint16_t port)
 {

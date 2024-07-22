@@ -232,14 +232,14 @@ namespace {
 	};
 }
 
-#define FILE_SHARE_ALL (FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE)
 file::impl* file::open_impl_fs(cstring filename, mode m)
 {
 	if (path_corrupt(filename)) return nullptr;
 	
-	DWORD dispositions[] = { OPEN_EXISTING, OPEN_ALWAYS, OPEN_EXISTING, CREATE_ALWAYS, CREATE_NEW };
+	static const DWORD dispositions[] = { OPEN_EXISTING, OPEN_ALWAYS, OPEN_EXISTING, CREATE_ALWAYS, CREATE_NEW };
 	DWORD access = (m==m_read ? GENERIC_READ : GENERIC_READ|GENERIC_WRITE);
-	HANDLE file = CreateFile(filename.c_str(), access, FILE_SHARE_ALL, NULL, dispositions[m], FILE_ATTRIBUTE_NORMAL, NULL);
+	DWORD share = FILE_SHARE_READ|FILE_SHARE_WRITE; // same as libc fopen (I could grant delete access, but better be consistent with libc)
+	HANDLE file = CreateFile(filename.c_str(), access, share, NULL, dispositions[m], FILE_ATTRIBUTE_NORMAL, NULL);
 	if (file == INVALID_HANDLE_VALUE) return NULL;
 	return new file_fs(file);
 }
@@ -289,7 +289,7 @@ bool file2::open(cstrnul filename, mode m)
 	
 	DWORD dispositions[] = { OPEN_EXISTING, OPEN_ALWAYS, OPEN_EXISTING, CREATE_ALWAYS, CREATE_NEW };
 	DWORD access = ((m&7)==m_read ? GENERIC_READ : GENERIC_READ|GENERIC_WRITE);
-	DWORD share = (m&m_exclusive) ? FILE_SHARE_READ : FILE_SHARE_ALL;
+	DWORD share = (m&m_exclusive) ? FILE_SHARE_READ : (FILE_SHARE_READ|FILE_SHARE_WRITE);
 	this->fd = CreateFileW(smelly_string(filename), access, share, NULL, dispositions[m&7], FILE_ATTRIBUTE_NORMAL, NULL);
 	return (this->fd != INVALID_HANDLE_VALUE);
 }

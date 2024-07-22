@@ -324,9 +324,9 @@ inline anyptr try_calloc(size_t size, size_t count) { _test_malloc(); return cal
 void* calloc(size_t, size_t) __attribute__((deprecated("use xcalloc or try_calloc instead")));
 
 
-template<typename T, typename T2> forceinline T reinterpret(T2 in)
+template<typename T, typename T2> forceinline T transmute(T2 in)
 {
-	static_assert(std::is_trivial_v<T> && std::is_trivial_v<T2> && sizeof(T) == sizeof(T2));
+	static_assert(std::is_trivially_copyable_v<T> && std::is_trivially_copyable_v<T2> && sizeof(T) == sizeof(T2));
 	T ret;
 	memcpy(&ret, &in, sizeof(ret));
 	return ret;
@@ -1134,7 +1134,8 @@ public:
 #endif
 
 // inspired by the Linux kernel macro, but using a member pointer looks cleaner; non-expressions (like member names) in macros look wrong
-template<typename Tc, typename Ti> Tc* container_of(Ti* ptr, Ti Tc:: * memb)
+template<typename Tc, typename Ti>
+Tc* container_of(Ti* ptr, Ti Tc:: * memb)
 {
 	// https://wg21.link/P0908 proposes a better implementation, but it was forgotten and not accepted
 	Tc* fake_object = (Tc*)0x12345678;  // doing math on a fake pointer is UB, but good luck proving it's bogus
@@ -1142,11 +1143,13 @@ template<typename Tc, typename Ti> Tc* container_of(Ti* ptr, Ti Tc:: * memb)
 	size_t offset = (uintptr_t)&(fake_object->*memb) - (uintptr_t)fake_object;
 	return (Tc*)((uint8_t*)ptr - offset);
 }
-template<typename Tc, typename Ti> const Tc* container_of(const Ti* ptr, Ti Tc:: * memb)
+template<typename Tc, typename Ti>
+const Tc* container_of(const Ti* ptr, Ti Tc:: * memb)
 {
 	return container_of<Tc, Ti>((Ti*)ptr, memb);
 }
-template<auto memb, typename Ti> auto container_of(Ti* ptr) { return container_of(ptr, memb); }
+template<auto memb, typename Ti>
+auto container_of(Ti* ptr) { return container_of(ptr, memb); }
 
 class range_iter_t {
 	size_t n;

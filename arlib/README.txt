@@ -1,8 +1,9 @@
 Arlib is my utility library / std:: replacement.
 It exists for several reasons:
 - The C++ standard headers contain plenty of strange features and options whose existence
-    significantly increases compile time. For example, I only have one string class, no allocators
-    or wchar_t; this allows me to define most member functions outside the header.
+    significantly increases compile time and error message verbosity. For example, I only have one
+    string class, no allocators or wchar_t; this allows me to define most member functions outside
+    the header.
 - The std:: types lack, or lacked when I started Arlib, lots of useful features, for example an easy
     way to check if a string starts with another, or an easy way to split a string by linebreaks.
     (There are no standardized sockets or JSON parsers either, but third party libraries can fill

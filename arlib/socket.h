@@ -100,9 +100,9 @@ public:
 	// Arlib DNS doesn't accept the FQDN marker (trailing period) either;
 	//  I've never seen one in practice, not even in search-domain-enabled networks.
 	// The domain can be an IP address, and if so, will be resolved synchronously.
-	static async<address> dns(cstring domain);
+	static async<address> dns(cstring domain, size_t tries = 2);
 	// Like the above, but will parse a port number from the host, if present.
-	static async<address> dns_port(cstring host, uint16_t port);
+	static async<address> dns_port(cstring host, uint16_t port, size_t tries = 2);
 	
 	static async<autoptr<socket2>> create(address ip);
 #ifdef ARLIB_SSL

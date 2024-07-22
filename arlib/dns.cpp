@@ -135,6 +135,7 @@ public:
 		timestamp expiry = {};
 		
 		uint16_t trid;
+		uint16_t retries;
 		
 		uint8_t send_buf_domain_start;
 		uint8_t send_buf_domain_len;
@@ -226,7 +227,7 @@ public:
 		return n->prod.complete_sync(addr);
 	}
 	
-	async<socket2::address> await_lookup(cstring domain)
+	async<socket2::address> await_lookup(cstring domain, size_t tries)
 	{
 		waiter_node* n = waiting.alloc();
 		
@@ -234,10 +235,13 @@ public:
 		if (addr)
 			return my_complete(n, addr);
 		
+		if (!tries)
+			return my_complete(n, {});
 		bytestreamw req(n->send_buf);
 		
 		n->trid = this->pick_trid();
-		n->expiry = timestamp::now() + duration::ms(5000);
+		n->expiry = timestamp::in_ms(2000);
+		n->retries = tries-1;
 		req.u16b(n->trid);
 		
 		uint16_t flags = 0;
@@ -315,8 +319,18 @@ public:
 				continue;
 			if (n.expiry <= now)
 			{
-				waiting.dealloc(&n);
-				n.prod.complete({});
+				if (n.retries)
+				{
+					n.retries--;
+					n.expiry = timestamp::in_ms(2000);
+					sock->send(bytesr(n.send_buf, n.send_buf_size));
+					next_expiry = min(next_expiry, n.expiry);
+				}
+				else
+				{
+					waiting.dealloc(&n);
+					n.prod.complete({});
+				}
 			}
 			else
 				next_expiry = min(next_expiry, n.expiry);
@@ -486,9 +500,9 @@ again:
 
 }
 
-async<socket2::address> socket2::dns(cstring domain)
+async<socket2::address> socket2::dns(cstring domain, size_t tries)
 {
-	return get_dns()->await_lookup(domain);
+	return get_dns()->await_lookup(domain, tries);
 }
 void* socket2::dns_create() { return new dns_t; }
 void socket2::dns_destroy(void* dns) { delete (dns_t*)dns; }
