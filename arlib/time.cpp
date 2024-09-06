@@ -69,6 +69,7 @@ uint64_t timer::get_counter()
 uint64_t timer::to_us(uint64_t count)
 {
 #ifdef __x86_64__
+	// according to values in https://github.com/microsoft/STL/blob/main/stl/inc/__msvc_chrono.hpp
 	if (LIKELY(timer_freq.QuadPart == 10000000))
 		return div10(count);
 	// frequency can be 24 million if on an ARM emulating x86, but they can just take the slow path.

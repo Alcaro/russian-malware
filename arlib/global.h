@@ -158,8 +158,8 @@ defer_holder<T> dtor(T&& f)
 #define STR(x) STR_(x)
 
 #ifdef __GNUC__
-#define LIKELY(expr)    __builtin_expect(!!(expr), true)
-#define UNLIKELY(expr)  __builtin_expect(!!(expr), false)
+#define LIKELY(expr)    __builtin_expect((bool)(expr), true)
+#define UNLIKELY(expr)  __builtin_expect((bool)(expr), false)
 #define MAYBE_UNUSED __attribute__((__unused__)) // shut up, stupid warnings
 #define KEEP_OBJECT __attribute__((__used__)) // for static unused variables that shouldn't be optimized out
 #define forceinline inline __attribute__((always_inline))
@@ -1259,6 +1259,7 @@ using std::signbit;
 //     If a hybrid DLL imports a symbol that doesn't exist, it will remain as NULL, and will crash if called. You can't even
 //     NULL check them, compiler will optimize it out. If you need that feature, use LoadLibrary or an appropriate wrapper.
 // - Compiler-supported thread local storage in DLLs paths is unlikely to work. (TlsAlloc is fine.)
+// - Exceptions (both DW2 and SEH) are untested. I don't know if they work, break, or work only on some architectures.
 // - It uses a couple of GCC extensions, with no MSVC equivalent. (Though the rest of Arlib isn't tested under MSVC either.)
 // - Not tested outside i386 and x86_64, and likely to misbehave arbitrarily.
 // - It does various weird things; antivirus programs may react.

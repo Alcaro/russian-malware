@@ -409,8 +409,9 @@ test("http 4", "tcp", "http")
 	http_t http;
 	wrap_socks(http);
 	int n_done = 0;
+	co_holder coros;
 	
-	runloop2::detach([&]()->async<void> {
+	coros.add([&]()->async<void> {
 		http_t::req q1 = { "https://floating.muncher.se/arlib/test.txt" };
 		http_t::rsp r1 = co_await http.request(q1);
 		assert_eq(++n_done, 1);
@@ -423,7 +424,7 @@ test("http 4", "tcp", "http")
 		assert_eq(r4.text(), "hello world 4");
 	}());
 	
-	runloop2::detach([&]()->async<void> {
+	coros.add([&]()->async<void> {
 		http_t::req q2 = { "https://floating.muncher.se/arlib/test2.txt" };
 		http_t::rsp r2 = co_await http.request(q2);
 		assert_eq(++n_done, 2);
@@ -431,7 +432,7 @@ test("http 4", "tcp", "http")
 		assert_eq(r2.text(), "hello world 2");
 	}());
 	
-	runloop2::detach([&]()->async<void> {
+	coros.add([&]()->async<void> {
 		http_t::req q3 = { "https://floating.muncher.se/arlib/test3.txt" };
 		http_t::rsp r3 = co_await http.request(q3);
 		assert_eq(++n_done, 3);
@@ -452,29 +453,30 @@ test("http 5", "tcp", "http")
 	http_t http;
 	wrap_socks(http);
 	int n_done = 0;
+	co_holder coros;
 	
-	runloop2::detach([&]()->async<void> {
+	coros.add([&]()->async<void> {
 		http_t::req q1 = { "https://floating.muncher.se/404.html" };
 		http_t::rsp r1 = co_await http.request(q1);
 		assert_eq(++n_done, 1);
 		assert_eq(r1.status, 404);
 	}());
 	
-	runloop2::detach([&]()->async<void> {
+	coros.add([&]()->async<void> {
 		http_t::req q2 = { "https://stacked.muncher.se/404.html" };
 		http_t::rsp r2 = co_await http.request(q2);
 		assert_eq(++n_done, 2);
 		assert_eq(r2.status, 404);
 	}());
 	
-	runloop2::detach([&]()->async<void> {
+	coros.add([&]()->async<void> {
 		http_t::req q3 = { "https://floating.muncher.se/404.html" };
 		http_t::rsp r3 = co_await http.request(q3);
 		assert_eq(++n_done, 3);
 		assert_eq(r3.status, 404);
 	}());
 	
-	runloop2::run([&]()->async<void> {
+	coros.add([&]()->async<void> {
 		http_t::req q4 = { "https://floating.muncher.se/404.html" };
 		http_t::rsp r4 = co_await http.request(q4);
 		assert_eq(++n_done, 4);
@@ -496,14 +498,15 @@ test("http 6", "tcp", "http")
 	// echo json_encode(["post" => file_get_contents("php://input")]);
 	q1.body.append('x');
 	http_t::req q2 = q1;
+	co_holder coros;
 	
-	runloop2::detach([&]()->async<void> {
+	coros.add([&]()->async<void> {
 		http_t::rsp r = co_await http.request(q1);
 		assert_eq(r.status, 200);
 		assert_eq(r.text(), "{\"post\":\"x\"}");
 	}());
 	q2.body.append('y');
-	runloop2::run([&]()->async<void> {
+	coros.add([&]()->async<void> {
 		http_t::rsp r = co_await http.request(q2);
 		assert_eq(r.status, 200);
 		assert_eq(r.text(), "{\"post\":\"xy\"}");
@@ -522,7 +525,8 @@ test("http 7", "tcp", "http")
 	q1.headers.append("Connection: close"); // ensure it tries again
 	http_t::req q2 = q1;
 	
-	runloop2::detach([&]()->async<void> {
+	co_holder coros;
+	coros.add([&]()->async<void> {
 		http_t::rsp r = co_await http.request(q1);
 		assert_eq(r.status, 200);
 		assert_eq(r.text(), "hello world");

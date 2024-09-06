@@ -16,14 +16,14 @@
 
 // This file makes no attempt to implement or support
 // - Tear-offs (sub-interfaces implemented as separate objects, allocated when QI'd) - useless in this year. Just allocate it upfront.
-// - Custom interfaces - if either side is a Windows component, the interface is in the headers, and if neither is, why use COM?
+// - Custom interfaces - needs an IDL compiler
 // - DllCanUnloadNow - unavoidable race window between the dll's refcount and ctor entry / dtor exit
 // (though it doesn't particularly stop you either)
 
 // Available AddRef/Release strategies:
 // - I want to implement these functions myself -> CComObjectRoot (the others use this as base class)
-// - I want a normal object, created by new, with atomic refcounting -> CComObject
-// - I want a normal object, created by new, with non-atomic refcounting -> CComObjectNoLock
+// - I want a normal object, created with new, with atomic refcounting -> CComObject (nonatomic unless ARLIB_THREAD is enabled)
+// - I want a normal object, created with new, with non-atomic refcounting -> CComObjectNoLock (same as above if ARLIB_THREAD is disabled)
 // - I want this object to be part of another, and share its parent's refcount -> CComContainedObject
 // - I want lifetime managed by something else, with AddRef/Release being noops -> CComObjectStack (because 'something' is usually stack)
 
@@ -85,7 +85,7 @@ class CComObjectRoot : public Tifaces... {
 		if (riid == __uuidof(Ti))
 		{
 			self->AddRef();
-			*(IUnknown**)ppvObject = self;
+			*(Ti**)ppvObject = self;
 			return true;
 		}
 		
@@ -132,7 +132,7 @@ public:
 		uint32_t new_refcount = --refcount;
 		if (!new_refcount)
 		{
-			refcount++; // to prevent double delete if the dtor ends up QIing this object
+			refcount++; // to prevent double delete if the dtor ends up QIing this object (unlikely, but not unthinkable)
 			// gcc can devirtualize this, but only if it's in an anon namespace (clang can't, bug 94924)
 			// the drawback is the namespace makes it impossible to pass the object across translation units,
 			// but the entire COM is platform specific, you shouldn't have cross-TU platform-specific pieces
@@ -144,6 +144,7 @@ public:
 };
 }
 
+#ifdef ARLIB_THREAD
 // Implements QueryInterface, AddRef and Release. The latter two store a refcount in this object, and process it atomically.
 // Only the refcounts are atomic; the implemented interfaces need to take locks. The object must be created with new.
 namespace {
@@ -152,7 +153,7 @@ class CComObject : public CComObjectRoot<Tifaces...> {
 private:
 	LONG refcount = 1;
 protected:
-	uint32_t spare; // To avoid some padding. A child class can use this for anything; this object doesn't use it.
+	uint32_t spare;
 public:
 	ULONG STDMETHODCALLTYPE AddRef() override final
 	{
@@ -184,6 +185,9 @@ public:
 	virtual ~CComObject() {}
 };
 }
+#else
+#define CComObject CComObjectNoLock
+#endif
 
 // Implements QueryInterface, AddRef and Release. The latter two call AddRef/Release on the object this one is contained in.
 // Intended for use with member objects, such as the IPins in an IBaseFilter, where the inner is a direct member of the outer.
@@ -210,7 +214,7 @@ public:
 template<typename... Tifaces>
 class CComObjectStack : public CComObjectRoot<Tifaces...> {
 public:
-	ULONG STDMETHODCALLTYPE AddRef() override final { return 1; }
+	ULONG STDMETHODCALLTYPE AddRef() override final { return 2; }
 	ULONG STDMETHODCALLTYPE Release() override final { return 1; }
 };
 
@@ -230,6 +234,10 @@ public:
 	static_assert(std::is_member_pointer_v<decltype(accessor)>);
 	// feels like there should be a few type traits for this, but...
 	using Tparent = decltype([]<typename Tval, typename Tparent>(Tval Tparent::*)->Tparent{}(accessor));
+	// todo: this won't work with IEnumObjects, it takes an extra RIID before Ti* (it presumably QI's the objects, not just AddRef)
+	// (but there's few or no usecases for implementing that interface anyways, no known interface refers to it)
+	// (everything needing an object collection takes IObjectArray instead)
+	// (the only known implementation is CLSID_EnumerableObjectCollection (which also implements IObjectCollection and IObjectArray))
 	using Tret = decltype([]<typename Ti>(HRESULT STDMETHODCALLTYPE (Tiface::*)(ULONG, Ti*, ULONG*))->Ti{}(&Tiface::Next));
 	
 	CComPtr<Tparent> parent; // Tparent isn't a COM interface, but it has AddRef and Release functions so it's good enough
@@ -344,14 +352,16 @@ class CComAggObject final : public Tparent {
 		
 		ULONG STDMETHODCALLTYPE AddRef() override
 		{
-			return ++refcount;
+			return __atomic_add_fetch(&refcount, 1, __ATOMIC_RELAXED);
 		}
 		ULONG STDMETHODCALLTYPE Release() override
 		{
-			uint32_t new_refcount = --refcount;
+			uint32_t new_refcount = __atomic_sub_fetch(&refcount, 1, __ATOMIC_RELEASE);
 			if (!new_refcount)
+			{
+				__atomic_add_fetch(&refcount, 1, __ATOMIC_ACQUIRE);
 				delete parent();
-			return new_refcount;
+			}
 		}
 	};
 	own_iunknown_t own_iunknown;

@@ -39,20 +39,13 @@ string smelly_string::ucs1_to_utf8(arrayview<uint8_t> ucs1)
 	return ret;
 }
 
-string smelly_string::utf16_to_utf8(arrayview<uint16_t> utf16)
+size_t smelly_string::utf16_to_utf8_buf(arrayview<uint16_t> utf16, arrayvieww<uint8_t> utf8)
 {
 #ifdef _WIN32
-	bytearray ret;
-	ret.resize(utf16.size()*3);
-	int retlen = WideCharToMultiByte(CP_UTF8, 0, (wchar_t*)utf16.ptr(), utf16.size(), (char*)ret.ptr(), ret.size(), nullptr, nullptr);
-	ret.resize(retlen);
-	return ret;
+	return WideCharToMultiByte(CP_UTF8, 0, (wchar_t*)utf16.ptr(), utf16.size(), (char*)utf8.ptr(), utf8.size(), nullptr, nullptr);
 #else
-	bytearray ret;
-	ret.resize(utf16.size()*3);
-	uint8_t* out_start = ret.ptr();
-	uint8_t* out = out_start;
-	for (size_t n=0;n<utf16.size();n++)
+	uint8_t* out = utf8.ptr();
+	for (size_t n = 0; n < utf16.size(); n++)
 	{
 		uint32_t codepoint = utf16[n];
 		if (LIKELY(codepoint <= 0x7F))
@@ -67,9 +60,17 @@ string smelly_string::utf16_to_utf8(arrayview<uint16_t> utf16)
 		}
 		out += string::codepoint(out, codepoint);
 	}
-	ret.resize(out-out_start);
-	return ret;
+	return out - utf8.ptr();
 #endif
+}
+
+string smelly_string::utf16_to_utf8(arrayview<uint16_t> utf16)
+{
+	bytearray ret;
+	ret.resize(utf16.size()*3);
+	size_t retlen = utf16_to_utf8_buf(utf16, ret);
+	ret.resize(retlen);
+	return ret;
 }
 
 string smelly_string::utf16l_to_utf8(arrayview<uint8_t> utf16)

@@ -1,6 +1,5 @@
 #pragma once
 #include "global.h"
-#include "linqbase.h"
 #include "serialize2-head.h"
 
 #include "simd.h"
@@ -14,7 +13,6 @@
 
 #include "bytepipe.h"
 #include "file.h"
-#include "linq.h"
 #include "os.h"
 #include "random.h"
 #include "stringconv.h"

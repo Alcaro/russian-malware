@@ -10,81 +10,43 @@
 #include <utility>
 #include <type_traits>
 
-#ifdef __GNUC__
-#define LIKELY(expr)    __builtin_expect(!!(expr), true)
-#define UNLIKELY(expr)  __builtin_expect(!!(expr), false)
-#else
-#define LIKELY(expr)    (expr)
-#define UNLIKELY(expr)  (expr)
-#endif
-
-// TODO: remove refcount; the runloop rewrite replaced a lot of functions with producer/consumer, so it's mostly unnecessary
-// but not completely, there are still a few I'm not sure what to do with
-//#define FUNCTION_NO_REFCOUNT
-
 template<typename T> class function;
 template<typename Tr, typename... Ta>
 class function<Tr(Ta...)> {
+protected:
 	typedef Tr(*Tfp)(void* ctx, Ta... args);
 	typedef Tr(*Tfpr)(Ta... args);
-	
-	struct refcount
-	{
-		size_t count;
-		void(*destruct)(void* ctx);
-	};
 	
 	// context first, so a buffer overflow into this object can't redirect the function without resetting the context
 	// I think that's the order that makes exploitation harder, though admittedly I don't have any numbers on that
 	void* ctx;
 	Tfp func;
-	refcount* ref;
 	
 	class dummy {};
 	
 	static Tr empty(void* ctx, Ta... args) { return Tr(); }
 	static Tr freewrap(void* ctx, Ta... args) { return ((Tfpr)ctx)(std::forward<Ta>(args)...); }
 	
-	void add_ref()
-	{
-		if (LIKELY(!ref)) return;
-		ref->count++;
-	}
-	
-	void unref()
-	{
-		if (LIKELY(!ref)) return;
-		if (!--ref->count)
-		{
-			ref->destruct(ctx);
-			delete ref;
-		}
-		ref = NULL;
-	}
-	
 	void init_free(Tfpr fp)
 	{
 		func = freewrap;
 		ctx = (void*)fp;
-		ref = NULL;
 	}
 	
 	void init_null()
 	{
 		func = empty;
 		ctx = (void*)empty;
-		ref = NULL;
 	}
 	
 	void init_ptr(Tfp fp, void* ctx)
 	{
 		this->func = fp;
 		this->ctx = ctx;
-		this->ref = NULL;
 	}
 	
 	template<typename Tl>
-	typename std::enable_if_t< std::is_convertible_v<Tl, Tfpr>>
+	typename std::enable_if_t<std::is_convertible_v<Tl, Tfpr>>
 	init_lambda(Tl lambda)
 	{
 		init_free(lambda);
@@ -99,47 +61,26 @@ class function<Tr(Ta...)> {
 	typename std::enable_if_t<!std::is_convertible_v<Tl, Tfpr>>
 	init_lambda(Tl lambda)
 	{
-		if constexpr (std::is_trivially_copyable_v<Tl> && sizeof(Tl) <= sizeof(void*))
+		static_assert(std::is_trivially_copyable_v<Tl> && sizeof(Tl) <= sizeof(void*));
+		
+		void* obj = NULL;
+		memcpy(&obj, &lambda, sizeof(lambda));
+		
+		auto wrap = [](void* ctx, Ta... args)
 		{
-			void* obj = NULL;
-			memcpy(&obj, &lambda, sizeof(lambda));
-			
-			auto wrap = [](void* ctx, Ta... args)
-			{
-				alignas(Tl) char l[sizeof(void*)];
-				memcpy(l, &ctx, sizeof(void*));
-				return (*(Tl*)l)(std::forward<Ta>(args)...);
-			};
-			init_ptr(wrap, obj);
-		}
-		else
-		{
-#ifdef FUNCTION_NO_REFCOUNT
-			static_assert(sizeof(Tl) < 0);
-#endif
-			class holder {
-				refcount rc;
-				Tl l;
-			public:
-				holder(Tl l) : l(l) { rc.count = 1; rc.destruct = &holder::destruct; }
-				static Tr call(holder* self, Ta... args) { return self->l(std::forward<Ta>(args)...); }
-				static void destruct(void* self) { ((holder*)self)->l.~Tl(); } // don't delete self, line 59 does that
-			};
-			this->func = (Tfp)&holder::call;
-			this->ctx = new holder(std::move(lambda));
-			this->ref = (refcount*)this->ctx;
-		}
+			alignas(Tl) char l[sizeof(void*)];
+			memcpy(l, &ctx, sizeof(void*));
+			return (*(Tl*)l)(std::forward<Ta>(args)...);
+		};
+		init_ptr(wrap, obj);
 	}
 	
 public:
 	function() { init_null(); }
-	function(const function& rhs) : ctx(rhs.ctx), func(rhs.func), ref(rhs.ref) { add_ref(); }
-	function(function&& rhs)      : ctx(rhs.ctx), func(rhs.func), ref(rhs.ref) { rhs.ref = NULL; }
-	function& operator=(const function& rhs)
-		{ unref(); func = rhs.func; ctx = rhs.ctx; ref = rhs.ref; add_ref(); return *this; }
-	function& operator=(function&& rhs)
-		{ unref(); func = rhs.func; ctx = rhs.ctx; ref = rhs.ref; rhs.ref = NULL; return *this; }
-	~function() { unref(); }
+	function(const function& rhs) = default;
+	function(function&& rhs) = default;
+	function& operator=(const function& rhs) = default;
+	function& operator=(function&& rhs) = default;
 	
 	function(Tfpr fp) { init_free(fp); }
 	function(std::nullptr_t) { init_null(); }
@@ -153,6 +94,7 @@ public:
 		init_lambda(std::forward<Tl>(lambda));
 	}
 	
+	// can't take member pointers, that's UB
 	template<typename Tl, typename Tc>
 	function(Tl lambda,
 	         Tc* ctx,
@@ -160,14 +102,153 @@ public:
 	            std::is_invocable_r_v<Tr, Tl, Tc*, Ta...>
 	         , dummy> ignore = dummy())
 	{
+		Tr(*func)(Tc*, Ta...) = lambda;
+		this->func = (Tfp)func;
+		this->ctx = (void*)ctx;
+	}
+	
+	Tr operator()(Ta... args) const { return func(ctx, std::forward<Ta>(args)...); }
+protected:
+	//to make null objects callable, 'func' must be a valid function
+	//empty() is weak, so it deduplicates, checking for that is easy
+	//but empty() could also be deduplicated with some explicit binding that's optimized out, so we need something else too
+	//for example, obj=func=empty
+	//this will give false positives if
+	//(1) the function is created from a lambda
+	//(2) the lambda value-binds a size_t
+	//(3) the size_t is random-looking or uninitialized, and just accidentally happens to be same as 'empty'
+	//(4) the lambda does nothing and is optimized out - in particular, it does not use its bound variable
+	//(5) the compiler does not optimize out the unused bind
+	//(6) the compiler merges the lambda with 'empty'
+	//(7) the callee does something significant with a falsy function - more than just not calling it
+	//many of which are extremely unlikely. In particular, the combination 2+4 seems quite impossible to me.
+	//Alternatively, you could craft a false positive by abusing decompose(), but if you do that, you're asking for trouble.
+	bool isTrue() const
+	{
+		return (func != empty || (void*)func != ctx);
+	}
+public:
+	explicit operator bool() const { return isTrue(); }
+	bool operator!() const { return !isTrue(); }
+	
+protected:
+	struct binding {
+		Tfp fp;
+		void* ctx;
+	};
+public:
+	//Splits a function object into a function pointer and a context argument.
+	//Calling the pointer, with the context as first argument, is equivalent to calling the function object directly
+	// (possibly modulo a few move constructor calls).
+	//If the function is a big_function, the function object must be kept alive during any use of the binding.
+	binding decompose()
+	{
+		return { func, ctx };
+	}
+};
+
+template<typename T> struct remove_function_cruft;
+template<typename Tc, typename Tr, typename... Ta> struct remove_function_cruft<Tr (Tc::*)(Ta...) const> { using type = Tr(Ta...); };
+template<typename Tc, typename Tr, typename... Ta> struct remove_function_cruft<Tr (Tc::*)(Ta...)      > { using type = Tr(Ta...); };
+template<typename T> function(T lambda) -> function<typename remove_function_cruft<decltype(&T::operator())>::type>;
+
+// A big_function is like a normal function, but it can bind more than one pointer, or anything that takes a copy constructor.
+template<typename T> class big_function;
+template<typename Tr, typename... Ta>
+class big_function<Tr(Ta...)> : public function<Tr(Ta...)> {
+	typedef Tr(*Tfp)(void* ctx, Ta... args);
+	typedef Tr(*Tfpr)(Ta... args);
+	
+	struct refcount
+	{
+		size_t count;
+		void(*destruct)(void* ctx);
+	};
+	refcount* ref = NULL;
+	
+	class dummy {};
+	
+	void add_ref()
+	{
+		if (!ref) return;
+		ref->count++;
+	}
+	
+	void unref()
+	{
+		if (!ref) return;
+		if (!--ref->count)
+		{
+			ref->destruct(this->ctx);
+			delete ref;
+		}
+		ref = NULL;
+	}
+	
+	// copy ctor is fine, lambda objects are fine, but making functions wrap each other means I mismatched an argument type or something
+	// this will also fail the sizeof test below, but this extra check gives better errors
+	template<typename Tri, typename... Tai>
+	void init_lambda_big(big_function<Tri(Tai...)>) = delete;
+	
+	template<typename Tl>
+	void init_lambda_big(Tl lambda)
+	{
+		if constexpr (std::is_trivially_copyable_v<Tl> && sizeof(Tl) <= sizeof(void*))
+		{
+			this->init_lambda(std::forward<Tl>(lambda));
+		}
+		else
+		{
+			class holder {
+				refcount rc;
+				Tl l;
+			public:
+				holder(Tl l) : l(l) { rc.count = 1; rc.destruct = &holder::destruct; }
+				static Tr call(holder* self, Ta... args) { return self->l(std::forward<Ta>(args)...); }
+				static void destruct(void* self) { ((holder*)self)->l.~Tl(); } // don't delete self, unref() does that (todo: check if UB)
+			};
+			this->func = (Tfp)&holder::call;
+			this->ctx = new holder(std::move(lambda));
+			this->ref = (refcount*)this->ctx;
+		}
+	}
+	
+public:
+	big_function() { this->init_null(); }
+	big_function(const big_function& rhs) { this->func = rhs.func; this->ctx = rhs.ctx; ref = rhs.ref; add_ref(); }
+	big_function(big_function&& rhs)      { this->func = rhs.func; this->ctx = rhs.ctx; ref = rhs.ref; rhs.ref = NULL; }
+	big_function& operator=(const big_function& rhs)
+		{ unref(); this->func = rhs.func; this->ctx = rhs.ctx; ref = rhs.ref; add_ref(); return *this; }
+	big_function& operator=(big_function&& rhs)
+		{ unref(); this->func = rhs.func; this->ctx = rhs.ctx; ref = rhs.ref; rhs.ref = NULL; return *this; }
+	~big_function() { unref(); }
+	
+	big_function(Tfpr fp) { this->init_free(fp); }
+	big_function(std::nullptr_t) { this->init_null(); }
+	
+	template<typename Tl>
+	big_function(Tl lambda,
+	             typename std::enable_if_t<
+	                std::is_invocable_r_v<Tr, Tl, Ta...>
+	             , dummy> ignore = dummy())
+	{
+		init_lambda_big(std::forward<Tl>(lambda));
+	}
+	
+	template<typename Tl, typename Tc>
+	big_function(Tl lambda,
+	             Tc* ctx,
+	             typename std::enable_if_t<
+	                std::is_invocable_r_v<Tr, Tl, Tc*, Ta...>
+	             , dummy> ignore = dummy())
+	{
 		this->func = (Tfp)(Tr(*)(Tc*, Ta...))lambda;
 		this->ctx = (void*)ctx;
 		this->ref = NULL;
 	}
 	
-#ifndef FUNCTION_NO_REFCOUNT
 	template<typename Tl, typename Tc>
-	function(Tl lambda,
+	big_function(Tl lambda,
 	         Tc* ctx,
 	         void(*destruct)(void* ctx),
 	         typename std::enable_if_t<
@@ -180,85 +261,9 @@ public:
 		this->ref->count = 1;
 		this->ref->destruct = destruct;
 	}
-#endif
-	
-	Tr operator()(Ta... args) const { return func(ctx, std::forward<Ta>(args)...); }
-private:
-	//to make null objects callable, 'func' must be a valid function
-	//empty() is weak, so it deduplicates, checking for that is easy
-	//but empty() could also be deduplicated with some explicit binding that's optimized out, so we need something else too
-	//for example, obj=func=empty
-	//this will give false positives if
-	//(1) the function is created from a lambda
-	//(2) the lambda value-binds a size_t
-	//(3) the size_t is random-looking or uninitialized, and just accidentally happens to be same as 'empty'
-	//(4) the lambda does nothing and is optimized out - in particular, it does not use its bound variable
-	//(5) the compiler does not optimize out the unused bind
-	//(6) the compiler merges the lambda with 'empty'
-	//(7) the callee does anything significant with a falsy function - more than just not calling it
-	//many of which are extremely unlikely. In particular, the combination 2+4 seems quite impossible to me.
-	//Alternatively, you could craft a false positive by abusing decompose(), but if you do that, you're asking for trouble.
-	bool isTrue() const
-	{
-		return (func != empty || (void*)func != ctx);
-	}
-public:
-	explicit operator bool() const { return isTrue(); }
-	bool operator!() const { return !isTrue(); }
-	
-private:
-	struct unsafe_binding {
-		bool safe;
-		Tfp fp;
-		void* ctx;
-		operator bool() { return safe; }
-	};
-	struct binding {
-		Tfp fp;
-		void* ctx;
-	};
-public:
-	//Splits a function object into a function pointer and a context argument.
-	//Calling the pointer, with the context as first argument, is equivalent to calling the function object directly
-	// (possibly modulo a few move constructor calls).
-	//
-	//WARNING: If the object owns memory, it must remain alive during any use of ctx.
-	//This function assumes you don't want to keep this object alive.
-	//Therefore, if you call this on something that should stay alive, you'll get a crash.
-	//
-	//The function object owns memory if it refers to a lambda binding more than sizeof(void*) bytes.
-	//In typical cases (a member function, or a lambda binding [this] or nothing), this is safe.
-	//If you want to decompose but keep the function object alive, use try_decompose.
-	binding decompose()
-	{
-		if (ref) __builtin_trap();
-		return { func, ctx };
-	}
-	
-//#ifndef FUNCTION_NO_REFCOUNT
-	//Like the above, but assumes you will keep the object alive, so it always succeeds.
-	//Potentially useful to skip a level of indirection when wrapping a C callback into an Arlib
-	// class, but should be avoided under most circumstances. Direct use of a C API can know what's
-	// being bound, and can safely use the above instead.
-	unsafe_binding try_decompose()
-	{
-		return { !ref, func, ctx };
-	}
-//#endif
-	
-	//TODO: reenable, and add a bunch of static asserts that every type (including return) is either unchanged,
-	// or a primitive type (integer or pointer - no struct, float, or other funny stuff) of the same size as the original
-	//Usage: function<void(void*)> x; function<void(int*)> y = x.transmute<void(int*)>();
-	//template<typename T>
-	//function<T> transmute()
-	//{
-	//	
-	//}
 };
 
 // for simple cases, a lambda capturing [this] is generally wiser than bind_ptr/bind_this
-
-#if __cplusplus >= 201703L
 
 // this isn't a constructor, so I don't think c++17/20 deduction guides can simplify it any further
 // and fn needs to be a constant expression, not sure if deduction guides can do that
@@ -277,63 +282,21 @@ function<Tr(Ta...)> function_binder(      Tc* ctx, Tr(Tc::*)(Ta...)      ) // ex
 		ctx };
 }
 
+// I'd delete this if I could, but the pmf must be a template param so a wrapper fptr can be created
 #define bind_ptr(fn, ptr) (function_binder<fn>(ptr, fn))
 #define bind_this(fn) bind_ptr(fn, this) // reminder: bind_this(&classname::function), not bind_this(function)
 
-#else
+template<typename Tl> auto decompose_lambda(Tl&& l) { return function(std::move(l)).decompose(); }
 
-template<typename Tc, typename Tr, typename... Ta>
-struct function_binder_inner {
-	template<Tr(Tc::*fn)(Ta...)>
-	function<Tr(Ta...)> get(Tc* ctx)
-	{
-		return {
-			[](Tc* ctx, Ta... args)->Tr { return (ctx->*fn)(std::forward<Ta>(args)...); },
-			ctx };
-	}
-	
-	template<Tr(Tc::*fn)(Ta...) const>
-	function<Tr(Ta...)> get(const Tc* ctx)
-	{
-		return {
-			[](const Tc* ctx, Ta... args)->Tr { return (ctx->*fn)(std::forward<Ta>(args)...); },
-			ctx };
-	}
-};
-template<typename Tc, typename Tr, typename... Ta>
-function_binder_inner<Tc, Tr, Ta...>
-function_binder(Tr(Tc::*)(Ta...))
-{ return {}; }
-template<typename Tc, typename Tr, typename... Ta>
-function_binder_inner<Tc, Tr, Ta...>
-function_binder(Tr(Tc::*)(Ta...) const)
-{ return {}; }
-
-#define bind_ptr(fn, ptr) (function_binder(fn).template get<fn>(ptr))
-#define bind_this(fn) bind_ptr(fn, this)
-
-#endif
-
-//while the function template can be constructed from a lambda, I want bind_lambda(...).decompose(...) to work
-//so I need something slightly more complex than #define bind_lambda(...) { __VA_ARGS__ }
-template<typename Tl, typename Tr, typename... Ta>
-function<Tr(Ta...)> bind_lambda_core(Tl&& l, Tr (Tl::*f)(Ta...) const)
-{ return l; }
-template<typename Tl, typename Tr, typename... Ta>
-function<Tr(Ta...)> bind_lambda_core(Tl&& l, Tr (Tl::*f)(Ta...))
-{ return l; }
-template<typename Tl>
-decltype(bind_lambda_core<Tl>(std::declval<Tl>(), &Tl::operator()))
-bind_lambda(Tl&& l)
+template<typename T>
+auto to_fptr(T tl)
 {
-	return bind_lambda_core<Tl>(std::move(l), &Tl::operator());
+	static_assert(std::is_trivially_constructible_v<T>);
+	return (typename remove_function_cruft<decltype(&T::operator())>::type*)tl;
 }
 
-//I could make this a compile error if the lambda can't safely decompose, but no need. it'll be immediately caught at runtime anyways
-//swapped decompose function is also possible, but also a waste of time, better use the two-lambda version (or g_signal_connect_swapped)
-template<typename Tl>
-auto decompose_lambda(Tl&& l) { return bind_lambda(std::move(l)).decompose(); }
-
+// todo: find which project I used this for
+/*
 //Implementation detail of the below.
 template<bool found, typename Tl1> void* decompose_get_userdata()
 {
@@ -426,3 +389,4 @@ auto decompose_lambda_large(Tl1&& extract, Tl2&& exec)
 {
 	return decompose_lambda_explicit_inner<true, Tl1, Tl2>(std::move(exec), &Tl2::operator());
 }
+*/

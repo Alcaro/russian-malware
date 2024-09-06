@@ -5,6 +5,8 @@
 static_assert(sizeof(uint8_t) == 1);
 static_assert(sizeof(uint64_t) == 8);
 
+// todo: use RWF_ATOMIC on kernel >= 6.11
+
 enum {
 	// Every object starts with a u64 size+type. Size is a power of two >= 32, and type is one of the t_ values.
 	t_typemask = 15,

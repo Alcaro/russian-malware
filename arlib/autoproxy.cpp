@@ -191,14 +191,14 @@ public:
 #ifdef BACKEND_GSETTINGS
 		gs_proxy = g_settings_new("org.gnome.system.proxy");
 		gs_socks = g_settings_new("org.gnome.system.proxy.socks");
-		auto change_event = decompose_lambda([this](char* key, GSettings* self) -> gboolean {
+		function change_event = [this](char* key, GSettings* self) -> gboolean {
 			// no point worrying about what exactly changed, just reload everything
 			mutexlocker lk(this->mut);
 			this->reload();
 			return false;
-		});
-		g_signal_connect_swapped(gs_proxy, "changed", G_CALLBACK(change_event.fp), change_event.ctx);
-		g_signal_connect_swapped(gs_socks, "changed", G_CALLBACK(change_event.fp), change_event.ctx);
+		};
+		g_signal_connect_swapped(gs_proxy, "changed", G_CALLBACK(change_event.decompose().fp), change_event.decompose().ctx);
+		g_signal_connect_swapped(gs_socks, "changed", G_CALLBACK(change_event.decompose().fp), change_event.decompose().ctx);
 #endif
 #ifdef BACKEND_GVDB
 		ino.add(file2::dir_config()+"dconf/user", [this](cstring fn){ mutexlocker lk(this->mut); this->reload(); });

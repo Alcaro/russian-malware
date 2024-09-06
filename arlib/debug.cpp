@@ -64,7 +64,17 @@ void debug_log_stack(const char * text)
 {
 	debug_log(text);
 	
-	void* addrs[80];
+	char buf[64];
+	const char * head = "Build ID ";
+	memcpy(buf, head, strlen(head));
+	int n = strlen(head);
+	tostringhex_ptr(buf+n, debug_build_id(), 32);
+	n+=32;
+	buf[n++] = '\n';
+	buf[n++] = '\0';
+	debug_log(buf);
+	
+	void* addrs[100];
 	int n_addrs = backtrace(addrs, ARRAY_SIZE(addrs));
 	
 	//*
@@ -210,7 +220,7 @@ void debug_log_stack(const char * text)
 {
 	debug_log(text);
 	
-	void* addrs[80];
+	void* addrs[100];
 	int n_addrs = CaptureStackBackTrace(0, ARRAY_SIZE(addrs), addrs, nullptr);
 	
 	for (int i=0;i<n_addrs;i++)

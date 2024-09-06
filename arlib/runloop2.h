@@ -35,10 +35,7 @@ public:
 	... operator co_await();
 };
 
-// producer and waiter can't be used directly.
-// Instead, inherit from them; T2 must be the child class' name, and must implement the applicable virtual function.
-// Alternatively, T2 can be void, meaning the virtual will never be invoked. For waiters, T2 can be void only if T is void.
-template<typename T, typename T2>
+template<typename T>
 class producer {
 public:
 	producer(producer_inner<T>);
@@ -52,7 +49,6 @@ public:
 // The member argument must point to your producer within its containing class. The function can be any member with matching signature.
 template<producer<T> Towner:: * memb, void(Towner::*fn_cancel)()>
 producer_inner<T> make_producer();
-
 
 template<typename T>
 class waiter {
@@ -69,7 +65,7 @@ waiter_inner<T> make_waiter();
 // You can also pass a lambda, if you don't have an object (mostly useful for tests).
 // The lambda can't capture; if you need that, use the above variant.
 template<fn_cancel = [](){ ... }>
-producer_inner<T> make_producer();
+waiter_inner<T> make_waiter();
 
 // An example of producer/waiter:
 
@@ -151,9 +147,6 @@ namespace runloop2 {
 	// Schedules this coroutine for execution when the caller returns to the runloop.
 	// They will execute in order of being added. There are no guarantees on how they're ordered relative to fds and timers.
 	void schedule(std::coroutine_handle<> coro);
-	// Adds a waiter for the event that simply does nothing. Useful mostly for tests.
-	// If you want to be able to cancel it, or be told when it's done, use another waiter.
-	void detach(async<void> event);
 	
 	// Runs the runloop. Returns after at least one event is dispatched, or if wait=false, returns immediately.
 	// Returns whether anything happened.
@@ -757,20 +750,6 @@ namespace runloop2 {
 	
 	void run(async<void> event);
 	bool step(bool wait=true);
-	
-	// TODO: delete runloop2::detach() and this class
-	class co_waiter_void_multi : public waiter<void> {
-	public:
-		co_waiter_void_multi() : waiter<void>([](waiter<void>*){}) {}
-		void forget() { prod = nullptr; } // wrapper because prod is protected
-		~co_waiter_void_multi() { prod = nullptr; } // ensure parent class' dtor doesn't do anything
-	};
-	extern co_waiter_void_multi co_wait_multi_inst;
-	inline void detach(async<void> event)
-	{
-		co_wait_multi_inst.forget();
-		event.then(&co_wait_multi_inst);
-	}
 	
 	// Implementation detail of socket::dns(). Should not be used by anyone else.
 	void* get_dns();

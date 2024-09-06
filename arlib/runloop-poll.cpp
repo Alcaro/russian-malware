@@ -418,6 +418,5 @@ namespace runloop2 {
 	void test_begin() { get_loop().test_begin(); }
 	void test_end() { get_loop().test_end(); }
 #endif
-	co_waiter_void_multi co_wait_multi_inst;
 }
 #endif

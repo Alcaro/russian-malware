@@ -2,12 +2,11 @@
 #include "global.h"
 #include "array.h"
 #include "hash.h"
-#include "linqbase.h"
 #include "string.h"
 #include "stringconv.h"
 
 template<typename T, typename Thasher = void>
-class set : public linqbase<set<T>> {
+class set {
 	template<typename,typename,typename>
 	friend class map;
 	
@@ -369,7 +368,7 @@ public:
 
 
 template<typename Tkey, typename Tvalue, typename Thasher = void>
-class map : public linqbase<map<Tkey,Tvalue,Thasher>> {
+class map {
 public:
 	struct node {
 		const Tkey key;

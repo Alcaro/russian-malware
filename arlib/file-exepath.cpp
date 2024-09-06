@@ -19,6 +19,8 @@ struct exepath_finder {
 #ifdef ARTYPE_DLL
 		// dladdr() can return this information, but it doesn't always contain path, so better use something else
 		
+		// TODO: on kernel >= 6.11, use ioctl(PROCMAP_QUERY) instead
+		
 		char linkpath[64];
 		strcpy(linkpath, "/proc/self/map_files/");
 		
@@ -66,23 +68,27 @@ cstrnul file::exepath() { return g_path.fullname; }
 #ifdef _WIN32
 #include <windows.h>
 
-extern const IMAGE_DOS_HEADER __ImageBase;
+extern "C" const IMAGE_DOS_HEADER __ImageBase;
 
-static char g_exepath[MAX_PATH];
-static int g_exepath_dirlen;
+// https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation says max 32767 utf16 units, so let's fit that
+static uint8_t g_exepath[32768*3];
+static uint32_t g_exepath_dirlen = 0;
 
 oninit_static()
 {
-	GetModuleFileNameA((HMODULE)&__ImageBase, g_exepath, MAX_PATH);
+	wchar_t utf16_buf[32768];
+	size_t utf16_len = GetModuleFileNameW((HMODULE)&__ImageBase, utf16_buf, 32768);
+	smelly_string::utf16_to_utf8_buf(arrayview<wchar_t>(utf16_buf, utf16_len+1), g_exepath);
+	
 	for (size_t i=0;g_exepath[i];i++)
 	{
-		if (g_exepath[i]=='\\') g_exepath[i]='/';
+		if (g_exepath[i] == '\\') g_exepath[i] = '/';
+		if (g_exepath[i] == '/') g_exepath_dirlen = i+1;
 	}
-	g_exepath_dirlen = strrchr(g_exepath, '/')+1 - g_exepath;
 }
 
-cstring file::exedir() { return cstring(bytesr((uint8_t*)g_exepath, g_exepath_dirlen)); }
-cstrnul file::exepath() { return g_exepath; }
+cstring file::exedir() { return cstring(bytesr(g_exepath, g_exepath_dirlen)); }
+cstrnul file::exepath() { return (char*)g_exepath; }
 #endif
 
 #include "test.h"

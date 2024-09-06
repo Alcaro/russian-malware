@@ -142,9 +142,8 @@ ifeq ($(OS),windows)
     DEFINES += ARLIB_HYBRID_DLL
     CONF_CFLAGS += -fpic
   endif
-  #surprisingly, this is still not default as of mingw 8.1.0 (to check, objdump -x | grep DllCharacteristics, 0x0100 bit is nxcompat)
+  #these two are on by default (to check, objdump -x | grep DllCharacteristics, 0x0100 bit is nxcompat, dynamicbase is 0x0040), but why not
   CONF_LFLAGS += -Wl,--nxcompat
-  #this one isn't on by default either (todo: check which objdump flag it is)
   CONF_LFLAGS += -Wl,--dynamicbase
   #todo: check which symbols are imported from here
   CONF_LFLAGS += -ladvapi32
@@ -418,6 +417,8 @@ TRUE_CFLAGS := -std=c99 $(CCXXFLAGS) $(CONF_CFLAGS) $(CFLAGS)
 # - Some equivalent of my container_of<&parent_cls::member>(this)
 #     also known as CONTAINING_RECORD in Windows/FreeBSD kernels
 # - static_assert(false) - valid in clang >= 17 and gcc >= 13
+# - Rename std::is_const_v to std::is_const, and rename std::is_const to std::is_const_wrap or something (or just delete it)
+#     or at least mark is_const deprecated in favor of is_const_v, that typo tends to create some seriously nasty error messages
 
 # C++20 features I should investigate using more of:
 # - Template string literals (for the regex parser)
@@ -437,23 +438,23 @@ obj:
 	echo Signature: 8a477f597d28d172789f06886806bc55 > obj/CACHEDIR.TAG
 
 ifeq ($(HOST_SHELL),cmd)
-miniclean:
+miniclean: | obj
 	del /q obj\DEFAULT_*
 # I'd prefer to say 'delete everything except this the cachedir tag', but that doesn't exist in common shells
 # I could list every name except that, but the list is big and annoying to maintain, and omissions may result in absurd heisenbugs
-clean:
+clean: | obj
 	del /q obj\*
 	@echo Signature: 8a477f597d28d172789f06886806bc55 > obj/CACHEDIR.TAG
-clean-prof:
+clean-prof: | obj
 	del /q obj\*.o
 #superclean not supported on cmd
 else
-miniclean:
+miniclean: | obj
 	rm -f obj/DEFAULT_*
-clean:
+clean: | obj
 	rm -f obj/*
 	@echo Signature: 8a477f597d28d172789f06886806bc55 > obj/CACHEDIR.TAG
-clean-prof:
+clean-prof: | obj
 	rm -f obj/*.o
 superclean: clean
 	-rm arlib/deps/bearssl-0.6/build*/*

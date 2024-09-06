@@ -369,6 +369,7 @@ static void my_cancel(async<void> event)
 static void test1(std::initializer_list<int> holder)
 {
 	arrayview<int> vals = { holder.begin(), holder.size() };
+	co_holder coros;
 	
 	int end = 0;
 	for (int v : vals)
@@ -380,7 +381,7 @@ static void test1(std::initializer_list<int> holder)
 	for (size_t i=0;i<vals.size();i+=3)
 	{
 		if (vals[i+2] != -1)
-			runloop2::detach(mut_test(mut, state, vals[i], vals[i+1], vals[i+2]));
+			coros.add(mut_test(mut, state, vals[i], vals[i+1], vals[i+2]));
 		else
 			my_cancel(mut_test(mut, state, vals[i], vals[i+1], vals[i+2]));
 	}
@@ -393,14 +394,15 @@ static void test1(std::initializer_list<int> holder)
 test("runloop co_mutex", "", "")
 {
 	co_mutex mut;
+	co_holder coros;
 	int state = 0;
 	assert(!mut.locked());
-	runloop2::detach(mut_test(mut, state, 1, 2, 7));
+	coros.add(mut_test(mut, state, 1, 2, 7));
 	assert(mut.locked());
-	runloop2::detach(mut_test(mut, state, 3, 8, 9));
-	runloop2::detach(mut_test(mut, state, 4,10,11));
+	coros.add(mut_test(mut, state, 3, 8, 9));
+	coros.add(mut_test(mut, state, 4,10,11));
 	my_cancel(mut_test(mut, state, 5,-1,-1));
-	runloop2::detach(mut_test(mut, state, 6,12,13));
+	coros.add(mut_test(mut, state, 6,12,13));
 	
 	while (state != 13)
 		runloop2::step();

@@ -179,6 +179,7 @@ private:
 public:
 	cstring() { init_empty(); }
 	cstring(const cstring& other) = default;
+	//cstring(string&&) = delete; // causes trouble with cstring ctor in function argument position. operator= catches most trouble anyways
 	
 	cstring(const char * str) { init_from_nocopy(str); }
 	cstring(const char8_t * str) { init_from_nocopy((char*)str); }
@@ -188,6 +189,8 @@ public:
 	// If has_nul, then bytes[bytes.size()] is zero. (Undefined behavior does not count as zero.)
 	cstring(bytesr bytes, bool has_nul) { init_from_nocopy(bytes, has_nul); }
 	cstring& operator=(const cstring& other) = default;
+	cstring& operator=(bytesr bytes) { init_from_nocopy(bytes); return *this; }
+	cstring& operator=(string&&) = delete;
 	cstring& operator=(const char * str) { init_from_nocopy(str); return *this; }
 	cstring& operator=(const char8_t * str) { init_from_nocopy((char*)str); return *this; }
 	cstring& operator=(nullptr_t) { init_empty(); return *this; }
@@ -250,11 +253,11 @@ public:
 	template<size_t limit>
 	array<cstring> crsplit(cstring sep) const { return crsplit(sep, limit); }
 	
-	array<string> split(cstring sep, size_t limit) const { return csplit(sep, limit).cast<string>(); }
+	array<string> split(cstring sep, size_t limit) const { return csplit(sep, limit).transform<string>(); }
 	template<size_t limit = SIZE_MAX>
 	array<string> split(cstring sep) const { return split(sep, limit); }
 	
-	array<string> rsplit(cstring sep, size_t limit) const { return crsplit(sep, limit).cast<string>(); }
+	array<string> rsplit(cstring sep, size_t limit) const { return crsplit(sep, limit).transform<string>(); }
 	template<size_t limit>
 	array<string> rsplit(cstring sep) const { return rsplit(sep, limit); }
 	
@@ -267,11 +270,11 @@ public:
 	template<size_t limit>
 	array<cstring> crspliti(cstring sep) const { return crspliti(sep, limit); }
 	
-	array<string> spliti(cstring sep, size_t limit) const { return cspliti(sep, limit).cast<string>(); }
+	array<string> spliti(cstring sep, size_t limit) const { return cspliti(sep, limit).transform<string>(); }
 	template<size_t limit = SIZE_MAX>
 	array<string> spliti(cstring sep) const { return spliti(sep, limit); }
 	
-	array<string> rspliti(cstring sep, size_t limit) const { return crspliti(sep, limit).cast<string>(); }
+	array<string> rspliti(cstring sep, size_t limit) const { return crspliti(sep, limit).transform<string>(); }
 	template<size_t limit>
 	array<string> rspliti(cstring sep) const { return rspliti(sep, limit); }
 	
@@ -287,18 +290,18 @@ public:
 	template<size_t limit>
 	sarray<cstring,limit+1> fcrsplit(cstring sep) const { sarray<cstring,limit+1> ret; crsplit_to(sep, ret); return ret; }
 	template<size_t limit>
-	sarray<string,limit+1> fsplit(cstring sep) const { return fcsplit<limit>(sep).template cast<string>(); }
+	sarray<string,limit+1> fsplit(cstring sep) const { return fcsplit<limit>(sep).template transform<string>(); }
 	template<size_t limit>
-	sarray<string,limit+1> frsplit(cstring sep) const { return fcrsplit<limit>(sep).template cast<string>(); }
+	sarray<string,limit+1> frsplit(cstring sep) const { return fcrsplit<limit>(sep).template transform<string>(); }
 	
 	template<size_t limit>
 	sarray<cstring,limit+1> fcspliti(cstring sep) const { sarray<cstring,limit+1> ret; cspliti_to(sep, ret); return ret; }
 	template<size_t limit>
 	sarray<cstring,limit+1> fcrspliti(cstring sep) const { sarray<cstring,limit+1> ret; crspliti_to(sep, ret); return ret; }
 	template<size_t limit>
-	sarray<string,limit+1> fspliti(cstring sep) const { return fcspliti<limit>(sep).template cast<string>(); }
+	sarray<string,limit+1> fspliti(cstring sep) const { return fcspliti<limit>(sep).template transform<string>(); }
 	template<size_t limit>
-	sarray<string,limit+1> frspliti(cstring sep) const { return fcrspliti<limit>(sep).template cast<string>(); }
+	sarray<string,limit+1> frspliti(cstring sep) const { return fcrspliti<limit>(sep).template transform<string>(); }
 	
 private:
 	// Input: Three pointers, start <= at <= end. The found match must be within the incoming at..end.
@@ -326,7 +329,7 @@ public:
 	std::enable_if_t<sizeof(T::match(nullptr,nullptr,nullptr))!=0, array<string>>
 	split(T regex, size_t limit) const
 	{
-		return csplit(regex, limit).template cast<string>();
+		return csplit(regex, limit).template transform<string>();
 	}
 	template<size_t limit = SIZE_MAX, typename T>
 	std::enable_if_t<sizeof(T::match(nullptr,nullptr,nullptr))!=0, array<string>>
@@ -706,9 +709,18 @@ public:
 	static string utf16_to_utf8(arrayview<uint16_t> utf16);
 	static string utf16l_to_utf8(arrayview<uint8_t> utf16);
 	
-	// this specific function is so smelly I won't even bother implementing it on linux
+	// Latter's size() must be at least 3x former. Returns number of bytes actually written.
+	static size_t utf16_to_utf8_buf(arrayview<uint16_t> utf16, arrayvieww<uint8_t> utf8);
+	
 #ifdef _WIN32
+	// this specific function is so smelly I won't even bother implementing it on linux
 	static array<uint16_t> utf8_to_utf16(cstring utf8);
+	
+	// and these are nonportable
+	static_assert(sizeof(wchar_t) == sizeof(uint16_t));
+	static string utf16_to_utf8(arrayview<wchar_t> utf16) { return utf16_to_utf8(utf16.transmute<uint16_t>()); }
+	static size_t utf16_to_utf8_buf(arrayview<wchar_t> utf16, arrayvieww<uint8_t> utf8)
+		{ return utf16_to_utf8_buf(utf16.transmute<uint16_t>(), utf8); }
 #endif
 };
 

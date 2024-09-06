@@ -80,7 +80,7 @@ static async<void> ssltest(function<async<autoptr<socket2>>(autoptr<socket2> inn
 	
 	testctx("howsmyssl") {
 		http_t http;
-		http.wrap_socks([wrap](bool ssl, cstring domain, uint16_t port) -> async<autoptr<socket2>> {
+		http.wrap_socks([&wrap](bool ssl, cstring domain, uint16_t port) -> async<autoptr<socket2>> {
 			assert(ssl);
 			co_return co_await wrap(co_await socket2::create(domain, port), domain);
 		});
@@ -110,24 +110,24 @@ co_test("TCP client, disconnecting server", "runloop,dns", "tcp")
 	
 	autoptr<runloop> loop = runloop::create();
 	
-	uintptr_t timer = loop->raw_set_timer_once(60000, bind_lambda([&]() { loop->exit(); assert_unreachable(); }));
+	uintptr_t timer = loop->raw_set_timer_once(60000, [&]() { loop->exit(); assert_unreachable(); });
 	
 	uint64_t start_ms = time_ms_ne();
 	
 	//need to provoke Shitty Server into actually dropping the connections
 	autoptr<socket> sock2;
-	uintptr_t timer2 = loop->raw_set_timer_repeat(5000, bind_lambda([&]() { sock2 = socket::create("floating.muncher.se", 9, loop); }));
+	uintptr_t timer2 = loop->raw_set_timer_repeat(5000, [&]() { sock2 = socket::create("floating.muncher.se", 9, loop); });
 	
 	autoptr<socket> sock = socket::create("floating.muncher.se", 9, loop);
 	assert(sock);
 	
-	sock->callback(bind_lambda([&]()
+	sock->callback([&]()
 		{
 			uint8_t buf[64];
 			int ret = sock->recv(buf);
 			assert_lte(ret, 0);
 			if (ret < 0) loop->exit();
-		}), nullptr);
+		}, nullptr);
 	
 	loop->enter();
 	
@@ -247,12 +247,13 @@ test("socketbuf crash", "", "")
 		socketbuf sock = autoptr<socket2>(inner);
 		sock.send(cstring("abc").bytes());
 		assert_eq(++step, 1);
-		runloop2::detach([](socketbuf& sock)->async<void>{
+		waiter<void> wait;
+		([](socketbuf& sock)->async<void>{
 				assert_eq(++step, 2);
 				co_await sock.u32l();
 				assert_eq(++step, 4);
 				assert(!sock);
-			}(sock));
+			}(sock)).then(&wait);
 		assert_eq(++step, 3);
 		inner->ret = -1;
 		inner->send_wait.complete();
@@ -266,12 +267,13 @@ test("socketbuf crash", "", "")
 		socketbuf sock = autoptr<socket2>(inner);
 		sock.send(cstring("abc").bytes());
 		assert_eq(++step, 1);
-		runloop2::detach([](socketbuf& sock)->async<void>{
+		waiter<void> wait;
+		([](socketbuf& sock)->async<void>{
 				assert_eq(++step, 2);
 				co_await sock.u32l();
 				assert_eq(++step, 4);
 				assert(!sock);
-			}(sock));
+			}(sock)).then(&wait);
 		assert_eq(++step, 3);
 		inner->ret = -1;
 		inner->recv_wait.complete();
@@ -288,13 +290,14 @@ test("socketbuf reset", "", "")
 		socketbuf sock = autoptr<socket2>(inner);
 		sock.send(cstring("abc").bytes());
 		assert_eq(++step, 1);
-		runloop2::detach([](socketbuf& sock)->async<void>{
+		co_holder coros;
+		coros.add([](socketbuf& sock)->async<void>{
 				assert_eq(++step, 2);
 				co_await sock.u32l();
 				assert_range(++step, 5, 6); // doesn't matter which order these two run
 				assert(!sock);
 			}(sock));
-		runloop2::detach([](socketbuf& sock)->async<void>{
+		coros.add([](socketbuf& sock)->async<void>{
 				assert_eq(++step, 3);
 				bool ok = co_await sock.await_send();
 				assert_eq(ok, false);

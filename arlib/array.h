@@ -3,7 +3,6 @@
 #include <new>
 #include <string.h>
 #include <type_traits>
-#include "linqbase.h"
 #include "serialize2-head.h"
 #include "heap.h"
 
@@ -14,7 +13,7 @@ class cstring;
 
 //size: two pointers
 //this object does not own its storage, it's just a pointer wrapper
-template<typename T> class arrayview : public linqbase<arrayview<T>> {
+template<typename T> class arrayview {
 protected:
 	T * items = NULL; // not const, despite not necessarily being writable; this makes arrayvieww/array a lot simpler
 	size_t count = 0;
@@ -127,7 +126,8 @@ public:
 		return arrayview<T2>((T2*)this->items, newsize);
 	}
 	
-	template<typename T2> inline array<T2> cast() const;
+	template<typename T2> inline array<T2> transform() const;
+	template<typename Tl> inline auto transform(const Tl& l) const;
 	
 	const T* find_ptr(const T& item) const
 	{
@@ -735,10 +735,18 @@ public:
 };
 
 template<typename T> template<typename T2>
-inline array<T2> arrayview<T>::cast() const
+inline array<T2> arrayview<T>::transform() const
 {
 	array<T2> ret;
 	for (const T& tmp : *this) ret.append(tmp);
+	return ret;
+}
+
+template<typename T> template<typename Tl>
+inline auto arrayview<T>::transform(const Tl& l) const
+{
+	array<decltype(l(this->items[0]))> ret;
+	for (const T& tmp : *this) ret.append(l(tmp));
 	return ret;
 }
 

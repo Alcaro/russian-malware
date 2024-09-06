@@ -1394,6 +1394,12 @@ test("string base", "array,memeq", "string")
 		string str2 = str_ptr;
 		assert_eq(str2, "aaaaaaaaaaaaaaaaaaaaaaaa");
 	}
+	
+	{
+		auto can_self_assign = []<typename T>() { T tmp; return requires { tmp = tmp + tmp; }; };
+		assert(can_self_assign.operator()<string>());
+		assert(!can_self_assign.operator()<cstring>());
+	}
 }
 
 test("string::natcompare", "array,memeq", "string")

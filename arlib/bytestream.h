@@ -296,6 +296,7 @@ public:
 	void u64l(uint64_t val) { buf += pack_le64(val); }
 	void u64b(uint64_t val) { buf += pack_be64(val); }
 	
+	/*
 	class pointer {
 		bytearray* buf;
 		size_t pos;
@@ -309,6 +310,11 @@ public:
 	};
 	pointer ptr32() { buf.resize(buf.size()+4); return pointer { &buf, buf.size()-4 }; }
 	pointer ptr64() { buf.resize(buf.size()+8); return pointer { &buf, buf.size()-8 }; }
+	*/
+	void u32l_at(size_t pos, uint32_t val) { writeu_le32(buf.ptr()+pos, val); }
+	void u32b_at(size_t pos, uint32_t val) { writeu_be32(buf.ptr()+pos, val); }
+	void u64l_at(size_t pos, uint32_t val) { writeu_le64(buf.ptr()+pos, val); }
+	void u64b_at(size_t pos, uint32_t val) { writeu_be64(buf.ptr()+pos, val); }
 	
 	void f32l(float  val) { buf += pack_lef32(val); }
 	void f32b(float  val) { buf += pack_bef32(val); }
@@ -320,6 +326,7 @@ public:
 	void align32() { buf.resize((buf.size()+3)&~3); }
 	void align64() { buf.resize((buf.size()+7)&~7); }
 	
+	size_t size() { return buf.size(); }
 	arrayview<uint8_t> peek()
 	{
 		return buf;

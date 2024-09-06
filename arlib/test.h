@@ -1,7 +1,6 @@
 #pragma once
 #include "global.h"
 #include "stringconv.h"
-#include "linq.h"
 #include "set.h"
 #include "time.h"
 
@@ -50,12 +49,14 @@ template<size_t size> string tostring_dbg(const char(&item)[size]) { return item
 template<typename Tkey, typename Tvalue>
 string tostring_dbg(const map<Tkey,Tvalue>& item)
 {
-	return "{"+
-		item
-			.select([](const typename map<Tkey,Tvalue>::node& n){ return tostring_dbg(n.key)+" => "+tostring_dbg(n.value); })
-			.as_array()
-			.join(", ")
-		+"}";
+	string ret;
+	for (const typename map<Tkey,Tvalue>::node& n : item)
+	{
+		if (ret) ret += ", ";
+		else ret = "{";
+		ret += tostring_dbg(n.key)+" => "+tostring_dbg(n.value);
+	}
+	return ret + "}";
 }
 
 template<typename T>

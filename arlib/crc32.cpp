@@ -162,7 +162,7 @@ static uint32_t crc32_pclmul(arrayview<uint8_t> data, uint32_t crc)
 }
 #endif
 
-uint32_t crc32_update(arrayview<uint8_t> data, uint32_t crc)
+uint32_t crc32(arrayview<uint8_t> data, uint32_t crc)
 {
 #ifdef runtime__PCLMUL__
 	// crc32_small is slow per byte, but pclmul has high startup time; small wins for size <= 4
@@ -183,7 +183,7 @@ static void bench(const uint8_t * buf, int len, int iter, uint32_t exp)
 	uint32_t tmp = 0;
 	for (size_t n : range(iter))
 	{
-		tmp += crc32_update(bytesr(buf, len), tmp);
+		tmp += crc32(bytesr(buf, len), tmp);
 		if (n == 0) assert_eq(tmp, exp);
 		if (n == 0) assert_eq(tmp, crc32_small(bytesr(buf, len), 0));
 		if (!do_bench) return;
